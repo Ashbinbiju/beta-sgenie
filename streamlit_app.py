@@ -76,16 +76,15 @@ with tab1:
             user_orders[order["friend"]] = []
         user_orders[order["friend"]].append(order)
 
-    for user, orders in user_orders.items():
-        with st.container():
-            col1, col2 = st.columns([1,1])
-            with col1:
-                st.write(f"**{user}**")
-            with col2:
-                if st.button("✏️", key=f"edit_user_{user}"):
-                    st.session_state.edit_user = user
-            with col3:
-                if st.button("🗑️", key=f"delete_user_{user}"):
+    for user, items in orders.items():
+    st.write(f"**{user}**")
+    for item, price in items:
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.button("✏️ Edit", key=f"edit_{user}_{item}")
+        with col2:
+            st.button("🗑️ Delete", key=f"delete_{user}_{item}")
+        
                     st.session_state.delete_user = user
 
         # Handle Delete Confirmation
