@@ -81,7 +81,7 @@ with tab1:
 
     for user, orders in user_orders.items():
         # Display user name with Edit and Delete buttons in a compact row
-        col1, col2, col3 = st.columns([6, 1, 1])  # Adjusted column widths for better alignment
+        col1, col2, col3 = st.columns([4, 1, 1])  # Adjusted column widths for mobile-friendly layout
         with col1:
             st.write(f"**{user}**")
         with col2:
