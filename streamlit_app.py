@@ -78,7 +78,7 @@ with tab1:
 
     for user, orders in user_orders.items():
         with st.container():
-            col1, col2, col3 = st.columns([1, 1, 1])
+            col1, col2, col3 = st.columns([1,1])
             with col1:
                 st.write(f"**{user}**")
             with col2:
