@@ -44,6 +44,8 @@ tab1, tab2, tab3 = st.tabs(["📝 Orders", "📌 Friends", "🍔 Items"])
 # Tab 1: Orders
 with tab1:
     st.header("Take Orders")
+    
+    # Add Order Section
     selected_friend = st.selectbox("Select Friend", [f["name"] for f in data["friends"]])
     selected_items = st.multiselect("Select Items", [i["name"] for i in data["items"]])
     if st.button("Add Order", key="add_order"):
@@ -53,47 +55,59 @@ with tab1:
                 data["orders"].append({"friend": selected_friend, "item": item_name, "price": item_price})
             save_data(data)
             st.success(f"Added order(s) for {selected_friend}")
+            # Clear selected values
+            st.session_state.selected_friend = None
+            st.session_state.selected_items = []
         else:
             st.error("Please select a friend and at least one item.")
 
+    # Today's Orders Section
     st.subheader("Today's Orders")
-    for i, order in enumerate(data["orders"]):
-        col1, col2, col3 = st.columns([3, 3, 2])  # Adjust column widths
+    item_quantities = {}
+    for order in data["orders"]:
+        item_quantities[order["item"]] = item_quantities.get(order["item"], 0) + 1
+
+    for item, quantity in item_quantities.items():
+        st.write(f"{item} x{quantity}")
+
+    # User-Specific Orders Section
+    st.subheader("Orders by User")
+    user_orders = {}
+    for order in data["orders"]:
+        if order["friend"] not in user_orders:
+            user_orders[order["friend"]] = []
+        user_orders[order["friend"]].append(order)
+
+    for user, orders in user_orders.items():
+        st.write(f"**{user}**")
+        for order in orders:
+            st.write(f"- {order['item']} (₹{order['price']})")
+        col1, col2 = st.columns(2)
         with col1:
-            st.write(order["item"])
+            if st.button("Edit", key=f"edit_user_{user}"):
+                st.session_state.edit_user = user
         with col2:
-            st.write(f"₹{order['price']}")
-        with col3:
-            st.write(order["friend"])
-            if st.button("Edit", key=f"edit_order_{i}"):
-                st.session_state.edit_index = i
-            if st.button("Delete", key=f"delete_order_{i}"):
-                data["orders"].pop(i)
+            if st.button("Delete", key=f"delete_user_{user}"):
+                data["orders"] = [o for o in data["orders"] if o["friend"] != user]
                 save_data(data)
                 st.rerun()
 
-    if "edit_index" in st.session_state:
-        edit_index = st.session_state.edit_index
-        st.subheader("Edit Order")
-        edited_friend = st.selectbox("Edit Friend", [f["name"] for f in data["friends"]], index=[f["name"] for f in data["friends"]].index(data["orders"][edit_index]["friend"]))
-        edited_item = st.selectbox("Edit Item", [i["name"] for i in data["items"]], index=[i["name"] for i in data["items"]].index(data["orders"][edit_index]["item"]))
-        if st.button("Save Changes", key="save_edit"):
-            data["orders"][edit_index]["friend"] = edited_friend
-            data["orders"][edit_index]["item"] = edited_item
-            data["orders"][edit_index]["price"] = next(item["price"] for item in data["items"] if item["name"] == edited_item)
+    # Edit User Orders
+    if "edit_user" in st.session_state:
+        edit_user = st.session_state.edit_user
+        st.subheader(f"Edit Orders for {edit_user}")
+        edited_items = st.multiselect("Edit Items", [i["name"] for i in data["items"]], default=[o["item"] for o in data["orders"] if o["friend"] == edit_user])
+        if st.button("Save Changes", key="save_edit_user"):
+            # Remove old orders for the user
+            data["orders"] = [o for o in data["orders"] if o["friend"] != edit_user]
+            # Add new orders
+            for item_name in edited_items:
+                item_price = next(item["price"] for item in data["items"] if item["name"] == item_name)
+                data["orders"].append({"friend": edit_user, "item": item_name, "price": item_price})
             save_data(data)
-            del st.session_state.edit_index
-            st.success("Order updated successfully!")
+            del st.session_state.edit_user
+            st.success(f"Orders updated for {edit_user}")
             st.rerun()
-
-    total_cost = sum(order["price"] for order in data["orders"])
-    st.subheader(f"Total Cost: ₹{total_cost:.2f}")
-
-    if st.button("Clear All Orders", key="clear_all_orders"):
-        data["orders"] = []
-        save_data(data)
-        st.warning("All orders cleared.")
-        st.rerun()
 
 # Tab 2: Friends
 with tab2:
