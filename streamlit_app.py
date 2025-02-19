@@ -2,11 +2,11 @@ import streamlit as st
 import json
 import os
 
-# Custom CSS for red Delete button
+# Custom CSS for red Delete button (target only Delete buttons)
 st.markdown(
     """
     <style>
-    div.stButton > button:first-child {
+    .delete-button button {
         background-color: #ff4b4b;
         color: white;
     }
@@ -101,6 +101,11 @@ with tab1:
             if st.button(f"Edit {user}", key=f"edit_user_{user}"):
                 st.session_state.edit_user = user
         with col3:
+            # Add a custom class to the Delete button for red styling
+            st.markdown(
+                f'<div class="delete-button"><button onclick="alert(\'Are you sure you want to delete all orders for {user}?\')">Delete {user}</button></div>',
+                unsafe_allow_html=True
+            )
             if st.button(f"Delete {user}", key=f"delete_user_{user}"):
                 if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
                     data["orders"] = [o for o in data["orders"] if o["friend"] != user]
