@@ -62,40 +62,32 @@ with tab1:
         else:
             st.error("Please select a friend and at least one item.")
 
-    # Today's Orders Section
-    st.subheader("Today's Orders")
-    item_quantities = {}
-    for order in data["orders"]:
-        item_quantities[order["item"]] = item_quantities.get(order["item"], 0) + 1
-
-    for item, quantity in item_quantities.items():
-        st.write(f"{item} x{quantity}")
-
     # User-Specific Orders Section
-    st.subheader("Orders by User")
-    user_orders = {}
-    for order in data["orders"]:
-        if order["friend"] not in user_orders:
-            user_orders[order["friend"]] = []
-        user_orders[order["friend"]].append(order)
+st.subheader("Orders by User")
+user_orders = {}
+for order in data["orders"]:
+    if order["friend"] not in user_orders:
+        user_orders[order["friend"]] = []
+    user_orders[order["friend"]].append(order)
 
-    for user, orders in user_orders.items():
-        # Display user name with Edit and Delete buttons in a compact row
-        col1, col2, col3 = st.columns([6, 2, 2])  # Adjusted column widths for mobile-friendly layout
-        with col1:
-            st.write(f"**{user}**")
-        with col2:
-            if st.button(f"✏️ Edit {user}", key=f"edit_user_{user}"):
-                st.session_state.edit_user = user
-        with col3:
-            if st.button(f"❌ Delete {user}", key=f"delete_user_{user}"):
-                if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
-                    data["orders"] = [o for o in data["orders"] if o["friend"] != user]
-                    save_data(data)
-                    st.rerun()
+for user, orders in user_orders.items():
+    # Create a compact row for the user name and buttons
+    col1, col2, col3 = st.columns([4, 1, 1])  # Adjust column widths as needed
+    with col1:
+        st.write(f"**{user}**")  # Display the user's name
+    with col2:
+        if st.button(f"✏️ Edit", key=f"edit_user_{user}"):  # Edit button
+            st.session_state.edit_user = user
+    with col3:
+        if st.button(f"❌ Delete", key=f"delete_user_{user}"):  # Delete button
+            if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
+                data["orders"] = [o for o in data["orders"] if o["friend"] != user]
+                save_data(data)
+                st.rerun()
 
-        for order in orders:
-            st.write(f"- {order['item']} (₹{order['price']})")
+    # Display the user's orders
+    for order in orders:
+        st.write(f"- {order['item']} (₹{order['price']})")
 
     # Edit User Orders
     if "edit_user" in st.session_state:
