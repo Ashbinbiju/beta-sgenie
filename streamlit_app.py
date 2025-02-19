@@ -64,7 +64,7 @@ if st.button("Add Order"):
             "friend": selected_friend,
             "item": selected_item,
             "price": selected_price,
-            "datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Add datetime
         }
         data["orders"].append(order)
         save_data(data)
@@ -76,7 +76,10 @@ if st.button("Add Order"):
 st.subheader("Today's Orders")
 if data["orders"]:
     for order in data["orders"]:
-        st.write(f"✅ **{order['friend']}** ordered **{order['item']}** for ₹{order['price']} on {order['datetime']}")
+        if "datetime" in order:  # Check if datetime exists
+            st.write(f"✅ **{order['friend']}** ordered **{order['item']}** for ₹{order['price']} on {order['datetime']}")
+        else:
+            st.write(f"✅ **{order['friend']}** ordered **{order['item']}** for ₹{order['price']}")
 else:
     st.write("No orders yet.")
 
@@ -96,6 +99,9 @@ if st.sidebar.button("View Past Orders"):
     st.subheader("All Past Orders")
     if data["orders"]:
         for order in data["orders"]:
-            st.write(f"📅 **{order['datetime']}**: {order['friend']} ordered {order['item']} for ₹{order['price']}")
+            if "datetime" in order:  # Check if datetime exists
+                st.write(f"📅 **{order['datetime']}**: {order['friend']} ordered {order['item']} for ₹{order['price']}")
+            else:
+                st.write(f"📅 {order['friend']} ordered {order['item']} for ₹{order['price']}")
     else:
         st.write("No past orders found.")
