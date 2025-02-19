@@ -34,7 +34,7 @@ data = load_data()
 # App title
 st.title("Cafeteria Order Tracker ☕")
 
-# Tab 1: Orders (Main Tab)
+# Section 1: Take Orders
 st.header("Take Orders")
 
 # Add Friend Section
@@ -72,14 +72,11 @@ if st.button("Add Order"):
     else:
         st.error("Please fill in all fields.")
 
-# Display Today's Orders
-st.subheader("Today's Orders")
+# Section 2: Today's Orders
+st.header("Today's Orders")
 if data["orders"]:
     for order in data["orders"]:
-        if "datetime" in order:  # Check if datetime exists
-            st.write(f"✅ **{order['friend']}** ordered **{order['item']}** for ₹{order['price']} on {order['datetime']}")
-        else:
-            st.write(f"✅ **{order['friend']}** ordered **{order['item']}** for ₹{order['price']}")
+        st.write(f"{order['friend']} ordered {order['item']} for ₹{order['price']} on {order['datetime']}")
 else:
     st.write("No orders yet.")
 
@@ -93,15 +90,12 @@ if st.button("Clear All Orders"):
     save_data(data)
     st.warning("All orders cleared.")
 
-# Tab 2: Past Orders (Optional)
-st.sidebar.header("Past Orders")
-if st.sidebar.button("View Past Orders"):
+# Section 3: Past Orders
+st.header("Past Orders")
+if st.button("View Past Orders"):
     st.subheader("All Past Orders")
     if data["orders"]:
         for order in data["orders"]:
-            if "datetime" in order:  # Check if datetime exists
-                st.write(f"📅 **{order['datetime']}**: {order['friend']} ordered {order['item']} for ₹{order['price']}")
-            else:
-                st.write(f"📅 {order['friend']} ordered {order['item']} for ₹{order['price']}")
+            st.write(f"{order['datetime']}: {order['friend']} ordered {order['item']} for ₹{order['price']}")
     else:
         st.write("No past orders found.")
