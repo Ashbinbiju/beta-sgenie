@@ -2,19 +2,6 @@ import streamlit as st
 import json
 import os
 
-# Custom CSS for red Delete button (target only Delete buttons)
-st.markdown(
-    """
-    <style>
-    .delete-button button {
-        background-color: #ff4b4b;
-        color: white;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # Constants
 DATA_FILE = "data.json"
 PICS_DIR = "pics"
@@ -94,19 +81,14 @@ with tab1:
 
     for user, orders in user_orders.items():
         # Display user name with Edit and Delete buttons in a compact row
-        col1, col2, col3 = st.columns([6, 2, 2])  # Adjusted column widths for mobile-friendly layout
+        col1, col2, col3 = st.columns([6, 1, 1])  # Adjusted column widths for better alignment
         with col1:
             st.write(f"**{user}**")
         with col2:
-            if st.button(f"Edit {user}", key=f"edit_user_{user}"):
+            if st.button(f"Edit", key=f"edit_user_{user}"):
                 st.session_state.edit_user = user
         with col3:
-            # Add a custom class to the Delete button for red styling
-            st.markdown(
-                f'<div class="delete-button"><button onclick="alert(\'Are you sure you want to delete all orders for {user}?\')">Delete {user}</button></div>',
-                unsafe_allow_html=True
-            )
-            if st.button(f"Delete {user}", key=f"delete_user_{user}"):
+            if st.button(f"Delete", key=f"delete_user_{user}"):
                 if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
                     data["orders"] = [o for o in data["orders"] if o["friend"] != user]
                     save_data(data)
