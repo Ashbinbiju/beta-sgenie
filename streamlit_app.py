@@ -36,16 +36,46 @@ def save_data(data):
 data = load_data()
 
 # App title
-st.title("Cafeteria Order Tracker ☕")
+st.title("Cafeteria Order Tracker")
 
 # Tabs for navigation
-tab1, tab2, tab3 = st.tabs(["📌 Friends", "🍔 Items", "📝 Orders"])
+tab1, tab2, tab3 = st.tabs(["📝 Orders", "📌 Friends", "🍔 Items"])
 
-# Tab 1: Friends
+# Tab 1: Orders
 with tab1:
+    st.header("Take Orders")
+    selected_friend = st.selectbox("Select Friend", [f["name"] for f in data["friends"]])
+    selected_item = st.selectbox("Select Item", [i["name"] for i in data["items"]])
+    if st.button("Add Order", key="add_order"):
+        selected_item_price = next(item["price"] for item in data["items"] if item["name"] == selected_item)
+        data["orders"].append({"friend": selected_friend, "item": selected_item, "price": selected_item_price})
+        save_data(data)
+        st.success(f"Added order: {selected_friend} ordered {selected_item}")
+
+    st.subheader("Today's Orders")
+    for i, order in enumerate(data["orders"]):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.write(f"{order['friend']} ordered {order['item']} - ₹{order['price']}")
+        with col2:
+            if st.button("Delete", key=f"delete_order_{i}"):
+                data["orders"].pop(i)
+                save_data(data)
+                st.rerun()
+
+    total_cost = sum(order["price"] for order in data["orders"])
+    st.subheader(f"Total Cost: ₹{total_cost:.2f}")
+
+    if st.button("Clear All Orders", key="clear_all_orders"):
+        data["orders"] = []
+        save_data(data)
+        st.warning("All orders cleared.")
+
+# Tab 2: Friends
+with tab2:
     st.header("Manage Friends")
-    name = st.text_input("Enter Friend's Name")
-    pic = st.file_uploader("Upload a Picture", type=["jpg", "png"])
+    name = st.text_input("Enter Friend's Name", key="friend_name")
+    pic = st.file_uploader("Upload a Picture", type=["jpg", "png"], key="friend_pic")
     if st.button("Add Friend", key="add_friend"):
         if name:
             if name in [f["name"] for f in data["friends"]]:
@@ -60,17 +90,19 @@ with tab1:
                 data["friends"].append(friend)
                 save_data(data)
                 st.success(f"Added {name}")
+                # Clear input fields after adding
+                st.session_state.friend_name = ""
+                st.session_state.friend_pic = None
         else:
             st.error("Please enter a name.")
 
     st.subheader("Friends List")
+    cols = st.columns(3)  # Display 3 friends per row
     for i, friend in enumerate(data["friends"]):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.write(f"🧑 {friend['name']}")
-            if friend.get("pic"):  # Safely check if 'pic' exists
+        with cols[i % 3]:  # Cycle through columns
+            st.write(friend["name"])
+            if friend.get("pic"):
                 st.image(friend["pic"], width=100)
-        with col2:
             if st.button("Delete", key=f"delete_friend_{i}"):
                 data["friends"].pop(i)
                 save_data(data)
@@ -81,11 +113,11 @@ with tab1:
         save_data(data)
         st.warning("All friends cleared.")
 
-# Tab 2: Items
-with tab2:
+# Tab 3: Items
+with tab3:
     st.header("Cafeteria Items")
-    item_name = st.text_input("Item Name")
-    item_price = st.number_input("Price", min_value=0.0, step=0.5)
+    item_name = st.text_input("Item Name", key="item_name")
+    item_price = st.number_input("Price", min_value=0.0, step=0.5, key="item_price")
     if st.button("Add Item", key="add_item"):
         if item_name and item_price:
             if item_name in [i["name"] for i in data["items"]]:
@@ -101,7 +133,7 @@ with tab2:
     for i, item in enumerate(data["items"]):
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.write(f"🍕 {item['name']} - ₹{item['price']}")
+            st.write(f"{item['name']} - ₹{item['price']}")
         with col2:
             if st.button("Delete", key=f"delete_item_{i}"):
                 data["items"].pop(i)
@@ -112,33 +144,3 @@ with tab2:
         data["items"] = []
         save_data(data)
         st.warning("All items cleared.")
-
-# Tab 3: Orders
-with tab3:
-    st.header("Take Orders")
-    selected_friend = st.selectbox("Select Friend", [f["name"] for f in data["friends"]])
-    selected_item = st.selectbox("Select Item", [i["name"] for i in data["items"]])
-    if st.button("Add Order", key="add_order"):
-        selected_item_price = next(item["price"] for item in data["items"] if item["name"] == selected_item)
-        data["orders"].append({"friend": selected_friend, "item": selected_item, "price": selected_item_price})
-        save_data(data)
-        st.success(f"Added order: {selected_friend} ordered {selected_item}")
-
-    st.subheader("Today's Orders")
-    for i, order in enumerate(data["orders"]):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.write(f"✅ {order['friend']} ordered {order['item']} - ₹{order['price']}")
-        with col2:
-            if st.button("Delete", key=f"delete_order_{i}"):
-                data["orders"].pop(i)
-                save_data(data)
-                st.rerun()
-
-    total_cost = sum(order["price"] for order in data["orders"])
-    st.subheader(f"Total Cost: ₹{total_cost:.2f}")
-
-    if st.button("Clear All Orders", key="clear_all_orders"):
-        data["orders"] = []
-        save_data(data)
-        st.warning("All orders cleared.")
