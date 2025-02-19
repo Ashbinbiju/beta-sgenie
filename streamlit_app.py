@@ -79,18 +79,20 @@ with tab1:
         user_orders[order["friend"]].append(order)
 
     for user, orders in user_orders.items():
-        st.write(f"**{user}**")
-        for order in orders:
-            st.write(f"- {order['item']} (₹{order['price']})")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns([4, 1, 1])  # Adjust column widths
         with col1:
-            if st.button("Edit", key=f"edit_user_{user}"):
-                st.session_state.edit_user = user
+            st.write(f"**{user}**")
         with col2:
-            if st.button("Delete", key=f"delete_user_{user}"):
+            if st.button("📝", key=f"edit_user_{user}", help="Edit Orders"):
+                st.session_state.edit_user = user
+        with col3:
+            if st.button("🗑️", key=f"delete_user_{user}", help="Delete Orders"):
                 data["orders"] = [o for o in data["orders"] if o["friend"] != user]
                 save_data(data)
                 st.rerun()
+
+        for order in orders:
+            st.write(f"- {order['item']} (₹{order['price']})")
 
     # Edit User Orders
     if "edit_user" in st.session_state:
@@ -143,10 +145,10 @@ with tab2:
                 st.image(friend["pic"], width=100, caption="Click to Edit/Delete")
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Edit", key=f"edit_friend_{i}"):
+                if st.button("📝", key=f"edit_friend_{i}", help="Edit Friend"):
                     st.session_state.edit_friend_index = i
             with col2:
-                if st.button("Delete", key=f"delete_friend_{i}"):
+                if st.button("🗑️", key=f"delete_friend_{i}", help="Delete Friend"):
                     data["friends"].pop(i)
                     save_data(data)
                     st.rerun()
@@ -196,7 +198,7 @@ with tab3:
         with col1:
             st.write(f"{item['name']} - ₹{item['price']}")
         with col2:
-            if st.button("Delete", key=f"delete_item_{i}"):
+            if st.button("🗑️", key=f"delete_item_{i}", help="Delete Item"):
                 data["items"].pop(i)
                 save_data(data)
                 st.rerun()
