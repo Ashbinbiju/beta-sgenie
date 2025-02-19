@@ -48,6 +48,7 @@ with tab1:
     # Add Order Section
     selected_friend = st.selectbox("Select Friend", [f["name"] for f in data["friends"]])
     selected_items = st.multiselect("Select Items", [i["name"] for i in data["items"]])
+    
     if st.button("Add Order", key="add_order"):
         if selected_friend and selected_items:
             for item_name in selected_items:
@@ -79,14 +80,15 @@ with tab1:
         user_orders[order["friend"]].append(order)
 
     for user, orders in user_orders.items():
-        col1, col2, col3 = st.columns([4, 1, 1])  # Adjust column widths
+        # Display user name with Edit and Delete buttons in a row
+        col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
             st.write(f"**{user}**")
         with col2:
-            if st.button("📝", key=f"edit_user_{user}", help="Edit Orders"):
+            if st.button("✏️ Edit", key=f"edit_user_{user}"):
                 st.session_state.edit_user = user
         with col3:
-            if st.button("🗑️", key=f"delete_user_{user}", help="Delete Orders"):
+            if st.button("❌ Delete", key=f"delete_user_{user}"):
                 data["orders"] = [o for o in data["orders"] if o["friend"] != user]
                 save_data(data)
                 st.rerun()
@@ -98,11 +100,10 @@ with tab1:
     if "edit_user" in st.session_state:
         edit_user = st.session_state.edit_user
         st.subheader(f"Edit Orders for {edit_user}")
-        edited_items = st.multiselect("Edit Items", [i["name"] for i in data["items"]], default=[o["item"] for o in data["orders"] if o["friend"] == edit_user])
+        edited_items = st.multiselect("Edit Items", [i["name"] for i in data["items"]], 
+                                      default=[o["item"] for o in data["orders"] if o["friend"] == edit_user])
         if st.button("Save Changes", key="save_edit_user"):
-            # Remove old orders for the user
             data["orders"] = [o for o in data["orders"] if o["friend"] != edit_user]
-            # Add new orders
             for item_name in edited_items:
                 item_price = next(item["price"] for item in data["items"] if item["name"] == item_name)
                 data["orders"].append({"friend": edit_user, "item": item_name, "price": item_price})
@@ -116,6 +117,7 @@ with tab2:
     st.header("Manage Friends")
     name = st.text_input("Enter Friend's Name", key="friend_name")
     pic = st.file_uploader("Upload a Picture", type=["jpg", "png"], key="friend_pic")
+
     if st.button("Add Friend", key="add_friend"):
         if name:
             if name in [f["name"] for f in data["friends"]]:
@@ -130,57 +132,21 @@ with tab2:
                 data["friends"].append(friend)
                 save_data(data)
                 st.success(f"Added {name}")
-                # Clear input fields after adding
-                st.session_state.friend_name = ""
-                st.session_state.friend_pic = None
         else:
             st.error("Please enter a name.")
 
     st.subheader("Friends List")
-    cols = st.columns(2)  # Display 2 friends per row
-    for i, friend in enumerate(data["friends"]):
-        with cols[i % 2]:  # Cycle through columns
-            st.write(friend["name"])
-            if friend.get("pic"):
-                st.image(friend["pic"], width=100, caption="Click to Edit/Delete")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("📝", key=f"edit_friend_{i}", help="Edit Friend"):
-                    st.session_state.edit_friend_index = i
-            with col2:
-                if st.button("🗑️", key=f"delete_friend_{i}", help="Delete Friend"):
-                    data["friends"].pop(i)
-                    save_data(data)
-                    st.rerun()
-
-    if "edit_friend_index" in st.session_state:
-        edit_index = st.session_state.edit_friend_index
-        st.subheader("Edit Friend")
-        edited_name = st.text_input("Edit Name", value=data["friends"][edit_index]["name"], key="edit_friend_name")
-        edited_pic = st.file_uploader("Edit Picture", type=["jpg", "png"], key="edit_friend_pic")
-        if st.button("Save Changes", key="save_friend_edit"):
-            data["friends"][edit_index]["name"] = edited_name
-            if edited_pic:
-                pic_path = f"{PICS_DIR}/{edited_name}.png"
-                with open(pic_path, "wb") as f:
-                    f.write(edited_pic.getbuffer())
-                data["friends"][edit_index]["pic"] = pic_path
-            save_data(data)
-            del st.session_state.edit_friend_index
-            st.success("Friend updated successfully!")
-            st.rerun()
-
-    if st.button("Clear All Friends", key="clear_all_friends"):
-        data["friends"] = []
-        save_data(data)
-        st.warning("All friends cleared.")
-        st.rerun()
+    for friend in data["friends"]:
+        st.write(friend["name"])
+        if friend.get("pic"):
+            st.image(friend["pic"], width=100)
 
 # Tab 3: Items
 with tab3:
     st.header("Cafeteria Items")
     item_name = st.text_input("Item Name", key="item_name")
     item_price = st.number_input("Price", min_value=0.0, step=0.5, key="item_price")
+
     if st.button("Add Item", key="add_item"):
         if item_name and item_price:
             if item_name in [i["name"] for i in data["items"]]:
@@ -198,13 +164,7 @@ with tab3:
         with col1:
             st.write(f"{item['name']} - ₹{item['price']}")
         with col2:
-            if st.button("🗑️", key=f"delete_item_{i}", help="Delete Item"):
+            if st.button("Delete", key=f"delete_item_{i}"):
                 data["items"].pop(i)
                 save_data(data)
                 st.rerun()
-
-    if st.button("Clear All Items", key="clear_all_items"):
-        data["items"] = []
-        save_data(data)
-        st.warning("All items cleared.")
-        st.rerun()
