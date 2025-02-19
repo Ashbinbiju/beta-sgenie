@@ -72,34 +72,35 @@ with tab1:
         st.write(f"{item} x{quantity}")
 
     # User-Specific Orders Section
-    st.subheader("Orders by User")
-    user_orders = {}
-    for order in data["orders"]:
-        if order["friend"] not in user_orders:
-            user_orders[order["friend"]] = []
-        user_orders[order["friend"]].append(order)
+   st.subheader("Orders by User")
 
-    for user, orders in user_orders.items():
-        # Display user name with Edit and Delete buttons in a compact row
-        col1, col2, col3 = st.columns([4, 1, 1])  # Adjusted column widths for mobile-friendly layout
+user_orders = {}
+for order in data["orders"]:
+    if order["friend"] not in user_orders:
+        user_orders[order["friend"]] = []
+    user_orders[order["friend"]].append(order)
+
+for user, orders in user_orders.items():
+    with st.container():
+        col1, col2, col3 = st.columns([4, 1, 1])
         with col1:
             st.write(f"**{user}**")
         with col2:
-            edit_button = st.button(f"Edit", key=f"edit_user_{user}")
+            edit_button = st.button("✏️", key=f"edit_user_{user}")
         with col3:
-            delete_button = st.button(f"Delete", key=f"delete_user_{user}")
+            delete_button = st.button("🗑️", key=f"delete_user_{user}")
 
-        # Handle button actions
-        if edit_button:
-            st.session_state.edit_user = user
-        if delete_button:
-            if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
-                data["orders"] = [o for o in data["orders"] if o["friend"] != user]
-                save_data(data)
-                st.rerun()
+    # Handle button actions
+    if edit_button:
+        st.session_state.edit_user = user
+    if delete_button:
+        if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
+            data["orders"] = [o for o in data["orders"] if o["friend"] != user]
+            save_data(data)
+            st.rerun()
 
-        for order in orders:
-            st.write(f"- {order['item']} (₹{order['price']})")
+    for order in orders:
+        st.write(f"- {order['item']} (₹{order['price']})")
 
     # Edit User Orders
     if "edit_user" in st.session_state:
