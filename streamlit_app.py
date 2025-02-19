@@ -2,6 +2,19 @@ import streamlit as st
 import json
 import os
 
+# Custom CSS for red Delete button
+st.markdown(
+    """
+    <style>
+    div.stButton > button:first-child {
+        background-color: #ff4b4b;
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Constants
 DATA_FILE = "data.json"
 PICS_DIR = "pics"
@@ -85,10 +98,10 @@ with tab1:
         with col1:
             st.write(f"**{user}**")
         with col2:
-            if st.button(f"✏️ Edit {user}", key=f"edit_user_{user}"):
+            if st.button(f"Edit {user}", key=f"edit_user_{user}"):
                 st.session_state.edit_user = user
         with col3:
-            if st.button(f"❌ Delete {user}", key=f"delete_user_{user}"):
+            if st.button(f"Delete {user}", key=f"delete_user_{user}"):
                 if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
                     data["orders"] = [o for o in data["orders"] if o["friend"] != user]
                     save_data(data)
