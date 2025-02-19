@@ -62,17 +62,18 @@ with tab1:
             st.error("Please enter a name.")
 
     st.subheader("Friends List")
-    for i, friend in enumerate(data["friends"]):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.write(f"🧑 {friend['name']}")
-            if friend["pic"]:
-                st.image(friend["pic"], width=100)
-        with col2:
-            if st.button("Delete", key=f"delete_friend_{i}"):
-                data["friends"].pop(i)
-                save_data(data)
-                st.rerun()
+for i, friend in enumerate(data["friends"]):
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.write(f"🧑 {friend['name']}")
+        # Safely check if 'pic' exists and is not None
+        if friend.get("pic"):
+            st.image(friend["pic"], width=100)
+    with col2:
+        if st.button("Delete", key=f"delete_friend_{i}"):
+            data["friends"].pop(i)
+            save_data(data)
+            st.rerun()
 
     if st.button("Clear All Friends"):
         data["friends"] = []
