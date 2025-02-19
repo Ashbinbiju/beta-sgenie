@@ -14,7 +14,11 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as file:
-                return json.load(file)
+                data = json.load(file)
+                # Ensure all friends have a 'pic' key
+                for friend in data.get("friends", []):
+                    friend.setdefault("pic", None)
+                return data
         except Exception as e:
             st.error(f"Error loading data: {e}")
             return {"friends": [], "items": [], "orders": []}
@@ -42,8 +46,7 @@ with tab1:
     st.header("Manage Friends")
     name = st.text_input("Enter Friend's Name")
     pic = st.file_uploader("Upload a Picture", type=["jpg", "png"])
-
-    if st.button("Add Friend"):
+    if st.button("Add Friend", key="add_friend"):
         if name:
             if name in [f["name"] for f in data["friends"]]:
                 st.error("Friend already exists.")
@@ -54,7 +57,6 @@ with tab1:
                     with open(pic_path, "wb") as f:
                         f.write(pic.getbuffer())
                     friend["pic"] = pic_path
-
                 data["friends"].append(friend)
                 save_data(data)
                 st.success(f"Added {name}")
@@ -62,20 +64,19 @@ with tab1:
             st.error("Please enter a name.")
 
     st.subheader("Friends List")
-for i, friend in enumerate(data["friends"]):
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.write(f"🧑 {friend['name']}")
-        # Safely check if 'pic' exists and is not None
-        if friend.get("pic"):
-            st.image(friend["pic"], width=100)
-    with col2:
-        if st.button("Delete", key=f"delete_friend_{i}"):
-            data["friends"].pop(i)
-            save_data(data)
-            st.rerun()
+    for i, friend in enumerate(data["friends"]):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.write(f"🧑 {friend['name']}")
+            if friend.get("pic"):  # Safely check if 'pic' exists
+                st.image(friend["pic"], width=100)
+        with col2:
+            if st.button("Delete", key=f"delete_friend_{i}"):
+                data["friends"].pop(i)
+                save_data(data)
+                st.rerun()
 
-    if st.button("Clear All Friends"):
+    if st.button("Clear All Friends", key="clear_all_friends"):
         data["friends"] = []
         save_data(data)
         st.warning("All friends cleared.")
@@ -85,8 +86,7 @@ with tab2:
     st.header("Cafeteria Items")
     item_name = st.text_input("Item Name")
     item_price = st.number_input("Price", min_value=0.0, step=0.5)
-
-    if st.button("Add Item"):
+    if st.button("Add Item", key="add_item"):
         if item_name and item_price:
             if item_name in [i["name"] for i in data["items"]]:
                 st.error("Item already exists.")
@@ -108,7 +108,7 @@ with tab2:
                 save_data(data)
                 st.rerun()
 
-    if st.button("Clear All Items"):
+    if st.button("Clear All Items", key="clear_all_items"):
         data["items"] = []
         save_data(data)
         st.warning("All items cleared.")
@@ -118,8 +118,7 @@ with tab3:
     st.header("Take Orders")
     selected_friend = st.selectbox("Select Friend", [f["name"] for f in data["friends"]])
     selected_item = st.selectbox("Select Item", [i["name"] for i in data["items"]])
-
-    if st.button("Add Order"):
+    if st.button("Add Order", key="add_order"):
         selected_item_price = next(item["price"] for item in data["items"] if item["name"] == selected_item)
         data["orders"].append({"friend": selected_friend, "item": selected_item, "price": selected_item_price})
         save_data(data)
@@ -139,7 +138,7 @@ with tab3:
     total_cost = sum(order["price"] for order in data["orders"])
     st.subheader(f"Total Cost: ₹{total_cost:.2f}")
 
-    if st.button("Clear All Orders"):
+    if st.button("Clear All Orders", key="clear_all_orders"):
         data["orders"] = []
         save_data(data)
         st.warning("All orders cleared.")
