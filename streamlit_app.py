@@ -85,14 +85,18 @@ with tab1:
         with col1:
             st.write(f"**{user}**")
         with col2:
-            if st.button(f"Edit", key=f"edit_user_{user}"):
-                st.session_state.edit_user = user
+            edit_button = st.button(f"Edit", key=f"edit_user_{user}")
         with col3:
-            if st.button(f"Delete", key=f"delete_user_{user}"):
-                if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
-                    data["orders"] = [o for o in data["orders"] if o["friend"] != user]
-                    save_data(data)
-                    st.rerun()
+            delete_button = st.button(f"Delete", key=f"delete_user_{user}")
+
+        # Handle button actions
+        if edit_button:
+            st.session_state.edit_user = user
+        if delete_button:
+            if st.checkbox(f"Are you sure you want to delete all orders for {user}?", key=f"confirm_delete_{user}"):
+                data["orders"] = [o for o in data["orders"] if o["friend"] != user]
+                save_data(data)
+                st.rerun()
 
         for order in orders:
             st.write(f"- {order['item']} (₹{order['price']})")
