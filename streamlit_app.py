@@ -22,6 +22,40 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)  # For Streamlit ThreadPoolExecutor warnings
 
+# Comprehensive list of User Agents
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.101 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.59 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Android 11; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
+    "Mozilla/5.0 (iPad; CPU OS 14_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.54 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/92.0.902.67 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.101 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.82 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
+]
+
 # API Keys (Consider moving to environment variables)
 ALPHA_VANTAGE_KEY = "TCAUKYUCIDZ6PI57"
 
@@ -46,7 +80,7 @@ TOOLTIPS = {
     "VPT": "Volume Price Trend - Tracks trend strength with price and volume",
 }
 
-# Define sectors and their stocks
+# Define sectors and their stocks (unchanged)
 SECTORS = {
     "Bank": [
         "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS", 
@@ -119,7 +153,9 @@ def retry(max_retries=3, delay=1, backoff_factor=2, jitter=0.5):
 def fetch_nse_stock_list():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     try:
-        response = requests.get(url, timeout=10)
+        session = requests.Session()
+        session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
+        response = session.get(url, timeout=10)
         response.raise_for_status()
         nse_data = pd.read_csv(io.StringIO(response.text))
         stock_list = [f"{symbol}.NS" for symbol in nse_data['SYMBOL']]
@@ -127,18 +163,25 @@ def fetch_nse_stock_list():
     except Exception:
         return list(set([stock for sector in SECTORS.values() for stock in sector]))
 
-@lru_cache(maxsize=100)
-def fetch_stock_data_cached(symbol, period="5y", interval="1d"):
+def fetch_stock_data_with_auth(symbol, period="5y", interval="1d"):
     try:
         if ".NS" not in symbol:
             symbol += ".NS"
-        stock = yf.Ticker(symbol)
+        session = requests.Session()
+        session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
+        stock = yf.Ticker(symbol, session=session)
+        time.sleep(random.uniform(1, 3))  # Add 1-3 second delay
         data = stock.history(period=period, interval=interval)
         if data.empty:
             raise ValueError(f"No data found for {symbol}")
         return data
-    except Exception:
+    except Exception as e:
+        st.warning(f"⚠️ Error fetching data for {symbol}: {str(e)}")
         return pd.DataFrame()
+
+@lru_cache(maxsize=100)
+def fetch_stock_data_cached(symbol, period="5y", interval="1d"):
+    return fetch_stock_data_with_auth(symbol, period, interval)
 
 def calculate_advance_decline_ratio(stock_list):
     advances = 0
@@ -166,7 +209,7 @@ def monte_carlo_simulation(data, simulations=1000, days=30):
             simulation_results.append(price_series)
         return simulation_results
     
-    model = arch_model(returns, vol='GARCH', p=1, q=1, dist='Normal', rescale=False)  # Disable rescaling to avoid DataScaleWarning
+    model = arch_model(returns, vol='GARCH', p=1, q=1, dist='Normal', rescale=False)
     garch_fit = model.fit(disp='off')
     forecasts = garch_fit.forecast(horizon=days)
     volatility = np.sqrt(forecasts.variance.iloc[-1].values)
@@ -232,7 +275,6 @@ def detect_divergence(data):
     bearish_div = (recent_highs < rsi_highs) and (price[recent_highs] > price[-1]) and (rsi[rsi_highs] > rsi[-1])
     return "Bullish Divergence" if bullish_div else "Bearish Divergence" if bearish_div else "No Divergence"
 
-# Custom Chande Momentum Oscillator implementation
 def calculate_cmo(close, window=14):
     try:
         diff = close.diff()
@@ -568,7 +610,6 @@ def generate_recommendations(data, symbol=None):
                     sell_score += 1
                     recommendations["Ichimoku_Trend"] = "Strong Sell"
 
-        # New Indicators
         if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
             data['Close'].iloc[-1] is not None):
             if (isinstance(data['Keltner_Upper'].iloc[-1], (int, float)) and 
@@ -669,7 +710,7 @@ def analyze_stock_parallel(symbol):
         }
     return None
 
-def analyze_all_stocks(stock_list, batch_size=50, progress_callback=None):
+def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
     results = []
     total_batches = (len(stock_list) // batch_size) + (1 if len(stock_list) % batch_size != 0 else 0)
     for i in range(0, len(stock_list), batch_size):
@@ -712,6 +753,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         ])
         results_df = analyze_all_stocks(
             selected_stocks,
+            batch_size=10,  # Reduced from 50
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         progress_bar.empty()
@@ -748,6 +790,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         ])
         intraday_results = analyze_intraday_stocks(
             selected_stocks,
+            batch_size=10,  # Reduced from 50
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         progress_bar.empty()
@@ -846,7 +889,7 @@ def update_progress(progress_bar, loading_text, progress_value, loading_messages
     dots = "." * int((progress_value * 10) % 4)
     loading_text.text(f"{loading_message}{dots}")
 
-def analyze_intraday_stocks(stock_list, batch_size=50, progress_callback=None):
+def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
     results = []
     total_batches = (len(stock_list) // batch_size) + (1 if len(stock_list) % batch_size != 0 else 0)
     for i in range(0, len(stock_list), batch_size):
