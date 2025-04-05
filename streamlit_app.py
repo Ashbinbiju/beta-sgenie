@@ -622,7 +622,7 @@ def generate_recommendations(data, symbol=None):
                     recommendations["Breakout"] = "Buy"
                 elif data['Close'].iloc[-1] < data['Donchian_Lower'].iloc[-1]:
                     sell_score += 1
-                    recommendations["BreakOut"] = "Sell"
+                    recommendations["Breakout"] = "Sell"  # Fixed typo "BreakOut" to "Breakout"
         
         # Mean Reversion
         if 'RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and data['Close'].iloc[-1] is not None:
@@ -637,18 +637,19 @@ def generate_recommendations(data, symbol=None):
                     sell_score += 2
                     recommendations["Mean_Reversion"] = "Sell"
         
-        # Ichimoku Trend
-        if 'Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and data['Close'].iloc[-1] is not None:
+        # Ichimoku Trend (Corrected)
+        if 'Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None:
             if (isinstance(data['Ichimoku_Tenkan'].iloc[-1], (int, float)) and 
                 isinstance(data['Ichimoku_Kijun'].iloc[-1], (int, float)) and 
                 isinstance(data['Close'].iloc[-1], (int, float)) and 
-                isinstance(data['Ichimoku_Span_A'].iloc[-1], (int, float))):
+                isinstance(data['Ichimoku_Span_A'].iloc[-1], (int, float)) and 
+                isinstance(data['Ichimoku_Span_B'].iloc[-1], (int, float))):
                 if (data['Ichimoku_Tenkan'].iloc[-1] > data['Ichimoku_Kijun'].iloc[-1] and
                     data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]):
                     buy_score += 1
                     recommendations["Ichimoku_Trend"] = "Strong Buy"
                 elif (data['Ichimoku_Tenkan'].iloc[-1] < data['Ichimoku_Kijun'].iloc[-1] and
-                      data['Close'].iloc[-1] < data['Ichimoku_Span_B  data['Ichimoku_Span_B'].iloc[-1]):
+                      data['Close'].iloc[-1] < data['Ichimoku_Span_B'].iloc[-1]):
                     sell_score += 1
                     recommendations["Ichimoku_Trend"] = "Strong Sell"
         
@@ -702,41 +703,41 @@ def generate_recommendations(data, symbol=None):
             fib_levels = [data['Fib_23.6'].iloc[-1], data['Fib_38.2'].iloc[-1], 
                           data['Fib_50.0'].iloc[-1], data['Fib_61.8'].iloc[-1]]
             for level in fib_levels:
-                if isinstance(level, (int, float)) and abs(current_price - level) / current_price < 0.01:  # Within 1%
+                if isinstance(level, (int, float)) and abs(current_price - level) / current_price < 0.01:
                     if current_price > level:
-                        buy_score += 1  # Potential support
+                        buy_score += 1
                     else:
-                        sell_score += 1  # Potential resistance
+                        sell_score += 1
         
         # Parabolic SAR
         if ('Parabolic_SAR' in data.columns and data['Parabolic_SAR'].iloc[-1] is not None and 
             data['Close'].iloc[-1] is not None):
             if isinstance(data['Parabolic_SAR'].iloc[-1], (int, float)) and isinstance(data['Close'].iloc[-1], (int, float)):
                 if data['Close'].iloc[-1] > data['Parabolic_SAR'].iloc[-1]:
-                    buy_score += 1  # Bullish signal
+                    buy_score += 1
                 elif data['Close'].iloc[-1] < data['Parabolic_SAR'].iloc[-1]:
-                    sell_score += 1  # Bearish signal
+                    sell_score += 1
         
         # OBV
         if ('OBV' in data.columns and data['OBV'].iloc[-1] is not None and 
             data['OBV'].iloc[-2] is not None):
             if isinstance(data['OBV'].iloc[-1], (int, float)) and isinstance(data['OBV'].iloc[-2], (int, float)):
                 if data['OBV'].iloc[-1] > data['OBV'].iloc[-2]:
-                    buy_score += 1  # Volume supports upward move
+                    buy_score += 1
                 elif data['OBV'].iloc[-1] < data['OBV'].iloc[-2]:
-                    sell_score += 1  # Volume supports downward move
+                    sell_score += 1
         
         # Fundamentals
         if symbol:
             fundamentals = fetch_fundamentals(symbol)
             if fundamentals['P/E'] < 15 and fundamentals['EPS'] > 0:
-                buy_score += 2  # Strong fundamentals
+                buy_score += 2
             elif fundamentals['P/E'] > 30 or fundamentals['EPS'] < 0:
-                sell_score += 1  # Weak fundamentals
+                sell_score += 1
             if fundamentals['RevenueGrowth'] > 0.1:
-                buy_score += 1  # Growth potential
+                buy_score += 1
             elif fundamentals['RevenueGrowth'] < 0:
-                sell_score += 0.5  # Declining revenue
+                sell_score += 0.5
         
         # Set recommendations based on scores
         if buy_score >= 4:
