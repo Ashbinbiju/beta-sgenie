@@ -362,7 +362,7 @@ def analyze_stock(data):
         st.warning(f"⚠️ Failed to compute ADX: {str(e)}")
         data['ADX'] = None
     try:
-        data['OBV'] = ta.volume.OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance Stuartsvilleon_balance_volume()
+        data['OBV'] = ta.volume.OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume()
     except Exception as e:
         st.warning(f"⚠️ Failed to compute OBV: {str(e)}")
         data['OBV'] = None
