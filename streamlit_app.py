@@ -78,9 +78,11 @@ TOOLTIPS = {
     "Ultimate_Osc": "Ultimate Oscillator - Combines short, medium, and long-term momentum",
     "CMO": "Chande Momentum Oscillator - Measures raw momentum (-100 to 100)",
     "VPT": "Volume Price Trend - Tracks trend strength with price and volume",
+    "Williams_%R": "Williams %R - Momentum indicator (-100 to 0)",
+    "Force_Index": "Elder's Force Index - Measures buying/selling pressure",
 }
 
-# Define sectors and their stocks (unchanged)
+# Define sectors and their stocks
 SECTORS = {
     "Bank": [
         "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS", 
@@ -128,6 +130,14 @@ SECTORS = {
     "Containers & Packaging": ["AGI.NS", "UFLEX.NS", "JINDALPOLY.NS", "COSMOFIRST.NS", "HUHTAMAKI.NS", "ESTER.NS", "TIRUPATI.NS", "PYRAMID.NS", "BBTCL.NS", "RAJESHCAN.NS", "IDEALTECHO.NS", "PERFECTPAC.NS", "GUJCON.NS", "HCP.NS", "SHETRON.NS"],
     "Paper": ["JKPAPER.NS", "WSTCSTPAPR.NS", "SESHAPAPER.NS", "PDMJEPAPER.NS", "NRAGRINDQ.NS", "RUCHIRA.NS", "SANGALPAPR.NS", "SVJENTERPR.NS", "METROGLOBL.NS", "SHREYANIND.NS", "SUBAMPAPER.NS", "STARPAPER.NS", "PAKKA.NS", "TNPL.NS", "KUANTUM.NS"],
     "Photographic Products": ["JINDALPHOT.NS"]
+}
+
+# Strategy weights for scoring
+STRATEGY_WEIGHTS = {
+    'momentum': 1.2,  # Higher weight to momentum in ranging markets
+    'trend': 1.5,     # Higher weight in trending markets
+    'volume': 0.9,
+    'volatility': 1.1
 }
 
 def tooltip(label, explanation):
@@ -242,14 +252,13 @@ def calculate_confidence_score(data):
         score += 1
     if 'Ichimoku_Span_A' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]:
         score += 1
-    # Adjust for volatility
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
-        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]  # Normalized ATR
-        if atr_volatility < 0.02:  # Low volatility increases confidence
+        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
+        if atr_volatility < 0.02:
             score += 0.5
-        elif atr_volatility > 0.05:  # High volatility reduces confidence
+        elif atr_volatility > 0.05:
             score -= 0.5
-    return min(max(score / 3.5, 0), 1)  # Normalize to 0-1 scale
+    return min(max(score / 3.5, 0), 1)
 
 def assess_risk(data):
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['ATR'].iloc[-1] > data['ATR'].mean():
@@ -292,6 +301,31 @@ def calculate_cmo(close, window=14):
     except Exception as e:
         st.warning(f"⚠️ Failed to compute custom CMO: {str(e)}")
         return None
+
+def detect_swing_points(data, lookback=5):
+    data['Swing_High'] = data['High'][(data['High'] > data['High'].shift(1)) & 
+                                      (data['High'] > data['High'].shift(-1)) & 
+                                      (data['High'] >= data['High'].rolling(lookback).max())]
+    data['Swing_Low'] = data['Low'][(data['Low'] < data['Low'].shift(1)) & 
+                                    (data['Low'] < data['Low'].shift(-1)) & 
+                                    (data['Low'] <= data['Low'].rolling(lookback).min())]
+    recent_high = data['Swing_High'].dropna().iloc[-1] if not data['Swing_High'].dropna().empty else data['High'].max()
+    recent_low = data['Swing_Low'].dropna().iloc[-1] if not data['Swing_Low'].dropna().empty else data['Low'].min()
+    return recent_high, recent_low
+
+def calculate_fibonacci_swing(data, lookback=5):
+    high, low = detect_swing_points(data, lookback)
+    diff = high - low
+    data['Fib_23.6'] = high - diff * 0.236
+    data['Fib_38.2'] = high - diff * 0.382
+    data['Fib_50.0'] = high - diff * 0.5
+    data['Fib_61.8'] = high - diff * 0.618
+    return data
+
+def calculate_williams_r(high, low, close, window=14):
+    highest_high = high.rolling(window).max()
+    lowest_low = low.rolling(window).min()
+    return -100 * (highest_high - close) / (highest_high - lowest_low)
 
 def analyze_stock(data):
     if data.empty or len(data) < 27:
@@ -385,13 +419,7 @@ def analyze_stock(data):
         st.warning(f"⚠️ Failed to compute Parabolic SAR: {str(e)}")
         data['Parabolic_SAR'] = None
     try:
-        high = data['High'].max()
-        low = data['Low'].min()
-        diff = high - low
-        data['Fib_23.6'] = high - diff * 0.236
-        data['Fib_38.2'] = high - diff * 0.382
-        data['Fib_50.0'] = high - diff * 0.5
-        data['Fib_61.8'] = high - diff * 0.618
+        data = calculate_fibonacci_swing(data)
     except Exception as e:
         st.warning(f"⚠️ Failed to compute Fibonacci: {str(e)}")
         data['Fib_23.6'] = None
@@ -464,6 +492,16 @@ def analyze_stock(data):
     except Exception as e:
         st.warning(f"⚠️ Failed to compute Volume Price Trend: {str(e)}")
         data['VPT'] = None
+    try:
+        data['Williams_%R'] = calculate_williams_r(data['High'], data['Low'], data['Close'])
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Williams %R: {str(e)}")
+        data['Williams_%R'] = None
+    try:
+        data['Force_Index'] = ta.volume.force_index(close=data['Close'], volume=data['Volume'], window=13)
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Force Index: {str(e)}")
+        data['Force_Index'] = None
     return data
 
 def calculate_buy_at(data):
@@ -481,25 +519,25 @@ def calculate_stop_loss(data, atr_multiplier=2.5):
         return None
     last_close = data['Close'].iloc[-1]
     last_atr = data['ATR'].iloc[-1]
-    # Adjust multiplier based on volatility
     atr_multiplier = 3.0 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25 else 1.5
     stop_loss = last_close - (atr_multiplier * last_atr)
-    # Prevent extreme stop loss (e.g., not below 10% of price)
     if stop_loss < last_close * 0.9:
         stop_loss = last_close * 0.9
     return round(stop_loss, 2)
 
-def calculate_target(data, risk_reward_ratio=3):
+def calculate_target(data, base_ratio=3):
     stop_loss = calculate_stop_loss(data)
     if stop_loss is None:
         st.warning("⚠️ Cannot calculate Target due to missing Stop Loss data.")
         return None
     last_close = data['Close'].iloc[-1]
     risk = last_close - stop_loss
-    # Cap risk/reward ratio to avoid extremes
-    adjusted_ratio = min(risk_reward_ratio, 5) if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25 else min(risk_reward_ratio, 3)
+    atr_volatility = data['ATR'].iloc[-1] / last_close
+    if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25:
+        adjusted_ratio = min(base_ratio * 1.2, 5) if atr_volatility < 0.03 else min(base_ratio * 0.8, 3)
+    else:
+        adjusted_ratio = min(base_ratio * 1.5, 5) if atr_volatility < 0.02 else min(base_ratio, 3)
     target = last_close + (risk * adjusted_ratio)
-    # Ensure target is reasonable (e.g., within 20% of current price)
     if target > last_close * 1.2:
         target = last_close * 1.2
     return round(target, 2)
@@ -516,6 +554,16 @@ def fetch_fundamentals(symbol):
     except Exception:
         return {'P/E': float('inf'), 'EPS': 0, 'RevenueGrowth': 0}
 
+def calculate_market_regime(data):
+    adx = data['ADX'].iloc[-1] if 'ADX' in data.columns and data['ADX'].iloc[-1] is not None else 0
+    return 'trending' if adx > 25 else 'ranging'
+
+def adjust_weights(market_regime):
+    if market_regime == 'trending':
+        STRATEGY_WEIGHTS.update({'trend': 2.0, 'momentum': 0.8})
+    else:
+        STRATEGY_WEIGHTS.update({'momentum': 1.5, 'volatility': 1.3})
+
 def generate_recommendations(data, symbol=None):
     recommendations = {
         "Intraday": "Hold", "Swing": "Hold",
@@ -530,114 +578,116 @@ def generate_recommendations(data, symbol=None):
     
     try:
         recommendations["Current Price"] = float(data['Close'].iloc[-1])
+        market_regime = calculate_market_regime(data)
+        adjust_weights(market_regime)
         buy_score = 0
         sell_score = 0
         
-        # RSI
+        # RSI (Momentum)
         if 'RSI' in data.columns and data['RSI'].iloc[-1] is not None:
             if isinstance(data['RSI'].iloc[-1], (int, float)):
                 if data['RSI'].iloc[-1] < 30:
-                    buy_score += 2
+                    buy_score += 2 * STRATEGY_WEIGHTS['momentum']
                 elif data['RSI'].iloc[-1] > 70:
-                    sell_score += 2
+                    sell_score += 2 * STRATEGY_WEIGHTS['momentum']
         
-        # MACD
+        # MACD (Trend)
         if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD_signal'].iloc[-1] is not None:
             if isinstance(data['MACD'].iloc[-1], (int, float)) and isinstance(data['MACD_signal'].iloc[-1], (int, float)):
                 if data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                 elif data['MACD'].iloc[-1] < data['MACD_signal'].iloc[-1]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
         
-        # Bollinger Bands
+        # Bollinger Bands (Volatility)
         if 'Close' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and data['Close'].iloc[-1] is not None:
             if isinstance(data['Close'].iloc[-1], (int, float)) and isinstance(data['Lower_Band'].iloc[-1], (int, float)) and isinstance(data['Upper_Band'].iloc[-1], (int, float)):
                 if data['Close'].iloc[-1] < data['Lower_Band'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['volatility']
                 elif data['Close'].iloc[-1] > data['Upper_Band'].iloc[-1]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['volatility']
         
-        # VWAP
+        # VWAP (Trend)
         if 'VWAP' in data.columns and data['VWAP'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
             if isinstance(data['VWAP'].iloc[-1], (int, float)) and isinstance(data['Close'].iloc[-1], (int, float)):
                 if data['Close'].iloc[-1] > data['VWAP'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                 elif data['Close'].iloc[-1] < data['VWAP'].iloc[-1]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
         
-        # Volume Analysis
+        # Volume Analysis (Volume)
         if ('Volume' in data.columns and data['Volume'].iloc[-1] is not None and 
             'Avg_Volume' in data.columns and data['Avg_Volume'].iloc[-1] is not None):
             volume_ratio = data['Volume'].iloc[-1] / data['Avg_Volume'].iloc[-1]
             if isinstance(volume_ratio, (int, float)) and isinstance(data['Close'].iloc[-1], (int, float)) and isinstance(data['Close'].iloc[-2], (int, float)):
                 if volume_ratio > 1.5 and data['Close'].iloc[-1] > data['Close'].iloc[-2]:
-                    buy_score += 2
+                    buy_score += 2 * STRATEGY_WEIGHTS['volume']
                 elif volume_ratio > 1.5 and data['Close'].iloc[-1] < data['Close'].iloc[-2]:
-                    sell_score += 2
+                    sell_score += 2 * STRATEGY_WEIGHTS['volume']
                 elif volume_ratio < 0.5:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['volume']
         
-        # Volume Spikes
+        # Volume Spikes (Volume)
         if 'Volume_Spike' in data.columns and data['Volume_Spike'].iloc[-1] is not None:
             if data['Volume_Spike'].iloc[-1] and isinstance(data['Close'].iloc[-1], (int, float)) and isinstance(data['Close'].iloc[-2], (int, float)):
                 if data['Close'].iloc[-1] > data['Close'].iloc[-2]:
-                    buy_score += 2
+                    buy_score += 2 * STRATEGY_WEIGHTS['volume']
                 else:
-                    sell_score += 2
+                    sell_score += 2 * STRATEGY_WEIGHTS['volume']
         
-        # Divergence
+        # Divergence (Momentum)
         if 'Divergence' in data.columns:
             if data['Divergence'].iloc[-1] == "Bullish Divergence":
-                buy_score += 1
+                buy_score += 1 * STRATEGY_WEIGHTS['momentum']
             elif data['Divergence'].iloc[-1] == "Bearish Divergence":
-                sell_score += 1
+                sell_score += 1 * STRATEGY_WEIGHTS['momentum']
         
-        # Ichimoku Cloud
+        # Ichimoku Cloud (Trend)
         if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None:
             if (isinstance(data['Ichimoku_Span_A'].iloc[-1], (int, float)) and 
                 isinstance(data['Ichimoku_Span_B'].iloc[-1], (int, float)) and 
                 isinstance(data['Close'].iloc[-1], (int, float))):
                 if data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                     recommendations["Ichimoku_Trend"] = "Buy"
                 elif data['Close'].iloc[-1] < min(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
                     recommendations["Ichimoku_Trend"] = "Sell"
         
-        # Chaikin Money Flow
+        # Chaikin Money Flow (Volume)
         if 'CMF' in data.columns and data['CMF'].iloc[-1] is not None:
             if isinstance(data['CMF'].iloc[-1], (int, float)):
                 if data['CMF'].iloc[-1] > 0:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['volume']
                 elif data['CMF'].iloc[-1] < 0:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['volume']
         
-        # Donchian Channels
+        # Donchian Channels (Trend)
         if 'Donchian_Upper' in data.columns and 'Donchian_Lower' in data.columns and data['Close'].iloc[-1] is not None:
             if (isinstance(data['Donchian_Upper'].iloc[-1], (int, float)) and 
                 isinstance(data['Donchian_Lower'].iloc[-1], (int, float)) and 
                 isinstance(data['Close'].iloc[-1], (int, float))):
                 if data['Close'].iloc[-1] > data['Donchian_Upper'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                     recommendations["Breakout"] = "Buy"
                 elif data['Close'].iloc[-1] < data['Donchian_Lower'].iloc[-1]:
-                    sell_score += 1
-                    recommendations["Breakout"] = "Sell"  # Fixed typo "BreakOut" to "Breakout"
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
+                    recommendations["Breakout"] = "Sell"
         
-        # Mean Reversion
+        # Mean Reversion (Momentum + Volatility)
         if 'RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and data['Close'].iloc[-1] is not None:
             if (isinstance(data['RSI'].iloc[-1], (int, float)) and 
                 isinstance(data['Lower_Band'].iloc[-1], (int, float)) and 
                 isinstance(data['Upper_Band'].iloc[-1], (int, float)) and 
                 isinstance(data['Close'].iloc[-1], (int, float))):
                 if data['RSI'].iloc[-1] < 30 and data['Close'].iloc[-1] <= data['Lower_Band'].iloc[-1]:
-                    buy_score += 2
+                    buy_score += 2 * STRATEGY_WEIGHTS['momentum']
                     recommendations["Mean_Reversion"] = "Buy"
                 elif data['RSI'].iloc[-1] > 70 and data['Close'].iloc[-1] >= data['Upper_Band'].iloc[-1]:
-                    sell_score += 2
+                    sell_score += 2 * STRATEGY_WEIGHTS['momentum']
                     recommendations["Mean_Reversion"] = "Sell"
         
-        # Ichimoku Trend (Corrected)
+        # Ichimoku Trend (Trend)
         if 'Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None:
             if (isinstance(data['Ichimoku_Tenkan'].iloc[-1], (int, float)) and 
                 isinstance(data['Ichimoku_Kijun'].iloc[-1], (int, float)) and 
@@ -646,57 +696,57 @@ def generate_recommendations(data, symbol=None):
                 isinstance(data['Ichimoku_Span_B'].iloc[-1], (int, float))):
                 if (data['Ichimoku_Tenkan'].iloc[-1] > data['Ichimoku_Kijun'].iloc[-1] and
                     data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]):
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                     recommendations["Ichimoku_Trend"] = "Strong Buy"
                 elif (data['Ichimoku_Tenkan'].iloc[-1] < data['Ichimoku_Kijun'].iloc[-1] and
                       data['Close'].iloc[-1] < data['Ichimoku_Span_B'].iloc[-1]):
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
                     recommendations["Ichimoku_Trend"] = "Strong Sell"
         
-        # Keltner Channels
+        # Keltner Channels (Volatility)
         if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
             data['Close'].iloc[-1] is not None):
             if (isinstance(data['Keltner_Upper'].iloc[-1], (int, float)) and 
                 isinstance(data['Keltner_Lower'].iloc[-1], (int, float)) and 
                 isinstance(data['Close'].iloc[-1], (int, float))):
                 if data['Close'].iloc[-1] < data['Keltner_Lower'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['volatility']
                 elif data['Close'].iloc[-1] > data['Keltner_Upper'].iloc[-1]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['volatility']
         
-        # TRIX
+        # TRIX (Momentum)
         if 'TRIX' in data.columns and data['TRIX'].iloc[-1] is not None:
             if isinstance(data['TRIX'].iloc[-1], (int, float)) and isinstance(data['TRIX'].iloc[-2], (int, float)):
                 if data['TRIX'].iloc[-1] > 0 and data['TRIX'].iloc[-1] > data['TRIX'].iloc[-2]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['momentum']
                 elif data['TRIX'].iloc[-1] < 0 and data['TRIX'].iloc[-1] < data['TRIX'].iloc[-2]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['momentum']
         
-        # Ultimate Oscillator
+        # Ultimate Oscillator (Momentum)
         if 'Ultimate_Osc' in data.columns and data['Ultimate_Osc'].iloc[-1] is not None:
             if isinstance(data['Ultimate_Osc'].iloc[-1], (int, float)):
                 if data['Ultimate_Osc'].iloc[-1] < 30:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['momentum']
                 elif data['Ultimate_Osc'].iloc[-1] > 70:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['momentum']
         
-        # Chande Momentum Oscillator
+        # Chande Momentum Oscillator (Momentum)
         if 'CMO' in data.columns and data['CMO'].iloc[-1] is not None:
             if isinstance(data['CMO'].iloc[-1], (int, float)):
                 if data['CMO'].iloc[-1] < -50:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['momentum']
                 elif data['CMO'].iloc[-1] > 50:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['momentum']
         
-        # Volume Price Trend
+        # Volume Price Trend (Volume)
         if 'VPT' in data.columns and data['VPT'].iloc[-1] is not None:
             if isinstance(data['VPT'].iloc[-1], (int, float)) and isinstance(data['VPT'].iloc[-2], (int, float)):
                 if data['VPT'].iloc[-1] > data['VPT'].iloc[-2]:
-                    buy_score += 1
-                elif data['VPT'].iloc[-1] < data['VPT'].iloc[-2]:
-                    sell_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['volume']
+                elif data['VPT'].iloc[-2] > data['VPT'].iloc[-1]:
+                    sell_score += 1 * STRATEGY_WEIGHTS['volume']
         
-        # Fibonacci Retracements
+        # Fibonacci Retracements (Volatility)
         if ('Fib_23.6' in data.columns and 'Fib_38.2' in data.columns and 
             data['Close'].iloc[-1] is not None):
             current_price = data['Close'].iloc[-1]
@@ -705,39 +755,62 @@ def generate_recommendations(data, symbol=None):
             for level in fib_levels:
                 if isinstance(level, (int, float)) and abs(current_price - level) / current_price < 0.01:
                     if current_price > level:
-                        buy_score += 1
+                        buy_score += 1 * STRATEGY_WEIGHTS['volatility']
                     else:
-                        sell_score += 1
+                        sell_score += 1 * STRATEGY_WEIGHTS['volatility']
         
-        # Parabolic SAR
+        # Parabolic SAR (Trend)
         if ('Parabolic_SAR' in data.columns and data['Parabolic_SAR'].iloc[-1] is not None and 
             data['Close'].iloc[-1] is not None):
             if isinstance(data['Parabolic_SAR'].iloc[-1], (int, float)) and isinstance(data['Close'].iloc[-1], (int, float)):
                 if data['Close'].iloc[-1] > data['Parabolic_SAR'].iloc[-1]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['trend']
                 elif data['Close'].iloc[-1] < data['Parabolic_SAR'].iloc[-1]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['trend']
         
-        # OBV
+        # OBV (Volume)
         if ('OBV' in data.columns and data['OBV'].iloc[-1] is not None and 
             data['OBV'].iloc[-2] is not None):
             if isinstance(data['OBV'].iloc[-1], (int, float)) and isinstance(data['OBV'].iloc[-2], (int, float)):
                 if data['OBV'].iloc[-1] > data['OBV'].iloc[-2]:
-                    buy_score += 1
+                    buy_score += 1 * STRATEGY_WEIGHTS['volume']
                 elif data['OBV'].iloc[-1] < data['OBV'].iloc[-2]:
-                    sell_score += 1
+                    sell_score += 1 * STRATEGY_WEIGHTS['volume']
+        
+        # Williams %R (Momentum)
+        if 'Williams_%R' in data.columns and data['Williams_%R'].iloc[-1] is not None:
+            if isinstance(data['Williams_%R'].iloc[-1], (int, float)):
+                if data['Williams_%R'].iloc[-1] < -80:
+                    buy_score += 1 * STRATEGY_WEIGHTS['momentum']
+                elif data['Williams_%R'].iloc[-1] > -20:
+                    sell_score += 1 * STRATEGY_WEIGHTS['momentum']
+        
+        # Force Index (Volume)
+        if 'Force_Index' in data.columns and data['Force_Index'].iloc[-1] is not None:
+            if isinstance(data['Force_Index'].iloc[-1], (int, float)) and isinstance(data['Force_Index'].iloc[-2], (int, float)):
+                if data['Force_Index'].iloc[-1] > 0 and data['Force_Index'].iloc[-1] > data['Force_Index'].iloc[-2]:
+                    buy_score += 1 * STRATEGY_WEIGHTS['volume']
+                elif data['Force_Index'].iloc[-1] < 0 and data['Force_Index'].iloc[-1] < data['Force_Index'].iloc[-2]:
+                    sell_score += 1 * STRATEGY_WEIGHTS['volume']
+        
+        # Volatility Adjustment (Volatility)
+        if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
+            atr_vol = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
+            if atr_vol > 0.05:
+                buy_score -= 0.5 * STRATEGY_WEIGHTS['volatility']
+                sell_score -= 0.5 * STRATEGY_WEIGHTS['volatility']
         
         # Fundamentals
         if symbol:
             fundamentals = fetch_fundamentals(symbol)
             if fundamentals['P/E'] < 15 and fundamentals['EPS'] > 0:
-                buy_score += 2
+                buy_score += 2 * STRATEGY_WEIGHTS['trend']
             elif fundamentals['P/E'] > 30 or fundamentals['EPS'] < 0:
-                sell_score += 1
+                sell_score += 1 * STRATEGY_WEIGHTS['trend']
             if fundamentals['RevenueGrowth'] > 0.1:
-                buy_score += 1
+                buy_score += 1 * STRATEGY_WEIGHTS['trend']
             elif fundamentals['RevenueGrowth'] < 0:
-                sell_score += 0.5
+                sell_score += 0.5 * STRATEGY_WEIGHTS['trend']
         
         # Set recommendations based on scores
         if buy_score >= 4:
@@ -761,7 +834,7 @@ def generate_recommendations(data, symbol=None):
         if recommendations["Target"] is None:
             st.warning("⚠️ Target not calculated due to missing data.")
         
-        recommendations["Score"] = max(0, min(buy_score - sell_score, 7))
+        recommendations["Score"] = max(0, min(buy_score - sell_score, 10))
     except Exception as e:
         st.warning(f"⚠️ Error generating recommendations: {str(e)}")
     return recommendations
@@ -856,7 +929,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not results_df.empty:
             st.subheader("🏆 Today's Top 10 Stocks")
             for _, row in results_df.iterrows():
-                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/7"):
+                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/10"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -893,7 +966,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not intraday_results.empty:
             st.subheader("🏆 Top 5 Intraday Stocks")
             for _, row in intraday_results.iterrows():
-                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/7"):
+                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/10"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -946,7 +1019,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             else:
                 st.warning("⚠️ No valid price action data available for plotting.")
         with tab2:
-            momentum_cols = ['RSI', 'MACD', 'MACD_signal', 'TRIX', 'Ultimate_Osc', 'CMO']
+            momentum_cols = ['RSI', 'MACD', 'MACD_signal', 'TRIX', 'Ultimate_Osc', 'CMO', 'Williams_%R']
             valid_momentum_cols = [col for col in momentum_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
             if valid_momentum_cols:
                 fig = px.line(data, y=valid_momentum_cols, title="Momentum Indicators")
@@ -968,10 +1041,10 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             fig = px.line(mc_df, title="Monte Carlo Price Simulations (30 Days)")
             st.plotly_chart(fig)
         with tab5:
-            new_cols = ['Ichimoku_Span_A', 'Ichimoku_Span_B', 'Ichimoku_Tenkan', 'Ichimoku_Kijun', 'CMF', 'VPT']
+            new_cols = ['Ichimoku_Span_A', 'Ichimoku_Span_B', 'Ichimoku_Tenkan', 'Ichimoku_Kijun', 'CMF', 'VPT', 'Force_Index']
             valid_new_cols = [col for col in new_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
             if valid_new_cols:
-                fig = px.line(data, y=valid_new_cols, title="New Indicators (Ichimoku, CMF, VPT)")
+                fig = px.line(data, y=valid_new_cols, title="New Indicators (Ichimoku, CMF, VPT, Force Index)")
                 st.plotly_chart(fig)
             else:
                 st.warning("⚠️ No valid new indicators available for plotting.")
