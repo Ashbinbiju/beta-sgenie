@@ -1112,7 +1112,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             mc_df = pd.DataFrame(mc_results).T
             mc_df.columns = [f"Sim {i+1}" for i in range(len(mc_results))]
             fig = px.line(mc_df, title="Monte Carlo Price Simulations (30 Days)")
-                        st.plotly_chart(fig)
+            st.plotly_chart(fig)
             percentiles = np.percentile(mc_df.iloc[-1], [5, 50, 95])
             st.write(f"5th Percentile: ₹{percentiles[0]:.2f}")
             st.write(f"Median: ₹{percentiles[1]:.2f}")
