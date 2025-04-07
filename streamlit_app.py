@@ -83,7 +83,7 @@ TOOLTIPS = {
 # Define sectors and their stocks
 SECTORS = {
 
-   top_nse_stocks = [
+   "top_nse_stocks": = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
     "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "LT.NS", "KOTAKBANK.NS",
     "ITC.NS", "ASIANPAINT.NS", "AXISBANK.NS", "MARUTI.NS", "BAJFINANCE.NS",
