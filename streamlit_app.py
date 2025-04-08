@@ -1156,29 +1156,46 @@ def update_progress(progress_bar, loading_text, progress, messages):
     loading_text.text(next(messages))
 
 def main():
-    st.sidebar.title("🔧 Settings")
-    stock_list = fetch_nse_stock_list()
-    sector_options = list(SECTORS.keys()) + ["Custom"]
-    selected_sector = st.sidebar.selectbox("Select Sector", sector_options)
+    st.sidebar.title("🔍 Stock Search & Sector Selection")
+    NSE_STOCKS = fetch_nse_stock_list()
     
-    if selected_sector == "Custom":
-        selected_stocks = st.sidebar.multiselect("Select Stocks", stock_list, default=["RELIANCE.NS"])
-    else:
-        selected_stocks = SECTORS.get(selected_sector, stock_list)
+    st.sidebar.subheader("Select Sectors")
+    all_sectors = list(SECTORS.keys())
+    selected_sectors = []
+    for sector in all_sectors:
+        if st.sidebar.checkbox(sector, value=True):
+            selected_sectors.append(sector)
     
-    symbol = st.sidebar.selectbox("Select Stock for Detailed Analysis", selected_stocks)
+    selected_stocks = list(set([stock for sector in selected_sectors for stock in SECTORS[sector] if stock in NSE_STOCKS]))
     
-    if st.sidebar.button("🔍 Analyze Selected Stock"):
+    symbol = None
+    selected_option = st.sidebar.selectbox(
+        "Choose or enter stock:",
+        options=[""] + selected_stocks + ["Custom"],
+        format_func=lambda x: x.split('.')[0] if x != "Custom" and x != "" else x
+    )
+    
+    if selected_option == "Custom":
+        custom_symbol = st.sidebar.text_input("Enter NSE Symbol (e.g., RELIANCE):")
+        if custom_symbol:
+            symbol = f"{custom_symbol}.NS"
+    elif selected_option != "":
+        symbol = selected_option
+    
+    if symbol:
+        if ".NS" not in symbol:
+            symbol += ".NS"
+        if symbol not in NSE_STOCKS:
+            st.sidebar.warning("⚠️ Unverified symbol - data may be unreliable")
         data = fetch_stock_data_cached(symbol)
         if not data.empty:
             data = analyze_stock(data)
             recommendations = generate_recommendations(data, symbol)
             display_dashboard(symbol, data, recommendations, selected_stocks)
         else:
-            st.error(f"❌ Failed to fetch data for {symbol}")
-    
-    st.sidebar.subheader("ℹ️ About")
-    st.sidebar.info("StockGenie Pro provides advanced stock analysis using technical indicators and machine learning for NSE stocks.")
+            st.error("❌ Failed to load data for this symbol")
+    else:
+        display_dashboard(None, None, None, selected_stocks)
 
 if __name__ == "__main__":
     main()
