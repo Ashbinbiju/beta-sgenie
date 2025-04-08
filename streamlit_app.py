@@ -82,62 +82,59 @@ TOOLTIPS = {
 
 # Define sectors and their stocks
 SECTORS = {
-
-   "top_nse_stocks":[
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
-    "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "LT.NS", "KOTAKBANK.NS",
-    "ITC.NS", "ASIANPAINT.NS", "AXISBANK.NS", "MARUTI.NS", "BAJFINANCE.NS",
-    "HCLTECH.NS", "SUNPHARMA.NS", "TITAN.NS", "WIPRO.NS", "ULTRACEMCO.NS",
-    "NESTLEIND.NS", "POWERGRID.NS", "TECHM.NS", "M&M.NS", "ONGC.NS",
-    "COALINDIA.NS", "NTPC.NS", "ADANIENT.NS", "JSWSTEEL.NS", "TATASTEEL.NS",
-    "GRASIM.NS", "DIVISLAB.NS", "BAJAJFINSV.NS", "HINDALCO.NS", "DRREDDY.NS",
-    "CIPLA.NS", "BRITANNIA.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "SHREECEM.NS",
-    "APOLLOHOSP.NS", "TATAMOTORS.NS", "INDUSINDBK.NS", "PIDILITIND.NS", "DMART.NS",
-    "SIEMENS.NS", "BHEL.NS", "GAIL.NS", "IOC.NS", "BEL.NS",
-    "HAVELLS.NS", "DABUR.NS", "AMBUJACEM.NS", "LUPIN.NS", "BERGEPAINT.NS",
-    "UPL.NS", "ACC.NS", "BANKBARODA.NS", "PNB.NS", "GODREJCP.NS",
-    "TATAPOWER.NS", "RECLTD.NS", "PFC.NS", "COLPAL.NS", "TRENT.NS",
-    "MUTHOOTFIN.NS", "AUROPHARMA.NS", "IGL.NS", "DLF.NS", "CONCOR.NS",
-    "ALKEM.NS", "NAUKRI.NS", "JINDALSTEL.NS", "PAGEIND.NS", "BALKRISIND.NS",
-    "IDEA.NS", "MFSL.NS", "CHOLAFIN.NS", "L&TFH.NS", "TORNTPHARM.NS",
-    "MRF.NS", "BOSCHLTD.NS", "ABB.NS", "ZYDUSLIFE.NS", "HINDPETRO.NS",
-    "SBICARD.NS", "INDIGO.NS", "ADANIPORTS.NS", "BAJAJ-AUTO.NS", "VEDL.NS",
-    "GODREJPROP.NS", "TATACONSUM.NS", "ICICIPRULI.NS", "OBEROIRLTY.NS", "POLYCAB.NS",
-    "PHOENIXLTD.NS", "ASTRAL.NS", "BPCL.NS", "CUMMINSIND.NS", "LICHSGFIN.NS",
-    "IDFCFIRSTB.NS", "MCX.NS", "GLENMARK.NS", "SUNTV.NS", "IPCALAB.NS",
-    "LTIM.NS", "EXIDEIND.NS", "COROMANDEL.NS", "DEEPAKNTR.NS", "ESCORTS.NS",
-    "BANKINDIA.NS", "GSPL.NS", "GNFC.NS", "NMDC.NS", "RAMCOCEM.NS",
-    "BANDHANBNK.NS", "APOLLOTYRE.NS", "TATACOMM.NS", "PETRONET.NS", "AUBANK.NS",
-    "KANSAINER.NS", "FEDERALBNK.NS", "SRF.NS", "MPHASIS.NS", "JUBLFOOD.NS",
-    "VOLTAS.NS", "BIOCON.NS", "CANBK.NS", "RBLBANK.NS", "SYNGENE.NS",
-    "DALBHARAT.NS", "YESBANK.NS", "HINDCOPPER.NS", "TVSMOTOR.NS", "UNIONBANK.NS",
-    "ASHOKLEY.NS", "INDHOTEL.NS", "ABFRL.NS", "CROMPTON.NS", "LAURUSLABS.NS",
-    "BATAINDIA.NS", "SAIL.NS", "GUJGASLTD.NS", "NATCOPHARM.NS", "PRESTIGE.NS",
-    "ZEEL.NS", "FORTIS.NS", "LALPATHLAB.NS", "IDFC.NS", "MANAPPURAM.NS",
-    "GMRINFRA.NS", "LICINDIA.NS", "STARHEALTH.NS", "PAYTM.NS", "IRCTC.NS",
-    "METROPOLIS.NS", "DELHIVERY.NS", "ZOMATO.NS", "NYKAA.NS", "POLICYBZR.NS",
-    "ADANIGREEN.NS", "ADANITRANS.NS", "HAL.NS", "IRFC.NS", "RVNL.NS",
-    "MAZDOCK.NS", "COCHINSHIP.NS", "BEML.NS", "ENGINERSIN.NS", "KIOCL.NS",
-    "NBCC.NS", "RCF.NS", "NLCINDIA.NS", "SJVN.NS", "MOIL.NS",
-    "ITI.NS", "HFCL.NS", "TRIDENT.NS", "SUZLON.NS", "JPPOWER.NS",
-    "TATACHEM.NS", "IEX.NS", "CDSL.NS", "ANGELONE.NS", "BSE.NS",
-    "NAM-INDIA.NS", "UTIAMC.NS", "CAMS.NS", "360ONE.NS", "KFINTECH.NS",
-    "CHAMBLFERT.NS", "GNFC.NS", "GSFC.NS", "PARADEEP.NS", "FACT.NS",
-    "ATUL.NS", "VINATIORGA.NS", "AARTIIND.NS", "PIIND.NS", "NAVINFLUOR.NS",
-    "CUB.NS", "DCBBANK.NS", "EQUITASBNK.NS", "UJJIVANSFB.NS", "SOUTHBANK.NS",
-    "KARURVYSYA.NS", "CSBBANK.NS", "TMB.NS", "J&KBANK.NS", "KTKBANK.NS",
-    "FSL.NS", "JBMA.NS", "MOTHERSON.NS", "ENDURANCE.NS", "SCHAEFFLER.NS",
-    "TIINDIA.NS", "SUNDARMFIN.NS", "SHRIRAMFIN.NS", "AAVAS.NS", "HOMEFIRST.NS",
-    "KSB.NS", "GRINDWELL.NS", "ELGIEQUIP.NS", "KIRLOSENG.NS", "TIMKEN.NS",
-    "THERMAX.NS", "HONAUT.NS", "GMMPFAUDLR.NS", "SKFINDIA.NS", "ARE&M.NS",
-    "EIHOTEL.NS", "CHALET.NS", "LEMONTRIE.NS", "SAPPHIRE.NS", "WONDERLA.NS",
-    "CARBORUNIV.NS", "CERA.NS", "KAJARIACER.NS", "SOMANYCERA.NS", "ORIENTELEC.NS",
-    "BLUESTARCO.NS", "WHIRLPOOL.NS", "SYMPHONY.NS", "BAJAJELEC.NS", "IFBIND.NS",
-    "TTKPRESTIG.NS", "HAWKINCOOK.NS", "BORORENEW.NS", "GREENLAM.NS", "PRINCEPIPE.NS",
-    "ROSSARI.NS", "NEOGEN.NS", "SHARDACROP.NS", "FINEORG.NS", "BALAMINES.NS"
-],
-
-    
+    "top_nse_stocks": [
+        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+        "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "LT.NS", "KOTAKBANK.NS",
+        "ITC.NS", "ASIANPAINT.NS", "AXISBANK.NS", "MARUTI.NS", "BAJFINANCE.NS",
+        "HCLTECH.NS", "SUNPHARMA.NS", "TITAN.NS", "WIPRO.NS", "ULTRACEMCO.NS",
+        "NESTLEIND.NS", "POWERGRID.NS", "TECHM.NS", "M&M.NS", "ONGC.NS",
+        "COALINDIA.NS", "NTPC.NS", "ADANIENT.NS", "JSWSTEEL.NS", "TATASTEEL.NS",
+        "GRASIM.NS", "DIVISLAB.NS", "BAJAJFINSV.NS", "HINDALCO.NS", "DRREDDY.NS",
+        "CIPLA.NS", "BRITANNIA.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "SHREECEM.NS",
+        "APOLLOHOSP.NS", "TATAMOTORS.NS", "INDUSINDBK.NS", "PIDILITIND.NS", "DMART.NS",
+        "SIEMENS.NS", "BHEL.NS", "GAIL.NS", "IOC.NS", "BEL.NS",
+        "HAVELLS.NS", "DABUR.NS", "AMBUJACEM.NS", "LUPIN.NS", "BERGEPAINT.NS",
+        "UPL.NS", "ACC.NS", "BANKBARODA.NS", "PNB.NS", "GODREJCP.NS",
+        "TATAPOWER.NS", "RECLTD.NS", "PFC.NS", "COLPAL.NS", "TRENT.NS",
+        "MUTHOOTFIN.NS", "AUROPHARMA.NS", "IGL.NS", "DLF.NS", "CONCOR.NS",
+        "ALKEM.NS", "NAUKRI.NS", "JINDALSTEL.NS", "PAGEIND.NS", "BALKRISIND.NS",
+        "IDEA.NS", "MFSL.NS", "CHOLAFIN.NS", "L&TFH.NS", "TORNTPHARM.NS",
+        "MRF.NS", "BOSCHLTD.NS", "ABB.NS", "ZYDUSLIFE.NS", "HINDPETRO.NS",
+        "SBICARD.NS", "INDIGO.NS", "ADANIPORTS.NS", "BAJAJ-AUTO.NS", "VEDL.NS",
+        "GODREJPROP.NS", "TATACONSUM.NS", "ICICIPRULI.NS", "OBEROIRLTY.NS", "POLYCAB.NS",
+        "PHOENIXLTD.NS", "ASTRAL.NS", "BPCL.NS", "CUMMINSIND.NS", "LICHSGFIN.NS",
+        "IDFCFIRSTB.NS", "MCX.NS", "GLENMARK.NS", "SUNTV.NS", "IPCALAB.NS",
+        "LTIM.NS", "EXIDEIND.NS", "COROMANDEL.NS", "DEEPAKNTR.NS", "ESCORTS.NS",
+        "BANKINDIA.NS", "GSPL.NS", "GNFC.NS", "NMDC.NS", "RAMCOCEM.NS",
+        "BANDHANBNK.NS", "APOLLOTYRE.NS", "TATACOMM.NS", "PETRONET.NS", "AUBANK.NS",
+        "KANSAINER.NS", "FEDERALBNK.NS", "SRF.NS", "MPHASIS.NS", "JUBLFOOD.NS",
+        "VOLTAS.NS", "BIOCON.NS", "CANBK.NS", "RBLBANK.NS", "SYNGENE.NS",
+        "DALBHARAT.NS", "YESBANK.NS", "HINDCOPPER.NS", "TVSMOTOR.NS", "UNIONBANK.NS",
+        "ASHOKLEY.NS", "INDHOTEL.NS", "ABFRL.NS", "CROMPTON.NS", "LAURUSLABS.NS",
+        "BATAINDIA.NS", "SAIL.NS", "GUJGASLTD.NS", "NATCOPHARM.NS", "PRESTIGE.NS",
+        "ZEEL.NS", "FORTIS.NS", "LALPATHLAB.NS", "IDFC.NS", "MANAPPURAM.NS",
+        "GMRINFRA.NS", "LICINDIA.NS", "STARHEALTH.NS", "PAYTM.NS", "IRCTC.NS",
+        "METROPOLIS.NS", "DELHIVERY.NS", "ZOMATO.NS", "NYKAA.NS", "POLICYBZR.NS",
+        "ADANIGREEN.NS", "ADANITRANS.NS", "HAL.NS", "IRFC.NS", "RVNL.NS",
+        "MAZDOCK.NS", "COCHINSHIP.NS", "BEML.NS", "ENGINERSIN.NS", "KIOCL.NS",
+        "NBCC.NS", "RCF.NS", "NLCINDIA.NS", "SJVN.NS", "MOIL.NS",
+        "ITI.NS", "HFCL.NS", "TRIDENT.NS", "SUZLON.NS", "JPPOWER.NS",
+        "TATACHEM.NS", "IEX.NS", "CDSL.NS", "ANGELONE.NS", "BSE.NS",
+        "NAM-INDIA.NS", "UTIAMC.NS", "CAMS.NS", "360ONE.NS", "KFINTECH.NS",
+        "CHAMBLFERT.NS", "GNFC.NS", "GSFC.NS", "PARADEEP.NS", "FACT.NS",
+        "ATUL.NS", "VINATIORGA.NS", "AARTIIND.NS", "PIIND.NS", "NAVINFLUOR.NS",
+        "CUB.NS", "DCBBANK.NS", "EQUITASBNK.NS", "UJJIVANSFB.NS", "SOUTHBANK.NS",
+        "KARURVYSYA.NS", "CSBBANK.NS", "TMB.NS", "J&KBANK.NS", "KTKBANK.NS",
+        "FSL.NS", "JBMA.NS", "MOTHERSON.NS", "ENDURANCE.NS", "SCHAEFFLER.NS",
+        "TIINDIA.NS", "SUNDARMFIN.NS", "SHRIRAMFIN.NS", "AAVAS.NS", "HOMEFIRST.NS",
+        "KSB.NS", "GRINDWELL.NS", "ELGIEQUIP.NS", "KIRLOSENG.NS", "TIMKEN.NS",
+        "THERMAX.NS", "HONAUT.NS", "GMMPFAUDLR.NS", "SKFINDIA.NS", "ARE&M.NS",
+        "EIHOTEL.NS", "CHALET.NS", "LEMONTRIE.NS", "SAPPHIRE.NS", "WONDERLA.NS",
+        "CARBORUNIV.NS", "CERA.NS", "KAJARIACER.NS", "SOMANYCERA.NS", "ORIENTELEC.NS",
+        "BLUESTARCO.NS", "WHIRLPOOL.NS", "SYMPHONY.NS", "BAJAJELEC.NS", "IFBIND.NS",
+        "TTKPRESTIG.NS", "HAWKINCOOK.NS", "BORORENEW.NS", "GREENLAM.NS", "PRINCEPIPE.NS",
+        "ROSSARI.NS", "NEOGEN.NS", "SHARDACROP.NS", "FINEORG.NS", "BALAMINES.NS"
+    ],
     "Bank": [
         "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS", 
         "INDUSINDBK.NS", "PNB.NS", "BANKBARODA.NS", "CANBK.NS", "UNIONBANK.NS", 
@@ -146,7 +143,24 @@ SECTORS = {
         "DCBBANK.NS", "SYNDIBANK.NS", "ALBK.NS", "ANDHRABANK.NS", "CORPBANK.NS", 
         "ORIENTBANK.NS", "UNITEDBNK.NS", "AUBANK.NS"
     ],
-    "Software & IT Services": ["TCS.NS", "TECHM.NS","NETF.NS", "OMEGAIN.NS", "NETLINK.NS", "ACCEL.NS", "MEGRISOFT.NS", "STARCOM.NS", "JETKING.NS", "BRISKTECH.NS", "SATTRIX.NS", "SBSJHVHSV.NS", "SMARTLINK.NS", "CGVAK.NS", "PRITHVI.NS", "DELAPLEX.NS", "AZTEC.NS", "ELNET.NS", "SLONE.NS", "INTRASOFT.NS", "ENFUSE.NS", "ATISHAY.NS", "ESCONET.NS", "TERASOFT.NS", "ADDICTIVE.NS", "SIGMASOLVE.NS", "SILICONRENT.NS", "PEANALYTICS.NS", "DEVINFO.NS", "TREJHARA.NS", "ACESOFT.NS", "SYSTANGO.NS", "ABM.NS", "CAPITALNUM.NS", "ARTIFICIAL.NS", "IZMO.NS", "MOLDTECH.NS", "DANLAW.NS", "CYBERTECH.NS", "ONWARDTEC.NS", "SOFTTECH.NS", "MINDTECK.NS", "VINSYS.NS", "MOSUTIL.NS", "INNOVANA.NS", "APTECH.NS", "ALLETECH.NS", "VEEFIN.NS", "INFOBEAN.NS", "IRIS.NS", "NINTEC.NS", "AURUMPROP.NS", "SILVERT.NS", "TRIDENT.NS", "ALLIEDDIG.NS", "KSOLVES.NS", "KELLTONTEC.NS", "MATRIMONY.NS", "EXPLEOSOL.NS", "DYNACONS.NS", "KERNEX.NS", "ECORECO.NS", "UNICOMMERCE.NS", "BLS.NS", "RAMCOSYS.NS", "ALLDIGI.NS", "QUICKHEAL.NS", "NIIT.NS", "ORIENTTECH.NS", "SAKSOFT.NS", "NUCLEUS.NS", "MOBIKWIK.NS", "HGS.NS", "GENESYS.NS", "RPSGVENT.NS", "MOSCHIP.NS", "DATAMATICS.NS", "63MOONS.NS", "RSYSTEMS.NS", "EMUDHRA.NS", "TANLA.NS", "ROUTE.NS", "RATEGAIN.NS", "NIITMTS.NS", "ZAGGLE.NS", "INTELLECT.NS", "SONATSOFTW.NS", "HAPPSTMNDS.NS", "NAZARA.NS", "CMSINFO.NS", "LATENTVIEW.NS", "ZINKA.NS", "JUSTDIAL.NS", "BSOFT.NS", "NEWGEN.NS", "ZENSARTECH.NS", "FSL.NS", "HEXAWARE.NS", "NYKAA.NS", "PAYTM.NS", "IRCTC.NS", "SWIGGY.NS", "ZOMATO.NS", "WIPRO.NS"],
+    "Software & IT Services": [
+        "TCS.NS", "TECHM.NS", "NETF.NS", "OMEGAIN.NS", "NETLINK.NS", "ACCEL.NS", "MEGRISOFT.NS", 
+        "STARCOM.NS", "JETKING.NS", "BRISKTECH.NS", "SATTRIX.NS", "SBSJHVHSV.NS", "SMARTLINK.NS", 
+        "CGVAK.NS", "PRITHVI.NS", "DELAPLEX.NS", "AZTEC.NS", "ELNET.NS", "SLONE.NS", "INTRASOFT.NS", 
+        "ENFUSE.NS", "ATISHAY.NS", "ESCONET.NS", "TERASOFT.NS", "ADDICTIVE.NS", "SIGMASOLVE.NS", 
+        "SILICONRENT.NS", "PEANALYTICS.NS", "DEVINFO.NS", "TREJHARA.NS", "ACESOFT.NS", "SYSTANGO.NS", 
+        "ABM.NS", "CAPITALNUM.NS", "ARTIFICIAL.NS", "IZMO.NS", "MOLDTECH.NS", "DANLAW.NS", 
+        "CYBERTECH.NS", "ONWARDTEC.NS", "SOFTTECH.NS", "MINDTECK.NS", "VINSYS.NS", "MOSUTIL.NS", 
+        "INNOVANA.NS", "APTECH.NS", "ALLETECH.NS", "VEEFIN.NS", "INFOBEAN.NS", "IRIS.NS", "NINTEC.NS", 
+        "AURUMPROP.NS", "SILVERT.NS", "TRIDENT.NS", "ALLIEDDIG.NS", "KSOLVES.NS", "KELLTONTEC.NS", 
+        "MATRIMONY.NS", "EXPLEOSOL.NS", "DYNACONS.NS", "KERNEX.NS", "ECORECO.NS", "UNICOMMERCE.NS", 
+        "BLS.NS", "RAMCOSYS.NS", "ALLDIGI.NS", "QUICKHEAL.NS", "NIIT.NS", "ORIENTTECH.NS", "SAKSOFT.NS", 
+        "NUCLEUS.NS", "MOBIKWIK.NS", "HGS.NS", "GENESYS.NS", "RPSGVENT.NS", "MOSCHIP.NS", "DATAMATICS.NS", 
+        "63MOONS.NS", "RSYSTEMS.NS", "EMUDHRA.NS", "TANLA.NS", "ROUTE.NS", "RATEGAIN.NS", "NIITMTS.NS", 
+        "ZAGGLE.NS", "INTELLECT.NS", "SONATSOFTW.NS", "HAPPSTMNDS.NS", "NAZARA.NS", "CMSINFO.NS", 
+        "LATENTVIEW.NS", "ZINKA.NS", "JUSTDIAL.NS", "BSOFT.NS", "NEWGEN.NS", "ZENSARTECH.NS", "FSL.NS", 
+        "HEXAWARE.NS", "NYKAA.NS", "PAYTM.NS", "IRCTC.NS", "SWIGGY.NS", "ZOMATO.NS", "WIPRO.NS"
+    ],
     "Finance": ["BAJFINANCE.NS", "HDFCLIFE.NS", "SBILIFE.NS", "ICICIPRULI.NS"],
     "Automobile & Ancillaries": ["MARUTI.NS", "TATAMOTORS.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"],
     "Healthcare": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS"],
@@ -298,14 +312,13 @@ def calculate_confidence_score(data):
         score += 1
     if 'Ichimoku_Span_A' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]:
         score += 1
-    # Adjust for volatility
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
-        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]  # Normalized ATR
-        if atr_volatility < 0.02:  # Low volatility increases confidence
+        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
+        if atr_volatility < 0.02:
             score += 0.5
-        elif atr_volatility > 0.05:  # High volatility reduces confidence
+        elif atr_volatility > 0.05:
             score -= 0.5
-    return min(max(score / 3.5, 0), 1)  # Normalize to 0-1 scale
+    return min(max(score / 3.5, 0), 1)
 
 def assess_risk(data):
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['ATR'].iloc[-1] > data['ATR'].mean():
@@ -314,7 +327,7 @@ def assess_risk(data):
         return "Low Volatility"
 
 def optimize_rsi_window(data, windows=range(5, 15)):
-    best_window, best_sharpe = 9, -float('inf')
+    best_window, best_sharpe = 14, -float('inf')  # Changed default to 14
     returns = data['Close'].pct_change().dropna()
     if len(returns) < 50:
         return best_window
@@ -366,7 +379,7 @@ def analyze_stock(data):
         st.warning(f"⚠️ Failed to compute RSI: {str(e)}")
         data['RSI'] = None
     try:
-        macd = ta.trend.MACD(data['Close'], window_slow=17, window_fast=8, window_sign=9)
+        macd = ta.trend.MACD(data['Close'], window_slow=26, window_fast=12, window_sign=9)  # Updated to standard parameters
         data['MACD'] = macd.macd()
         data['MACD_signal'] = macd.macd_signal()
         data['MACD_hist'] = macd.macd_diff()
@@ -415,7 +428,7 @@ def analyze_stock(data):
         else:
             data['ADX'] = None
     except Exception as e:
-        st.warning(f"⚠️ Failed to compute ADX: {str(e)}")
+        st.warning(f"⚠️ Failed to Stopwatch Loss compute ADX: {str(e)}")
         data['ADX'] = None
     try:
         data['OBV'] = ta.volume.OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume()
@@ -431,7 +444,7 @@ def analyze_stock(data):
         data['VWAP'] = None
     try:
         data['Avg_Volume'] = data['Volume'].rolling(window=10).mean()
-        data['Volume_Spike'] = data['Volume'] > (data['Avg_Volume'] * 1.5)
+        data['Volume_Spike'] = data['Volume'] > (data['Avg_Volume'] * 2.0)  # Updated to 2.0x
     except Exception as e:
         st.warning(f"⚠️ Failed to compute Volume Spike: {str(e)}")
         data['Volume_Spike'] = None
@@ -570,349 +583,338 @@ def fetch_fundamentals(symbol):
 
 def generate_recommendations(data, symbol=None):
     recommendations = {
-        "Intraday": "Hold", "Swing": "Hold",
-        "Short-Term": "Hold", "Long-Term": "Hold",
+        "Intraday": "Hold", "Swing": "Hold", "Short-Term": "Hold", "Long-Term": "Hold",
         "Mean_Reversion": "Hold", "Breakout": "Hold", "Ichimoku_Trend": "Hold",
-        "Current Price": None, "Buy At": None,
-        "Stop Loss": None, "Target": None, "Score": 0
+        "Current Price": None, "Buy At": None, "Stop Loss": None, "Target": None,
+        "Score": 0, "Net_Score": 0
     }
+    
     if data.empty or 'Close' not in data.columns or data['Close'].iloc[-1] is None:
-        st.warning("⚠️ No valid data available for recommendations.")
+        print("No valid data available for recommendations.")
         return recommendations
     
-    try:
-        recommendations["Current Price"] = float(data['Close'].iloc[-1])
-        buy_score = 0
-        sell_score = 0
-        print(f"Initial buy_score: {buy_score}, sell_score: {sell_score}")
-        
-        # RSI (Boosted for RSI <= 20)
-        print("Checking RSI...")
-        if 'RSI' in data.columns and data['RSI'].iloc[-1] is not None:
-            print(f"RSI value: {data['RSI'].iloc[-1]}, type: {type(data['RSI'].iloc[-1])}")
-            if isinstance(data['RSI'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['RSI'].iloc[-1] <= 20:  # Extreme oversold
-                    buy_score += 4
-                    print(f"RSI <= 20, buy_score: {buy_score}")
-                elif data['RSI'].iloc[-1] < 30:
-                    buy_score += 2
-                    print(f"RSI < 30, buy_score: {buy_score}")
-                elif data['RSI'].iloc[-1] > 70:
-                    sell_score += 2
-                    print(f"RSI > 70, sell_score: {sell_score}")
-        
-        # MACD
-        print("Checking MACD...")
-        if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD_signal'].iloc[-1] is not None:
-            print(f"MACD: {data['MACD'].iloc[-1]}, Signal: {data['MACD_signal'].iloc[-1]}")
-            if isinstance(data['MACD'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['MACD_signal'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
+    buy_score = 0
+    sell_score = 0
+    
+    print("Starting scoring process...")
+    
+    # RSI
+    if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) and 0 <= data['RSI'].iloc[-1] <= 100:
+        rsi = data['RSI'].iloc[-1]
+        print(f"RSI: {rsi}")
+        if rsi <= 20:
+            buy_score += 4
+            print(f"RSI <= 20, buy_score: {buy_score}")
+        elif rsi < 30:
+            buy_score += 2
+            print(f"RSI < 30, buy_score: {buy_score}")
+        elif rsi > 70:
+            sell_score += 2
+            print(f"RSI > 70, sell_score: {sell_score}")
+    
+    # MACD
+    if ('MACD' in data.columns and 'MACD_signal' in data.columns and 
+        not pd.isna(data['MACD'].iloc[-1]) and not pd.isna(data['MACD_signal'].iloc[-1])):
+        macd = data['MACD'].iloc[-1]
+        macd_signal = data['MACD_signal'].iloc[-1]
+        print(f"MACD: {macd}, MACD_signal: {macd_signal}")
+        if macd > macd_signal:
+            buy_score += 1
+            print(f"MACD > Signal, buy_score: {buy_score}")
+        elif macd < macd_signal:
+            sell_score += 1
+            print(f"MACD < Signal, sell_score: {sell_score}")
+    
+    # Bollinger Bands
+    if ('Lower_Band' in data.columns and 'Upper_Band' in data.columns and 
+        not pd.isna(data['Close'].iloc[-1]) and not pd.isna(data['Lower_Band'].iloc[-1]) and 
+        not pd.isna(data['Upper_Band'].iloc[-1])):
+        close = data['Close'].iloc[-1]
+        lower = data['Lower_Band'].iloc[-1]
+        upper = data['Upper_Band'].iloc[-1]
+        print(f"Close: {close}, Lower_Band: {lower}, Upper_Band: {upper}")
+        if close < lower:
+            buy_score += 1
+            print(f"Close < Lower_Band, buy_score: {buy_score}")
+        elif close > upper:
+            sell_score += 1
+            print(f"Close > Upper_Band, sell_score: {sell_score}")
+    
+    # VWAP
+    if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) and not pd.isna(data['Close'].iloc[-1]):
+        vwap = data['VWAP'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        print(f"Close: {close}, VWAP: {vwap}")
+        if close > vwap:
+            buy_score += 1
+            print(f"Close > VWAP, buy_score: {buy_score}")
+        elif close < vwap:
+            sell_score += 1
+            print(f"Close < VWAP, sell_score: {sell_score}")
+    
+    # Volume Analysis
+    if ('Volume' in data.columns and 'Avg_Volume' in data.columns and 
+        not pd.isna(data['Volume'].iloc[-1]) and not pd.isna(data['Avg_Volume'].iloc[-1])):
+        volume_ratio = data['Volume'].iloc[-1] / data['Avg_Volume'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        prev_close = data['Close'].iloc[-2]
+        print(f"Volume Ratio: {volume_ratio}, Close: {close}, Prev Close: {prev_close}")
+        if volume_ratio > 1.5 and close > prev_close:
+            buy_score += 2
+            print(f"Volume Ratio > 1.5 & Price Up, buy_score: {buy_score}")
+        elif volume_ratio > 1.5 and close < prev_close:
+            sell_score += 2
+            print(f"Volume Ratio > 1.5 & Price Down, sell_score: {sell_score}")
+        elif volume_ratio < 0.5:
+            sell_score += 1
+            print(f"Volume Ratio < 0.5, sell_score: {sell_score}")
+    
+    # Volume Spikes
+    if 'Volume_Spike' in data.columns and not pd.isna(data['Volume_Spike'].iloc[-1]):
+        spike = data['Volume_Spike'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        prev_close = data['Close'].iloc[-2]
+        print(f"Volume_Spike: {spike}, Close: {close}, Prev Close: {prev_close}")
+        if spike and close > prev_close:
+            buy_score += 1
+            print(f"Volume Spike & Price Up, buy_score: {buy_score}")
+        elif spike and close < prev_close:
+            sell_score += 1
+            print(f"Volume Spike & Price Down, sell_score: {sell_score}")
+    
+    # Divergence
+    if 'Divergence' in data.columns:
+        divergence = data['Divergence'].iloc[-1]
+        print(f"Divergence: {divergence}")
+        if divergence == "Bullish Divergence":
+            buy_score += 1
+            print(f"Bullish Divergence, buy_score: {buy_score}")
+        elif divergence == "Bearish Divergence":
+            sell_score += 1
+            print(f"Bearish Divergence, sell_score: {sell_score}")
+    
+    # Ichimoku Cloud
+    if ('Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and 
+        'Ichimoku_Span_A' in data.columns and not pd.isna(data['Ichimoku_Tenkan'].iloc[-1]) and 
+        not pd.isna(data['Ichimoku_Kijun'].iloc[-1]) and not pd.isna(data['Ichimoku_Span_A'].iloc[-1])):
+        tenkan = data['Ichimoku_Tenkan'].iloc[-1]
+        kijun = data['Ichimoku_Kijun'].iloc[-1]
+        span_a = data['Ichimoku_Span_A'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        print(f"Tenkan: {tenkan}, Kijun: {kijun}, Span_A: {span_a}, Close: {close}")
+        if tenkan > kijun and close > span_a:
+            buy_score += 2
+            recommendations["Ichimoku_Trend"] = "Strong Buy"
+            print(f"Ichimoku Strong Buy, buy_score: {buy_score}")
+        elif tenkan < kijun and close < span_a:
+            sell_score += 1
+            recommendations["Ichimoku_Trend"] = "Sell"
+            print(f"Ichimoku Sell, sell_score: {sell_score}")
+    
+    # Chaikin Money Flow
+    if 'CMF' in data.columns and not pd.isna(data['CMF'].iloc[-1]):
+        cmf = data['CMF'].iloc[-1]
+        print(f"CMF: {cmf}")
+        if cmf > 0:
+            buy_score += 1
+            print(f"CMF > 0, buy_score: {buy_score}")
+        elif cmf < 0:
+            sell_score += 1
+            print(f"CMF < 0, sell_score: {sell_score}")
+    
+    # Donchian Channels
+    if ('Donchian_Upper' in data.columns and 'Donchian_Lower' in data.columns and 
+        not pd.isna(data['Donchian_Upper'].iloc[-1]) and not pd.isna(data['Donchian_Lower'].iloc[-1])):
+        close = data['Close'].iloc[-1]
+        upper = data['Donchian_Upper'].iloc[-1]
+        lower = data['Donchian_Lower'].iloc[-1]
+        print(f"Close: {close}, Donchian_Upper: {upper}, Donchian_Lower: {lower}")
+        if close > upper:
+            buy_score += 1
+            recommendations["Breakout"] = "Buy"
+            print(f"Close > Donchian Upper, buy_score: {buy_score}")
+        elif close < lower:
+            sell_score += 1
+            recommendations["Breakout"] = "Sell"
+            print(f"Close < Donchian Lower, sell_score: {sell_score}")
+    
+    # Mean Reversion
+    if ('RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and 
+        not pd.isna(data['RSI'].iloc[-1]) and not pd.isna(data['Lower_Band'].iloc[-1]) and 
+        not pd.isna(data['Upper_Band'].iloc[-1])):
+        rsi = data['RSI'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        lower = data['Lower_Band'].iloc[-1]
+        upper = data['Upper_Band'].iloc[-1]
+        print(f"RSI: {rsi}, Close: {close}, Lower_Band: {lower}, Upper_Band: {upper}")
+        if rsi < 30 and close >= lower:
+            buy_score += 2
+            recommendations["Mean_Reversion"] = "Buy"
+            print(f"Mean Reversion Buy, buy_score: {buy_score}")
+        elif rsi > 70 and close >= upper:
+            sell_score += 2
+            recommendations["Mean_Reversion"] = "Sell"
+            print(f"Mean Reversion Sell, sell_score: {sell_score}")
+    
+    # Keltner Channels
+    if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
+        not pd.isna(data['Keltner_Upper'].iloc[-1]) and not pd.isna(data['Keltner_Lower'].iloc[-1])):
+        close = data['Close'].iloc[-1]
+        upper = data['Keltner_Upper'].iloc[-1]
+        lower = data['Keltner_Lower'].iloc[-1]
+        print(f"Close: {close}, Keltner_Upper: {upper}, Keltner_Lower: {lower}")
+        if close < lower:
+            buy_score += 1
+            print(f"Close < Keltner Lower, buy_score: {buy_score}")
+        elif close > upper:
+            sell_score += 1
+            print(f"Close > Keltner Upper, sell_score: {sell_score}")
+    
+    # TRIX
+    if 'TRIX' in data.columns and not pd.isna(data['TRIX'].iloc[-1]) and not pd.isna(data['TRIX'].iloc[-2]):
+        trix = data['TRIX'].iloc[-1]
+        prev_trix = data['TRIX'].iloc[-2]
+        print(f"TRIX: {trix}, Prev TRIX: {prev_trix}")
+        if trix > 0 and trix > prev_trix:
+            buy_score += 1
+            print(f"TRIX > 0 & Rising, buy_score: {buy_score}")
+        elif trix < 0 and trix < prev_trix:
+            sell_score += 1
+            print(f"TRIX < 0 & Falling, sell_score: {sell_score}")
+    
+    # Ultimate Oscillator
+    if 'Ultimate_Osc' in data.columns and not pd.isna(data['Ultimate_Osc'].iloc[-1]):
+        uo = data['Ultimate_Osc'].iloc[-1]
+        print(f"Ultimate Oscillator: {uo}")
+        if uo < 30:
+            buy_score += 1
+            print(f"Ultimate Oscillator < 30, buy_score: {buy_score}")
+        elif uo > 70:
+            sell_score += 1
+            print(f"Ultimate Oscillator > 70, sell_score: {sell_score}")
+    
+    # Chande Momentum Oscillator
+    if 'CMO' in data.columns and not pd.isna(data['CMO'].iloc[-1]):
+        cmo = data['CMO'].iloc[-1]
+        print(f"CMO: {cmo}")
+        if cmo < -50:
+            buy_score += 1
+            print(f"CMO < -50, buy_score: {buy_score}")
+        elif cmo > 50:
+            sell_score += 1
+            print(f"CMO > 50, sell_score: {sell_score}")
+    
+    # Volume Price Trend
+    if 'VPT' in data.columns and not pd.isna(data['VPT'].iloc[-1]) and not pd.isna(data['VPT'].iloc[-2]):
+        vpt = data['VPT'].iloc[-1]
+        prev_vpt = data['VPT'].iloc[-2]
+        print(f"VPT: {vpt}, Prev VPT: {prev_vpt}")
+        if vpt > prev_vpt:
+            buy_score += 1
+            print(f"VPT Rising, buy_score: {buy_score}")
+        elif vpt < prev_vpt:
+            sell_score += 1
+            print(f"VPT Falling, sell_score: {sell_score}")
+    
+    # Fibonacci Retracements
+    if ('Fib_23.6' in data.columns and 'Fib_38.2' in data.columns and 
+        not pd.isna(data['Fib_23.6'].iloc[-1]) and not pd.isna(data['Fib_38.2'].iloc[-1])):
+        current_price = data['Close'].iloc[-1]
+        fib_levels = [data['Fib_23.6'].iloc[-1], data['Fib_38.2'].iloc[-1], 
+                      data['Fib_50.0'].iloc[-1], data['Fib_61.8'].iloc[-1]]
+        print(f"Close: {current_price}, Fib Levels: {fib_levels}")
+        for level in fib_levels:
+            if not pd.isna(level) and abs(current_price - level) / current_price < 0.01:
+                if current_price > level:
                     buy_score += 1
-                    print(f"MACD > Signal, buy_score: {buy_score}")
-                elif data['MACD'].iloc[-1] < data['MACD_signal'].iloc[-1]:
-                    sell_score += 1
-                    print(f"MACD < Signal, sell_score: {sell_score}")
-        
-        # Bollinger Bands
-        print("Checking Bollinger Bands...")
-        if 'Close' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and data['Close'].iloc[-1] is not None:
-            print(f"Close: {data['Close'].iloc[-1]}, Lower: {data['Lower_Band'].iloc[-1]}, Upper: {data['Upper_Band'].iloc[-1]}")
-            if isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Lower_Band'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Upper_Band'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['Close'].iloc[-1] < data['Lower_Band'].iloc[-1]:
-                    buy_score += 1
-                    print(f"Close < Lower_Band, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] > data['Upper_Band'].iloc[-1]:
-                    sell_score += 1
-                    print(f"Close > Upper_Band, sell_score: {sell_score}")
-        
-        # VWAP
-        print("Checking VWAP...")
-        if 'VWAP' in data.columns and data['VWAP'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
-            print(f"Close: {data['Close'].iloc[-1]}, VWAP: {data['VWAP'].iloc[-1]}")
-            if isinstance(data['VWAP'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['Close'].iloc[-1] > data['VWAP'].iloc[-1]:
-                    buy_score += 1
-                    print(f"Close > VWAP, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] < data['VWAP'].iloc[-1]:
-                    sell_score += 1
-                    print(f"Close < VWAP, sell_score: {sell_score}")
-        
-        # Volume Analysis
-        print("Checking Volume Analysis...")
-        if ('Volume' in data.columns and data['Volume'].iloc[-1] is not None and 
-            'Avg_Volume' in data.columns and data['Avg_Volume'].iloc[-1] is not None):
-            volume_ratio = data['Volume'].iloc[-1] / data['Avg_Volume'].iloc[-1]
-            print(f"Volume Ratio: {volume_ratio}, Close: {data['Close'].iloc[-1]}, Prev Close: {data['Close'].iloc[-2]}")
-            if isinstance(volume_ratio, (int, float, np.integer, np.floating)) and isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Close'].iloc[-2], (int, float, np.integer, np.floating)):
-                if volume_ratio > 1.5 and data['Close'].iloc[-1] > data['Close'].iloc[-2]:
-                    buy_score += 2
-                    print(f"Volume Ratio > 1.5 & Price Up, buy_score: {buy_score}")
-                elif volume_ratio > 1.5 and data['Close'].iloc[-1] < data['Close'].iloc[-2]:
-                    sell_score += 2
-                    print(f"Volume Ratio > 1.5 & Price Down, sell_score: {sell_score}")
-                elif volume_ratio < 0.5:
-                    sell_score += 1
-                    print(f"Volume Ratio < 0.5, sell_score: {sell_score}")
-        
-        # Volume Spikes
-        print("Checking Volume Spikes...")
-        if 'Volume_Spike' in data.columns and data['Volume_Spike'].iloc[-1] is not None:
-            print(f"Volume_Spike: {data['Volume_Spike'].iloc[-1]}, Close: {data['Close'].iloc[-1]}, Prev Close: {data['Close'].iloc[-2]}")
-            if data['Volume_Spike'].iloc[-1] and isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Close'].iloc[-2], (int, float, np.integer, np.floating)):
-                if data['Close'].iloc[-1] > data['Close'].iloc[-2]:
-                    buy_score += 1
-                    print(f"Volume Spike & Price Up, buy_score: {buy_score}")
+                    print(f"Close near Fib level {level} (support), buy_score: {buy_score}")
                 else:
                     sell_score += 1
-                    print(f"Volume Spike & Price Down, sell_score: {sell_score}")
-        
-        # Divergence
-        print("Checking Divergence...")
-        if 'Divergence' in data.columns:
-            print(f"Divergence: {data['Divergence'].iloc[-1]}")
-            if data['Divergence'].iloc[-1] == "Bullish Divergence":
-                buy_score += 1
-                print(f"Bullish Divergence, buy_score: {buy_score}")
-            elif data['Divergence'].iloc[-1] == "Bearish Divergence":
-                sell_score += 1
-                print(f"Bearish Divergence, sell_score: {sell_score}")
-        
-        # Ichimoku Cloud
-        print("Checking Ichimoku Cloud...")
-        if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None:
-            print(f"Close: {data['Close'].iloc[-1]}, Span_A: {data['Ichimoku_Span_A'].iloc[-1]}, Span_B: {data['Ichimoku_Span_B'].iloc[-1]}")
-            if (isinstance(data['Ichimoku_Span_A'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Ichimoku_Span_B'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating))):
-                if data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-                    buy_score += 1
-                    recommendations["Ichimoku_Trend"] = "Buy"
-                    print(f"Close > Ichimoku Cloud, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] < min(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-                    sell_score += 1
-                    print(f"Close < Ichimoku Cloud, sell_score: {sell_score}")
-        
-        # Chaikin Money Flow
-        print("Checking Chaikin Money Flow...")
-        if 'CMF' in data.columns and data['CMF'].iloc[-1] is not None:
-            print(f"CMF: {data['CMF'].iloc[-1]}")
-            if isinstance(data['CMF'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['CMF'].iloc[-1] > 0:
-                    buy_score += 1
-                    print(f"CMF > 0, buy_score: {buy_score}")
-                elif data['CMF'].iloc[-1] < 0:
-                    sell_score += 1
-                    print(f"CMF < 0, sell_score: {sell_score}")
-        
-        # Donchian Channels
-        print("Checking Donchian Channels...")
-        if 'Donchian_Upper' in data.columns and 'Donchian_Lower' in data.columns and data['Close'].iloc[-1] is not None:
-            print(f"Close: {data['Close'].iloc[-1]}, Upper: {data['Donchian_Upper'].iloc[-1]}, Lower: {data['Donchian_Lower'].iloc[-1]}")
-            if (isinstance(data['Donchian_Upper'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Donchian_Lower'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating))):
-                if data['Close'].iloc[-1] > data['Donchian_Upper'].iloc[-1]:
-                    buy_score += 1
-                    recommendations["Breakout"] = "Buy"
-                    print(f"Close > Donchian Upper, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] < data['Donchian_Lower'].iloc[-1]:
-                    sell_score += 1
-                    recommendations["Breakout"] = "Sell"
-                    print(f"Close < Donchian Lower, sell_score: {sell_score}")
-        
-        # Mean Reversion
-        print("Checking Mean Reversion...")
-        if 'RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and data['Close'].iloc[-1] is not None:
-            print(f"RSI: {data['RSI'].iloc[-1]}, Close: {data['Close'].iloc[-1]}, Lower_Band: {data['Lower_Band'].iloc[-1]}")
-            if (isinstance(data['RSI'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Lower_Band'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Upper_Band'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating))):
-                if data['RSI'].iloc[-1] < 30 and data['Close'].iloc[-1] >= data['Lower_Band'].iloc[-1]:
-                    buy_score += 2
-                    recommendations["Mean_Reversion"] = "Buy"
-                    print(f"Mean Reversion Buy, buy_score: {buy_score}")
-                elif data['RSI'].iloc[-1] > 70 and data['Close'].iloc[-1] >= data['Upper_Band'].iloc[-1]:
-                    sell_score += 2
-                    recommendations["Mean_Reversion"] = "Sell"
-                    print(f"Mean Reversion Sell, sell_score: {sell_score}")
-        
-        # Ichimoku Trend
-        print("Checking Ichimoku Trend...")
-        if 'Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and data['Close'].iloc[-1] is not None:
-            print(f"Tenkan: {data['Ichimoku_Tenkan'].iloc[-1]}, Kijun: {data['Ichimoku_Kijun'].iloc[-1]}, Close: {data['Close'].iloc[-1]}")
-            if (isinstance(data['Ichimoku_Tenkan'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Ichimoku_Kijun'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Ichimoku_Span_A'].iloc[-1], (int, float, np.integer, np.floating))):
-                if (data['Ichimoku_Tenkan'].iloc[-1] > data['Ichimoku_Kijun'].iloc[-1] and
-                    data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]):
-                    buy_score += 1
-                    recommendations["Ichimoku_Trend"] = "Strong Buy"
-                    print(f"Ichimoku Strong Buy, buy_score: {buy_score}")
-                elif (data['Ichimoku_Tenkan'].iloc[-1] < data['Ichimoku_Kijun'].iloc[-1] and
-                      data['Close'].iloc[-1] < data['Ichimoku_Span_B'].iloc[-1]):
-                    sell_score += 1
-                    recommendations["Ichimoku_Trend"] = "Strong Sell"
-                    print(f"Ichimoku Strong Sell, sell_score: {sell_score}")
-        
-        # Keltner Channels
-        print("Checking Keltner Channels...")
-        if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
-            data['Close'].iloc[-1] is not None):
-            print(f"Close: {data['Close'].iloc[-1]}, Keltner Upper: {data['Keltner_Upper'].iloc[-1]}, Keltner Lower: {data['Keltner_Lower'].iloc[-1]}")
-            if (isinstance(data['Keltner_Upper'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Keltner_Lower'].iloc[-1], (int, float, np.integer, np.floating)) and 
-                isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating))):
-                if data['Close'].iloc[-1] < data['Keltner_Lower'].iloc[-1]:
-                    buy_score += 1
-                    print(f"Close < Keltner Lower, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] > data['Keltner_Upper'].iloc[-1]:
-                    sell_score += 1
-                    print(f"Close > Keltner Upper, sell_score: {sell_score}")
-        
-        # TRIX
-        print("Checking TRIX...")
-        if 'TRIX' in data.columns and data['TRIX'].iloc[-1] is not None:
-            print(f"TRIX: {data['TRIX'].iloc[-1]}, Prev TRIX: {data['TRIX'].iloc[-2]}")
-            if isinstance(data['TRIX'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['TRIX'].iloc[-2], (int, float, np.integer, np.floating)):
-                if data['TRIX'].iloc[-1] > 0 and data['TRIX'].iloc[-1] > data['TRIX'].iloc[-2]:
-                    buy_score += 1
-                    print(f"TRIX > 0 & Rising, buy_score: {buy_score}")
-                elif data['TRIX'].iloc[-1] < 0 and data['TRIX'].iloc[-1] < data['TRIX'].iloc[-2]:
-                    sell_score += 1
-                    print(f"TRIX < 0 & Falling, sell_score: {sell_score}")
-        
-        # Ultimate Oscillator
-        print("Checking Ultimate Oscillator...")
-        if 'Ultimate_Osc' in data.columns and data['Ultimate_Osc'].iloc[-1] is not None:
-            print(f"Ultimate Oscillator: {data['Ultimate_Osc'].iloc[-1]}")
-            if isinstance(data['Ultimate_Osc'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['Ultimate_Osc'].iloc[-1] < 30:
-                    buy_score += 1
-                    print(f"Ultimate Oscillator < 30, buy_score: {buy_score}")
-                elif data['Ultimate_Osc'].iloc[-1] > 70:
-                    sell_score += 1
-                    print(f"Ultimate Oscillator > 70, sell_score: {sell_score}")
-        
-        # Chande Momentum Oscillator
-        print("Checking Chande Momentum Oscillator...")
-        if 'CMO' in data.columns and data['CMO'].iloc[-1] is not None:
-            print(f"CMO: {data['CMO'].iloc[-1]}")
-            if isinstance(data['CMO'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['CMO'].iloc[-1] < -50:
-                    buy_score += 1
-                    print(f"CMO < -50, buy_score: {buy_score}")
-                elif data['CMO'].iloc[-1] > 50:
-                    sell_score += 1
-                    print(f"CMO > 50, sell_score: {sell_score}")
-        
-        # Volume Price Trend
-        print("Checking Volume Price Trend...")
-        if 'VPT' in data.columns and data['VPT'].iloc[-1] is not None:
-            print(f"VPT: {data['VPT'].iloc[-1]}, Prev VPT: {data['VPT'].iloc[-2]}")
-            if isinstance(data['VPT'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['VPT'].iloc[-2], (int, float, np.integer, np.floating)):
-                if data['VPT'].iloc[-1] > data['VPT'].iloc[-2]:
-                    buy_score += 1
-                    print(f"VPT Rising, buy_score: {buy_score}")
-                elif data['VPT'].iloc[-1] < data['VPT'].iloc[-2]:
-                    sell_score += 1
-                    print(f"VPT Falling, sell_score: {sell_score}")
-        
-        # Fibonacci Retracements
-        print("Checking Fibonacci Retracements...")
-        if ('Fib_23.6' in data.columns and 'Fib_38.2' in data.columns and 
-            data['Close'].iloc[-1] is not None):
-            current_price = data['Close'].iloc[-1]
-            fib_levels = [data['Fib_23.6'].iloc[-1], data['Fib_38.2'].iloc[-1], 
-                          data['Fib_50.0'].iloc[-1], data['Fib_61.8'].iloc[-1]]
-            print(f"Close: {current_price}, Fib Levels: {fib_levels}")
-            for level in fib_levels:
-                if isinstance(level, (int, float, np.integer, np.floating)) and abs(current_price - level) / current_price < 0.01:
-                    if current_price > level:
-                        buy_score += 1
-                        print(f"Close near Fib level {level} (support), buy_score: {buy_score}")
-                    else:
-                        sell_score += 1
-                        print(f"Close near Fib level {level} (resistance), sell_score: {sell_score}")
-        
-        # Parabolic SAR
-        print("Checking Parabolic SAR...")
-        if ('Parabolic_SAR' in data.columns and data['Parabolic_SAR'].iloc[-1] is not None and 
-            data['Close'].iloc[-1] is not None):
-            print(f"Close: {data['Close'].iloc[-1]}, Parabolic SAR: {data['Parabolic_SAR'].iloc[-1]}")
-            if isinstance(data['Parabolic_SAR'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['Close'].iloc[-1], (int, float, np.integer, np.floating)):
-                if data['Close'].iloc[-1] > data['Parabolic_SAR'].iloc[-1]:
-                    buy_score += 1
-                    print(f"Close > Parabolic SAR, buy_score: {buy_score}")
-                elif data['Close'].iloc[-1] < data['Parabolic_SAR'].iloc[-1]:
-                    sell_score += 1
-                    print(f"Close < Parabolic SAR, sell_score: {sell_score}")
-        
-        # OBV
-        print("Checking OBV...")
-        if ('OBV' in data.columns and data['OBV'].iloc[-1] is not None and 
-            data['OBV'].iloc[-2] is not None):
-            print(f"OBV: {data['OBV'].iloc[-1]}, Prev OBV: {data['OBV'].iloc[-2]}")
-            if isinstance(data['OBV'].iloc[-1], (int, float, np.integer, np.floating)) and isinstance(data['OBV'].iloc[-2], (int, float, np.integer, np.floating)):
-                if data['OBV'].iloc[-1] > data['OBV'].iloc[-2]:
-                    buy_score += 1
-                    print(f"OBV Rising, buy_score: {buy_score}")
-                elif data['OBV'].iloc[-1] < data['OBV'].iloc[-2]:
-                    sell_score += 1
-                    print(f"OBV Falling, sell_score: {sell_score}")
-        
-        # Fundamentals
-        print("Checking Fundamentals...")
-        if symbol:
-            fundamentals = fetch_fundamentals(symbol)
-            print(f"Fundamentals: P/E={fundamentals['P/E']}, EPS={fundamentals['EPS']}, RevenueGrowth={fundamentals['RevenueGrowth']}")
-            if fundamentals['P/E'] < 15 and fundamentals['EPS'] > 0:
-                buy_score += 2
-                print(f"P/E < 15 & EPS > 0, buy_score: {buy_score}")
-            elif fundamentals['P/E'] > 30 or fundamentals['EPS'] < 0:
-                sell_score += 1
-                print(f"P/E > 30 or EPS < 0, sell_score: {sell_score}")
-            if fundamentals['RevenueGrowth'] > 0.1:
-                buy_score += 1
-                print(f"Revenue Growth > 10%, buy_score: {buy_score}")
-            elif fundamentals['RevenueGrowth'] < 0:
-                sell_score += 0.5
-                print(f"Revenue Growth < 0%, sell_score: {sell_score}")
-        
-        print(f"Before final recommendations: buy_score: {buy_score}, sell_score: {sell_score}")
-        
-        # Set recommendations based on scores
-        net_score = buy_score - sell_score
-        if buy_score > sell_score and buy_score >= 4:
-            recommendations["Intraday"] = "Strong Buy"
-            recommendations["Swing"] = "Buy" if buy_score >= 3 else "Hold"
-            recommendations["Short-Term"] = "Buy" if buy_score >= 2 else "Hold"
-            recommendations["Long-Term"] = "Buy" if buy_score >= 1 else "Hold"
-        elif sell_score > buy_score and sell_score >= 4:
-            recommendations["Intraday"] = "Strong Sell"
-            recommendations["Swing"] = "Sell" if sell_score >= 3 else "Hold"
-            recommendations["Short-Term"] = "Sell" if sell_score >= 2 else "Hold"
-            recommendations["Long-Term"] = "Sell" if sell_score >= 1 else "Hold"
-        elif net_score > 0:
-            recommendations["Intraday"] = "Buy" if net_score >= 3 else "Hold"
-            recommendations["Swing"] = "Buy" if net_score >= 2 else "Hold"
-            recommendations["Short-Term"] = "Buy" if net_score >= 1 else "Hold"
-            recommendations["Long-Term"] = "Hold"
-        elif net_score < 0:
-            recommendations["Intraday"] = "Sell" if net_score <= -3 else "Hold"
-            recommendations["Swing"] = "Sell" if net_score <= -2 else "Hold"
-            recommendations["Short-Term"] = "Sell" if net_score <= -1 else "Hold"
-            recommendations["Long-Term"] = "Hold"
-        
-        recommendations["Buy At"] = calculate_buy_at(data)
-        recommendations["Stop Loss"] = calculate_stop_loss(data)
-        recommendations["Target"] = calculate_target(data)
-        
-        recommendations["Score"] = min(max(buy_score - sell_score, -7), 7)
-        print(f"Final buy_score: {buy_score}, sell_score: {sell_score}, Score: {recommendations['Score']}")
-    except Exception as e:
-        st.warning(f"⚠️ Error generating recommendations: {str(e)}")
+                    print(f"Close near Fib level {level} (resistance), sell_score: {sell_score}")
+    
+    # Parabolic SAR
+    if 'Parabolic_SAR' in data.columns and not pd.isna(data['Parabolic_SAR'].iloc[-1]):
+        sar = data['Parabolic_SAR'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        print(f"Close: {close}, Parabolic SAR: {sar}")
+        if close > sar:
+            buy_score += 1
+            print(f"Close > Parabolic SAR, buy_score: {buy_score}")
+        elif close < sar:
+            sell_score += 1
+            print(f"Close < Parabolic SAR, sell_score: {sell_score}")
+    
+    # OBV
+    if 'OBV' in data.columns and not pd.isna(data['OBV'].iloc[-1]) and not pd.isna(data['OBV'].iloc[-2]):
+        obv = data['OBV'].iloc[-1]
+        prev_obv = data['OBV'].iloc[-2]
+        print(f"OBV: {obv}, Prev OBV: {prev_obv}")
+        if obv > prev_obv:
+            buy_score += 1
+            print(f"OBV Rising, buy_score: {buy_score}")
+        elif obv < prev_obv:
+            sell_score += 1
+            print(f"OBV Falling, sell_score: {sell_score}")
+    
+    # Fundamentals
+    if symbol:
+        fundamentals = fetch_fundamentals(symbol)
+        print(f"Fundamentals: P/E={fundamentals['P/E']}, EPS={fundamentals['EPS']}, RevenueGrowth={fundamentals['RevenueGrowth']}")
+        if fundamentals['P/E'] < 15 and fundamentals['EPS'] > 0:
+            buy_score += 2
+            print(f"P/E < 15 & EPS > 0, buy_score: {buy_score}")
+        elif fundamentals['P/E'] > 30 or fundamentals['EPS'] < 0:
+            sell_score += 1
+            print(f"P/E > 30 or EPS < 0, sell_score: {sell_score}")
+        if fundamentals['RevenueGrowth'] > 0.1:
+            buy_score += 1
+            print(f"Revenue Growth > 10%, buy_score: {buy_score}")
+        elif fundamentals['RevenueGrowth'] < 0:
+            sell_score += 0.5
+            print(f"Revenue Growth < 0%, sell_score: {sell_score}")
+    
+    # Normalized scoring
+    total_signals = buy_score + sell_score
+    if total_signals == 0:
+        net_score = 0
+    else:
+        net_score = (buy_score - sell_score) / total_signals * 7
+    
+    print(f"Buy Score: {buy_score}, Sell Score: {sell_score}, Total Signals: {total_signals}")
+    print(f"Normalized Net Score: {net_score:.2f}")
+    
+    # Set recommendations
+    if net_score >= 5:
+        recommendations["Intraday"] = "Strong Buy"
+        recommendations["Swing"] = "Buy" if net_score >= 3 else "Hold"
+        recommendations["Short-Term"] = "Buy" if net_score >= 2 else "Hold"
+        recommendations["Long-Term"] = "Buy" if net_score >= 1 else "Hold"
+    elif net_score >= 3:
+        recommendations["Intraday"] = "Buy"
+        recommendations["Swing"] = "Hold"
+        recommendations["Short-Term"] = "Hold"
+        recommendations["Long-Term"] = "Hold"
+    elif net_score <= -5:
+        recommendations["Intraday"] = "Strong Sell"
+        recommendations["Swing"] = "Sell" if net_score <= -3 else "Hold"
+        recommendations["Short-Term"] = "Sell" if net_score <= -2 else "Hold"
+        recommendations["Long-Term"] = "Sell" if net_score <= -1 else "Hold"
+    elif net_score <= -3:
+        recommendations["Intraday"] = "Sell"
+        recommendations["Swing"] = "Hold"
+        recommendations["Short-Term"] = "Hold"
+        recommendations["Long-Term"] = "Hold"
+    else:
+        recommendations["Intraday"] = "Hold"
+    
+    recommendations["Current Price"] = float(data['Close'].iloc[-1]) if not pd.isna(data['Close'].iloc[-1]) else None
+    recommendations["Buy At"] = calculate_buy_at(data)
+    recommendations["Stop Loss"] = calculate_stop_loss(data)
+    recommendations["Target"] = calculate_target(data)
+    recommendations["Score"] = buy_score - sell_score
+    recommendations["Net_Score"] = round(net_score, 2)
+    
+    print(f"Final Recommendation: {recommendations['Intraday']}")
     return recommendations
 
 def analyze_batch(stock_batch):
@@ -951,6 +953,7 @@ def analyze_stock_parallel(symbol):
             "Breakout": recommendations["Breakout"],
             "Ichimoku_Trend": recommendations["Ichimoku_Trend"],
             "Score": recommendations.get("Score", 0),
+            "Net_Score": recommendations.get("Net_Score", 0)
         }
     return None
 
@@ -970,9 +973,11 @@ def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
         return pd.DataFrame()
     if "Score" not in results_df.columns:
         results_df["Score"] = 0
+    if "Net_Score" not in results_df.columns:
+        results_df["Net_Score"] = 0
     if "Current Price" not in results_df.columns:
         results_df["Current Price"] = None
-    return results_df.sort_values(by="Score", ascending=False).head(10)
+    return results_df.sort_values(by="Net_Score", ascending=False).head(10)
 
 def colored_recommendation(recommendation):
     if "Buy" in recommendation:
@@ -1005,7 +1010,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not results_df.empty:
             st.subheader("🏆 Today's Top 10 Stocks")
             for _, row in results_df.iterrows():
-                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/7"):
+                with st.expander(f"{row['Symbol']} - Net Score: {row['Net_Score']}"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -1042,7 +1047,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not intraday_results.empty:
             st.subheader("🏆 Top 5 Intraday Stocks")
             for _, row in intraday_results.iterrows():
-                with st.expander(f"{row['Symbol']} - Score: {row['Score']}/7"):
+                with st.expander(f"{row['Symbol']} - Net Score: {row['Net_Score']}"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -1077,61 +1082,55 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         for col, strategy in zip(cols, strategy_names):
             with col:
                 st.markdown(f"**{strategy}**", unsafe_allow_html=True)
-                st.markdown(colored_recommendation(recommendations[strategy]), unsafe_allow_html=True)
-        st.subheader("📈 Additional Strategies")
-        cols = st.columns(3)
-        new_strategies = ["Mean_Reversion", "Breakout", "Ichimoku_Trend"]
-        for col, strategy in zip(cols, new_strategies):
+                st.markdown(f"{colored_recommendation(recommendations[strategy])}", unsafe_allow_html=True)
+        
+        st.subheader("🔍 Specialized Strategies")
+        cols_special = st.columns(3)
+        special_strategies = ["Mean_Reversion", "Breakout", "Ichimoku_Trend"]
+        for col, strategy in zip(cols_special, special_strategies):
             with col:
                 st.markdown(f"**{strategy.replace('_', ' ')}**", unsafe_allow_html=True)
-                st.markdown(colored_recommendation(recommendations[strategy]), unsafe_allow_html=True)
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Price Action", "📉 Momentum", "📊 Volatility", "📈 Monte Carlo", "📉 New Indicators"])
-        with tab1:
-            price_cols = ['Close', 'SMA_50', 'SMA_200', 'EMA_20', 'EMA_50']
-            valid_price_cols = [col for col in price_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
-            if valid_price_cols:
-                fig = px.line(data, y=valid_price_cols, title="Price with Moving Averages")
-                st.plotly_chart(fig)
-            else:
-                st.warning("⚠️ No valid price action data available for plotting.")
-        with tab2:
-            momentum_cols = ['RSI', 'MACD', 'MACD_signal', 'TRIX', 'Ultimate_Osc', 'CMO']
-            valid_momentum_cols = [col for col in momentum_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
-            if valid_momentum_cols:
-                fig = px.line(data, y=valid_momentum_cols, title="Momentum Indicators")
-                st.plotly_chart(fig)
-            else:
-                st.warning("⚠️ No valid momentum indicators available for plotting.")
-        with tab3:
-            volatility_cols = ['ATR', 'Upper_Band', 'Lower_Band', 'Donchian_Upper', 'Donchian_Lower', 'Keltner_Upper', 'Keltner_Lower']
-            valid_volatility_cols = [col for col in volatility_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
-            if valid_volatility_cols:
-                fig = px.line(data, y=valid_volatility_cols, title="Volatility Analysis")
-                st.plotly_chart(fig)
-            else:
-                st.warning("⚠️ No valid volatility indicators available for plotting.")
-        with tab4:
-            mc_results = monte_carlo_simulation(data)
-            mc_df = pd.DataFrame(mc_results).T
-            mc_df.columns = [f"Sim {i+1}" for i in range(len(mc_results))]
-            fig = px.line(mc_df, title="Monte Carlo Price Simulations (30 Days)")
-            st.plotly_chart(fig)
-        with tab5:
-            new_cols = ['Ichimoku_Span_A', 'Ichimoku_Span_B', 'Ichimoku_Tenkan', 'Ichimoku_Kijun', 'CMF', 'VPT']
-            valid_new_cols = [col for col in new_cols if col in data.columns and pd.api.types.is_numeric_dtype(data[col])]
-            if valid_new_cols:
-                fig = px.line(data, y=valid_new_cols, title="New Indicators (Ichimoku, CMF, VPT)")
-                st.plotly_chart(fig)
-            else:
-                st.warning("⚠️ No valid new indicators available for plotting.")
-    elif symbol:
-        st.warning("⚠️ No data available for the selected stock.")
-
-def update_progress(progress_bar, loading_text, progress_value, loading_messages):
-    progress_bar.progress(progress_value)
-    loading_message = next(loading_messages)
-    dots = "." * int((progress_value * 10) % 4)
-    loading_text.text(f"{loading_message}{dots}")
+                st.markdown(f"{colored_recommendation(recommendations[strategy])}", unsafe_allow_html=True)
+        
+        st.subheader("📊 Technical Indicators")
+        indicator_cols = st.columns(3)
+        with indicator_cols[0]:
+            rsi = data['RSI'].iloc[-1] if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) else "N/A"
+            st.metric(tooltip("RSI", TOOLTIPS['RSI']), rsi)
+            macd = data['MACD'].iloc[-1] if 'MACD' in data.columns and not pd.isna(data['MACD'].iloc[-1]) else "N/A"
+            st.metric(tooltip("MACD", TOOLTIPS['MACD']), macd)
+        with indicator_cols[1]:
+            atr = data['ATR'].iloc[-1] if 'ATR' in data.columns and not pd.isna(data['ATR'].iloc[-1]) else "N/A"
+            st.metric(tooltip("ATR", TOOLTIPS['ATR']), atr)
+            vwap = data['VWAP'].iloc[-1] if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) else "N/A"
+            st.metric(tooltip("VWAP", TOOLTIPS['VWAP']), vwap)
+        with indicator_cols[2]:
+            adx = data['ADX'].iloc[-1] if 'ADX' in data.columns and not pd.isna(data['ADX'].iloc[-1]) else "N/A"
+            st.metric(tooltip("ADX", TOOLTIPS['ADX']), adx)
+            cmf = data['CMF'].iloc[-1] if 'CMF' in data.columns and not pd.isna(data['CMF'].iloc[-1]) else "N/A"
+            st.metric(tooltip("CMF", TOOLTIPS['CMF']), cmf)
+        
+        st.subheader("📉 Price Chart with Key Indicators")
+        fig = px.line(data, x=data.index, y='Close', title=f"{symbol} Price Movement")
+        fig.add_scatter(x=data.index, y=data['SMA_50'], mode='lines', name='SMA 50', line=dict(color='orange'))
+        fig.add_scatter(x=data.index, y=data['SMA_200'], mode='lines', name='SMA 200', line=dict(color='red'))
+        fig.add_scatter(x=data.index, y=data['Upper_Band'], mode='lines', name='Bollinger Upper', line=dict(color='purple', dash='dash'))
+        fig.add_scatter(x=data.index, y=data['Lower_Band'], mode='lines', name='Bollinger Lower', line=dict(color='purple', dash='dash'))
+        st.plotly_chart(fig)
+        
+        st.subheader("🔮 Monte Carlo Simulation")
+        sim_results = monte_carlo_simulation(data)
+        sim_df = pd.DataFrame(sim_results).T
+        sim_fig = px.line(sim_df, title=f"{symbol} 30-Day Price Simulation")
+        st.plotly_chart(sim_fig)
+        
+        st.subheader("📊 Risk Assessment")
+        risk = assess_risk(data)
+        st.write(f"Risk Level: {risk}")
+        
+        st.subheader("📈 Confidence Score")
+        confidence = calculate_confidence_score(data)
+        st.write(f"Confidence: {confidence:.2%}")
 
 def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
     results = []
@@ -1145,56 +1144,41 @@ def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
     
     results_df = pd.DataFrame([r for r in results if r is not None])
     if results_df.empty:
+        st.warning("⚠️ No valid intraday stock data retrieved.")
         return pd.DataFrame()
-    if "Score" not in results_df.columns:
-        results_df["Score"] = 0
-    if "Current Price" not in results_df.columns:
-        results_df["Current Price"] = None
-    intraday_df = results_df[results_df["Intraday"].str.contains("Buy", na=False)]
-    return intraday_df.sort_values(by="Score", ascending=False).head(5)
+    intraday_df = results_df[results_df['Intraday'].str.contains("Buy")]
+    if "Net_Score" not in intraday_df.columns:
+        intraday_df["Net_Score"] = 0
+    return intraday_df.sort_values(by="Net_Score", ascending=False).head(5)
+
+def update_progress(progress_bar, loading_text, progress, messages):
+    progress_bar.progress(min(progress, 1.0))
+    loading_text.text(next(messages))
 
 def main():
-    st.sidebar.title("🔍 Stock Search & Sector Selection")
-    NSE_STOCKS = fetch_nse_stock_list()
+    st.sidebar.title("🔧 Settings")
+    stock_list = fetch_nse_stock_list()
+    sector_options = list(SECTORS.keys()) + ["Custom"]
+    selected_sector = st.sidebar.selectbox("Select Sector", sector_options)
     
-    st.sidebar.subheader("Select Sectors")
-    all_sectors = list(SECTORS.keys())
-    selected_sectors = []
-    for sector in all_sectors:
-        if st.sidebar.checkbox(sector, value=True):
-            selected_sectors.append(sector)
+    if selected_sector == "Custom":
+        selected_stocks = st.sidebar.multiselect("Select Stocks", stock_list, default=["RELIANCE.NS"])
+    else:
+        selected_stocks = SECTORS.get(selected_sector, stock_list)
     
-    selected_stocks = list(set([stock for sector in selected_sectors for stock in SECTORS[sector] if stock in NSE_STOCKS]))
+    symbol = st.sidebar.selectbox("Select Stock for Detailed Analysis", selected_stocks)
     
-    symbol = None
-    selected_option = st.sidebar.selectbox(
-        "Choose or enter stock:",
-        options=[""] + selected_stocks + ["Custom"],
-        format_func=lambda x: x.split('.')[0] if x != "Custom" and x != "" else x
-    )
-    
-    if selected_option == "Custom":
-        custom_symbol = st.sidebar.text_input("Enter NSE Symbol (e.g., RELIANCE):")
-        if custom_symbol:
-            symbol = f"{custom_symbol}.NS"
-    elif selected_option != "":
-        symbol = selected_option
-    
-    if symbol:
-        if ".NS" not in symbol:
-            symbol += ".NS"
-        if symbol not in NSE_STOCKS:
-            st.sidebar.warning("⚠️ Unverified symbol - data may be unreliable")
+    if st.sidebar.button("🔍 Analyze Selected Stock"):
         data = fetch_stock_data_cached(symbol)
         if not data.empty:
             data = analyze_stock(data)
             recommendations = generate_recommendations(data, symbol)
             display_dashboard(symbol, data, recommendations, selected_stocks)
         else:
-            st.error("❌ Failed to load data for this symbol")
-    else:
-        display_dashboard(None, None, None, selected_stocks)
+            st.error(f"❌ Failed to fetch data for {symbol}")
+    
+    st.sidebar.subheader("ℹ️ About")
+    st.sidebar.info("StockGenie Pro provides advanced stock analysis using technical indicators and machine learning for NSE stocks.")
 
 if __name__ == "__main__":
     main()
-
