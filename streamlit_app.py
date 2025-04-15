@@ -17,22 +17,9 @@ import numpy as np
 import itertools
 from arch import arch_model
 import warnings
-import threading
-import pyotp
-from smartapi import SmartConnect
-from dotenv import load_dotenv
-import os
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-
-# Load environment variables
-load_dotenv()
-CLIENT_ID = os.getenv
-PASSWORD = os.getenv
-TOTP_SECRET = os.getenv
-API_KEY = os.getenv
-ALPHA_VANTAGE_KEY = os.getenv
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -67,30 +54,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
 ]
 
-# Symbol to SmartAPI token mapping (partial, for top_nse_stocks)
-TOKEN_MAP = {
-    "RELIANCE.NS": "11536",
-    "TCS.NS": "2950",
-    "HDFCBANK.NS": "1333",
-    "INFY.NS": "1594",
-    "HINDUNILVR.NS": "1348",
-    "ICICIBANK.NS": "1366",
-    "SBIN.NS": "3045",
-    "BHARTIARTL.NS": "466",
-    "LT.NS": "1922",
-    "KOTAKBANK.NS": "1788",
-    "ITC.NS": "1490",
-    "ASIANPAINT.NS": "351",
-    "AXISBANK.NS": "383",
-    "MARUTI.NS": "2031",
-    "BAJFINANCE.NS": "424",
-    "HCLTECH.NS": "1291",
-    "SUNPHARMA.NS": "3433",
-    "TITAN.NS": "3506",
-    "WIPRO.NS": "3787",
-    "ULTRACEMCO.NS": "3727"
-    # Add more tokens as needed from Angel One's instrument list
-}
+ALPHA_VANTAGE_KEY = "TCAUKYUCIDZ6PI57"
 
 TOOLTIPS = {
     "RSI": "Relative Strength Index (30=Oversold, 70=Overbought)",
@@ -197,43 +161,6 @@ SECTORS = {
     "Retailing": ["DMART.NS", "TRENT.NS"],
     "Miscellaneous": ["ADANIGREEN.NS"]
 }
-
-# Initialize SmartAPI
-def initialize_smartapi():
-    try:
-        totp = pyotp.TOTP(TOTP_SECRET)
-        smartapi = SmartConnect(api_key=API_KEY)
-        session = smartapi.generateSession(CLIENT_ID, PASSWORD, totp.now())
-        if session['status']:
-            st.success("✅ Connected to SmartAPI")
-            return smartapi
-        else:
-            st.error(f"⚠️ SmartAPI login failed: {session['message']}")
-            return None
-    except Exception as e:
-        st.error(f"⚠️ SmartAPI initialization error: {str(e)}")
-        return None
-
-# Fetch real-time data using SmartAPI
-def fetch_realtime_data(smartapi, symbol):
-    try:
-        symbol_without_ns = symbol.replace(".NS", "")
-        token = TOKEN_MAP.get(symbol)
-        if not token:
-            st.warning(f"⚠️ No token found for {symbol}")
-            return None
-        ltp_data = smartapi.ltpData("NSE", symbol_without_ns, token)
-        if ltp_data['status'] and 'data' in ltp_data:
-            price = ltp_data['data']['ltp']
-            timestamp = datetime.now()
-            return pd.DataFrame({
-                'Close': [price],
-                'Timestamp': [timestamp]
-            }, index=[timestamp])
-        return None
-    except Exception as e:
-        st.warning(f"⚠️ Error fetching real-time data for {symbol}: {str(e)}")
-        return None
 
 def tooltip(label, explanation):
     return f"{label} 📌 ({explanation})"
@@ -580,7 +507,7 @@ def calculate_buy_at(data):
     return round(buy_at, 2)
 
 def calculate_stop_loss(data, atr_multiplier=2.5):
-    if data.empty or 'ATR' in data.columns or data['ATR'].iloc[-1] is None:
+    if data.empty or 'ATR' not in data.columns or data['ATR'].iloc[-1] is None:
         st.warning("⚠️ Cannot calculate Stop Loss due to missing or invalid ATR data.")
         return None
     last_close = data['Close'].iloc[-1]
@@ -847,7 +774,7 @@ def generate_recommendations(data, symbol=None):
     total_signals = max(buy_score + sell_score, 5)
     net_score = (buy_score - sell_score) / total_signals * 5
     
-    # Set recommendations
+    # Set recommendations with narrower thresholds
     if net_score >= 3:
         recommendations["Intraday"] = "Strong Buy"
         recommendations["Swing"] = "Buy" if net_score >= 2 else "Hold"
@@ -868,6 +795,8 @@ def generate_recommendations(data, symbol=None):
         recommendations["Swing"] = "Hold"
         recommendations["Short-Term"] = "Hold"
         recommendations["Long-Term"] = "Hold"
+    else:
+        recommendations["Intraday"] = "Hold"
     
     recommendations["Current Price"] = float(data['Close'].iloc[-1]) if not pd.isna(data['Close'].iloc[-1]) else None
     recommendations["Buy At"] = calculate_buy_at(data)
@@ -958,38 +887,6 @@ def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
         results_df["Net_Score"] = 0
     return results_df[results_df["Intraday"].isin(["Buy", "Strong Buy"])].sort_values(by="Net_Score", ascending=False).head(5)
 
-# Monitor top stocks in real-time
-def monitor_top_stocks(smartapi, symbols, alert_callback):
-    historical_recommendations = {}
-    for symbol in symbols:
-        data = fetch_stock_data_cached(symbol)
-        if not data.empty:
-            data = analyze_stock(data)
-            historical_recommendations[symbol] = generate_recommendations(data, symbol)
-    
-    while True:
-        for symbol in symbols:
-            data = fetch_realtime_data(smartapi, symbol)
-            if data is not None:
-                current_price = data['Close'].iloc[-1]
-                rec = historical_recommendations.get(symbol, {})
-                alert = rec.get("Intraday", "Hold")
-                # Trigger alerts based on price crossing key levels
-                if rec.get("Buy At") and current_price <= rec["Buy At"]:
-                    alert = "Buy"
-                elif rec.get("Stop Loss") and current_price <= rec["Stop Loss"]:
-                    alert = "Sell (Stop Loss Hit)"
-                elif rec.get("Target") and current_price >= rec["Target"]:
-                    alert = "Sell (Target Hit)"
-                
-                alert_callback(symbol, {
-                    "Symbol": symbol,
-                    "Current Price": current_price,
-                    "Alert": alert,
-                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-        time.sleep(60)
-
 def colored_recommendation(recommendation):
     if "Buy" in recommendation:
         return f"🟢 {recommendation}"
@@ -1004,12 +901,11 @@ def update_progress(progress_bar, loading_text, progress, messages):
     progress_bar.progress(min(progress, 1.0))
     loading_text.text(next(messages))
 
-def display_dashboard(symbol=None, data=None, recommendations=None, selected_stocks=None, smartapi=None):
-    st.title("📊 StockGenie Pro - NSE Analysis with Real-Time Alerts")
+def display_dashboard(symbol=None, data=None, recommendations=None, selected_stocks=None):
+    st.title("📊 StockGenie Pro - NSE Analysis")
     st.subheader(f"📅 Analysis for {datetime.now().strftime('%d %b %Y')}")
     
     if st.button("🚀 Generate Daily Top Picks"):
-        st.session_state['top_stocks'] = []
         progress_bar = st.progress(0)
         loading_text = st.empty()
         loading_messages = itertools.cycle([
@@ -1024,7 +920,6 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         progress_bar.empty()
         loading_text.empty()
         if not results_df.empty:
-            st.session_state['top_stocks'] = results_df['Symbol'].tolist()
             st.subheader("🏆 Today's Top 10 Stocks")
             for _, row in results_df.iterrows():
                 with st.expander(f"{row['Symbol']} - Net Score: {row['Net_Score']}"):
@@ -1078,24 +973,6 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         else:
             st.warning("⚠️ No intraday picks available due to data issues.")
     
-    if 'top_stocks' in st.session_state and st.session_state['top_stocks'] and smartapi:
-        st.subheader("📡 Real-Time Alerts")
-        alert_placeholder = st.empty()
-        alert_history = []
-        
-        def update_alerts(symbol, alert_data):
-            alert_history.append(alert_data)
-            with alert_placeholder.container():
-                st.write(f"**Latest Alerts (Updated: {datetime.now().strftime('%H:%M:%S')})**")
-                for alert in alert_history[-10:]:
-                    st.write(f"{colored_recommendation(alert['Alert'])} {alert['Timestamp']} - {alert['Symbol']}: ₹{alert['Current Price']}")
-        
-        threading.Thread(
-            target=monitor_top_stocks,
-            args=(smartapi, st.session_state['top_stocks'], update_alerts),
-            daemon=True
-        ).start()
-    
     if symbol and data is not None and recommendations is not None:
         st.header(f"📋 {symbol.split('.')[0]} Analysis")
         col1, col2, col3, col4 = st.columns(4)
@@ -1136,7 +1013,6 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         st.plotly_chart(fig)
 
 if __name__ == "__main__":
-    smartapi = initialize_smartapi()
     stock_list = fetch_nse_stock_list()
     selected_stocks = st.sidebar.multiselect("Select Stocks or Sectors", 
                                              options=["All NSE Stocks"] + list(SECTORS.keys()), 
@@ -1152,8 +1028,9 @@ if __name__ == "__main__":
         if not data.empty:
             data = analyze_stock(data)
             recommendations = generate_recommendations(data, symbol)
-            display_dashboard(symbol, data, recommendations, stocks_to_analyze, smartapi)
+            display_dashboard(symbol, data, recommendations, stocks_to_analyze)
         else:
             st.error(f"⚠️ No data found for {symbol}")
     else:
-        display_dashboard(selected_stocks=stocks_to_analyze, smartapi=smartapi)
+        display_dashboard(selected_stocks=stocks_to_analyze)
+
