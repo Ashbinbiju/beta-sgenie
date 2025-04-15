@@ -272,17 +272,17 @@ def calculate_confidence_score(data):
     score = 0
     if 'RSI' in data.columns and data['RSI'].iloc[-1] is not None and data['RSI'].iloc[-1] < 30:
         score += 1
-    if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
-        score += 1
-    if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-        score += 1
-    if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
-        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
-        if atr_volatility < 0.02:
-            score += 0.5
-        elif atr_volatility > 0.05:
-            score -= 0.5
-    return min(max(score / 3.5, 0), 1)
+        if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
+            score += 1
+            if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
+                score += 1
+                if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
+                    atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
+                    if atr_volatility < 0.02:
+                        score += 0.5
+                    elif atr_volatility > 0.05:
+                        score -= 0.5
+                    return min(max(score / 3.5, 0), 1)
 
 def assess_risk(data):
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['ATR'].iloc[-1] > data['ATR'].mean():
@@ -354,15 +354,21 @@ def calculate_pivot_points(data):
 
 def calculate_heikin_ashi(data):
     try:
-        ha_data = data.copy()
+        # Create a new DataFrame to store Heikin-Ashi values
+        ha_data = pd.DataFrame(index=data.index)
+        
+        # Calculate HA_Close
         ha_data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
         
-        # Initialize HA Open
+        # Initialize HA_Open with the first value from data['Open']
         ha_data['HA_Open'] = data['Open'].copy()
-        for i in range(1, len(data)):
+        
+        # Compute HA_Open for subsequent rows
+        for i in range(1, len(ha_data)):
             ha_data['HA_Open'].iloc[i] = (ha_data['HA_Open'].iloc[i-1] + ha_data['HA_Close'].iloc[i-1]) / 2
         
-        ha_data['HA_High'] = pd.concat([data['High'], ha_data['HA_Open'], ha_data['HA_Close']], axis=1).max(axis=1)
+        # Calculate HA_High and HA_Low
+        ha_data['HA_High'] = pd.concat([data['High'], ha_data['HA_Open'], ha_data['HA_Close']], axis=Tube1).max(axis=1)
         ha_data['HA_Low'] = pd.concat([data['Low'], ha_data['HA_Open'], ha_data['HA_Close']], axis=1).min(axis=1)
         
         return ha_data[['HA_Open', 'HA_High', 'HA_Low', 'HA_Close']]
@@ -1089,7 +1095,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
     if symbol and data is not None and recommendations is not None:
         st.header(f"📋 {symbol.split('.')[0]} Analysis")
         col1, col2, col3, col4 = st.columns(4)
-        with RAIcol1:
+        with col1:
             current_price = recommendations['Current Price'] if recommendations['Current Price'] is not None else "N/A"
             st.metric(tooltip("Current Price", TOOLTIPS['RSI']), f"₹{current_price}")
         with col2:
@@ -1149,5 +1155,3 @@ if __name__ == "__main__":
                 display_dashboard(symbol, data, recommendations, stocks_to_analyze)
         else:
             st.error(f"⚠️ No data found for {symbol}")
-    else:
-        display_dashboard(selected_stocks=stocks_to_analyze)
