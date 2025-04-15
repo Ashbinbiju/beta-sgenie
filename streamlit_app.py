@@ -274,7 +274,7 @@ def calculate_confidence_score(data):
         score += 1
     if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
         score += 1
-    if 'Ichimoku_Span_A' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > data['Ichimoku_Span_A'].iloc[-1]:
+    if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
         score += 1
     if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
         atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
@@ -373,12 +373,12 @@ def calculate_heikin_ashi(data):
 def analyze_stock(data):
     if data.empty or len(data) < 27:
         st.warning("⚠️ Insufficient data to compute indicators.")
-        return data
+        return None
     required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     missing_cols = [col for col in required_columns if col not in data.columns]
     if missing_cols:
         st.warning(f"⚠️ Missing required columns: {', '.join(missing_cols)}")
-        return data
+        return None
     
     try:
         rsi_window = optimize_rsi_window(data)
@@ -431,10 +431,7 @@ def analyze_stock(data):
         st.warning(f"⚠️ Failed to compute ATR: {str(e)}")
         data['ATR'] = None
     try:
-        if len(data) >= 27:
-            data['ADX'] = ta.trend.ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx()
-        else:
-            data['ADX'] = None
+        data['ADX'] = ta.trend.ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx()
     except Exception as e:
         st.warning(f"⚠️ Failed to compute ADX: {str(e)}")
         data['ADX'] = None
@@ -572,7 +569,7 @@ def analyze_stock(data):
     return data
 
 def calculate_buy_at(data):
-    if data.empty or 'RSI' not in data.columns or data['RSI'].iloc[-1] is None:
+    if data is None or 'RSI' not in data.columns or data['RSI'].iloc[-1] is None:
         st.warning("⚠️ Cannot calculate Buy At due to missing or invalid RSI data.")
         return None
     last_close = data['Close'].iloc[-1]
@@ -581,67 +578,72 @@ def calculate_buy_at(data):
     return round(buy_at, 2)
 
 def calculate_stop_loss(data, atr_multiplier=2.5):
-    if data.empty or 'ATR' not in data.columns or data['ATR'].iloc[-1] is None:
+    if data is None or 'ATR' not in data.columns or data['ATR'].iloc[-1] is None:
         st.warning("⚠️ Cannot calculate Stop Loss due to missing or invalid ATR data.")
         return None
     last_close = data['Close'].iloc[-1]
     last_atr = data['ATR'].iloc[-1]
+    atr_std = data['ATR'].std() if not data['ATR'].std() == 0 else 1
     atr_multiplier = 3.0 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25 else 1.5
+    atr_multiplier += (last_atr / atr_std) * 0.5  # Adjust based on volatility
     stop_loss = last_close - (atr_multiplier * last_atr)
-    if stop_loss < last_close * 0.9:
-        stop_loss = last_close * 0.9
+    if stop_loss < last_close * 0.85:
+        stop_loss = last_close * 0.85
     return round(stop_loss, 2)
 
 def calculate_target(data, risk_reward_ratio=3):
+    if data is None:
+        st.warning("⚠️ Cannot calculate Target due to missing data.")
+        return None
     stop_loss = calculate_stop_loss(data)
     if stop_loss is None:
         st.warning("⚠️ Cannot calculate Target due to missing Stop Loss data.")
         return None
     last_close = data['Close'].iloc[-1]
     risk = last_close - stop_loss
-    adjusted_ratio = min(risk_reward_ratio, 5) if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25 else min(risk_reward_ratio, 3)
+    adjusted_ratio = min(risk_reward_ratio, 5) if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 30 else min(risk_reward_ratio, 3)
     target = last_close + (risk * adjusted_ratio)
-    if target > last_close * 1.2:
-        target = last_close * 1.2
+    max_target = last_close * 1.3 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 30 else last_close * 1.2
+    if target > max_target:
+        target = max_target
     return round(target, 2)
 
+@lru_cache(maxsize=100)
 def fetch_fundamentals(symbol):
     try:
         stock = yf.Ticker(symbol)
         info = stock.info
+        pe = info.get('trailingPE', 100)
+        pe = min(pe, 100) if pe != float('inf') else 100
         return {
-            'P/E': info.get('trailingPE', float('inf')),
+            'P/E': pe,
             'EPS': info.get('trailingEps', 0),
             'RevenueGrowth': info.get('revenueGrowth', 0)
         }
     except Exception:
-        return {'P/E': float('inf'), 'EPS': 0, 'RevenueGrowth': 0}
+        return {'P/E': 100, 'EPS': 0, 'RevenueGrowth': 0}
 
 def generate_recommendations(data, symbol=None):
-    recommendations = {
-        "Intraday": "Hold", "Swing": "Hold", "Short-Term": "Hold", "Long-Term": "Hold",
-        "Mean_Reversion": "Hold", "Breakout": "Hold", "Ichimoku_Trend": "Hold",
+    default_recommendations = {
+        "Intraday": "N/A", "Swing": "N/A", "Short-Term": "N/A", "Long-Term": "N/A",
+        "Mean_Reversion": "N/A", "Breakout": "N/A", "Ichimoku_Trend": "N/A",
         "Current Price": None, "Buy At": None, "Stop Loss": None, "Target": None,
         "Score": 0, "Net_Score": 0
     }
     
-    if data.empty or 'Close' not in data.columns or data['Close'].iloc[-1] is None:
-        return recommendations
+    if data is None or data.empty or 'Close' not in data.columns or data['Close'].iloc[-1] is None:
+        return default_recommendations
     
     buy_score = 0
     sell_score = 0
     
-    # RSI
+    # RSI (Extreme conditions only)
     if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) and 0 <= data['RSI'].iloc[-1] <= 100:
         rsi = data['RSI'].iloc[-1]
         if rsi <= 20:
             buy_score += 2
-        elif rsi < 30:
-            buy_score += 1
         elif rsi >= 80:
             sell_score += 2
-        elif rsi > 70:
-            sell_score += 1
     
     # MACD
     if ('MACD' in data.columns and 'MACD_signal' in data.columns and 
@@ -707,18 +709,27 @@ def generate_recommendations(data, symbol=None):
     
     # Ichimoku Cloud
     if ('Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and 
-        'Ichimoku_Span_A' in data.columns and not pd.isna(data['Ichimoku_Tenkan'].iloc[-1]) and 
-        not pd.isna(data['Ichimoku_Kijun'].iloc[-1]) and not pd.isna(data['Ichimoku_Span_A'].iloc[-1])):
+        'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and
+        'Ichimoku_Chikou' in data.columns and 
+        not pd.isna(data['Ichimoku_Tenkan'].iloc[-1]) and 
+        not pd.isna(data['Ichimoku_Kijun'].iloc[-1]) and 
+        not pd.isna(data['Ichimoku_Span_A'].iloc[-1]) and
+        not pd.isna(data['Ichimoku_Span_B'].iloc[-1]) and
+        not pd.isna(data['Ichimoku_Chikou'].iloc[-1])):
         tenkan = data['Ichimoku_Tenkan'].iloc[-1]
         kijun = data['Ichimoku_Kijun'].iloc[-1]
         span_a = data['Ichimoku_Span_A'].iloc[-1]
+        span_b = data['Ichimoku_Span_B'].iloc[-1]
+        chikou = data['Ichimoku_Chikou'].iloc[-1]
         close = data['Close'].iloc[-1]
-        if tenkan > kijun and close > span_a:
+        cloud_top = max(span_a, span_b)
+        cloud_bottom = min(span_a, span_b)
+        if tenkan > kijun and close > cloud_top and chikou > close:
             buy_score += 2
-            recommendations["Ichimoku_Trend"] = "Strong Buy"
-        elif tenkan < kijun and close < span_a:
+            default_recommendations["Ichimoku_Trend"] = "Strong Buy"
+        elif tenkan < kijun and close < cloud_bottom and chikou < close:
             sell_score += 2
-            recommendations["Ichimoku_Trend"] = "Strong Sell"
+            default_recommendations["Ichimoku_Trend"] = "Strong Sell"
     
     # Chaikin Money Flow
     if 'CMF' in data.columns and not pd.isna(data['CMF'].iloc[-1]):
@@ -736,12 +747,12 @@ def generate_recommendations(data, symbol=None):
         lower = data['Donchian_Lower'].iloc[-1]
         if close > upper:
             buy_score += 1
-            recommendations["Breakout"] = "Buy"
+            default_recommendations["Breakout"] = "Buy"
         elif close < lower:
             sell_score += 1
-            recommendations["Breakout"] = "Sell"
+            default_recommendations["Breakout"] = "Sell"
     
-    # Mean Reversion
+    # Mean Reversion (RSI-based, standard thresholds)
     if ('RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and 
         not pd.isna(data['RSI'].iloc[-1]) and not pd.isna(data['Lower_Band'].iloc[-1]) and 
         not pd.isna(data['Upper_Band'].iloc[-1])):
@@ -751,10 +762,10 @@ def generate_recommendations(data, symbol=None):
         upper = data['Upper_Band'].iloc[-1]
         if rsi < 30 and close >= lower:
             buy_score += 2
-            recommendations["Mean_Reversion"] = "Buy"
+            default_recommendations["Mean_Reversion"] = "Buy"
         elif rsi > 70 and close >= upper:
             sell_score += 2
-            recommendations["Mean_Reversion"] = "Sell"
+            default_recommendations["Mean_Reversion"] = "Sell"
     
     # Keltner Channels
     if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
@@ -876,36 +887,36 @@ def generate_recommendations(data, symbol=None):
     
     # Set recommendations with narrower thresholds
     if net_score >= 3:
-        recommendations["Intraday"] = "Strong Buy"
-        recommendations["Swing"] = "Buy" if net_score >= 2 else "Hold"
-        recommendations["Short-Term"] = "Buy" if net_score >= 1.5 else "Hold"
-        recommendations["Long-Term"] = "Buy" if net_score >= 1 else "Hold"
+        default_recommendations["Intraday"] = "Strong Buy"
+        default_recommendations["Swing"] = "Buy" if net_score >= 2 else "Hold"
+        default_recommendations["Short-Term"] = "Buy" if net_score >= 1.5 else "Hold"
+        default_recommendations["Long-Term"] = "Buy" if net_score >= 1 else "Hold"
     elif net_score >= 1:
-        recommendations["Intraday"] = "Buy"
-        recommendations["Swing"] = "Hold"
-        recommendations["Short-Term"] = "Hold"
-        recommendations["Long-Term"] = "Hold"
+        default_recommendations["Intraday"] = "Buy"
+        default_recommendations["Swing"] = "Hold"
+        default_recommendations["Short-Term"] = "Hold"
+        default_recommendations["Long-Term"] = "Hold"
     elif net_score <= -3:
-        recommendations["Intraday"] = "Strong Sell"
-        recommendations["Swing"] = "Sell" if net_score <= -2 else "Hold"
-        recommendations["Short-Term"] = "Sell" if net_score <= -1.5 else "Hold"
-        recommendations["Long-Term"] = "Sell" if net_score <= -1 else "Hold"
+        default_recommendations["Intraday"] = "Strong Sell"
+        default_recommendations["Swing"] = "Sell" if net_score <= -2 else "Hold"
+        default_recommendations["Short-Term"] = "Sell" if net_score <= -1.5 else "Hold"
+        default_recommendations["Long-Term"] = "Sell" if net_score <= -1 else "Hold"
     elif net_score <= -1:
-        recommendations["Intraday"] = "Sell"
-        recommendations["Swing"] = "Hold"
-        recommendations["Short-Term"] = "Hold"
-        recommendations["Long-Term"] = "Hold"
+        default_recommendations["Intraday"] = "Sell"
+        default_recommendations["Swing"] = "Hold"
+        default_recommendations["Short-Term"] = "Hold"
+        default_recommendations["Long-Term"] = "Hold"
     else:
-        recommendations["Intraday"] = "Hold"
+        default_recommendations["Intraday"] = "Hold"
     
-    recommendations["Current Price"] = float(data['Close'].iloc[-1]) if not pd.isna(data['Close'].iloc[-1]) else None
-    recommendations["Buy At"] = calculate_buy_at(data)
-    recommendations["Stop Loss"] = calculate_stop_loss(data)
-    recommendations["Target"] = calculate_target(data)
-    recommendations["Score"] = buy_score - sell_score
-    recommendations["Net_Score"] = round(net_score, 2)
+    default_recommendations["Current Price"] = float(data['Close'].iloc[-1]) if not pd.isna(data['Close'].iloc[-1]) else None
+    default_recommendations["Buy At"] = calculate_buy_at(data)
+    default_recommendations["Stop Loss"] = calculate_stop_loss(data)
+    default_recommendations["Target"] = calculate_target(data)
+    default_recommendations["Score"] = buy_score - sell_score
+    default_recommendations["Net_Score"] = round(net_score, 2)
     
-    return recommendations
+    return default_recommendations
 
 def analyze_batch(stock_batch):
     results = []
@@ -928,6 +939,8 @@ def analyze_stock_parallel(symbol):
     data = fetch_stock_data_cached(symbol)
     if not data.empty:
         data = analyze_stock(data)
+        if data is None:
+            return None
         recommendations = generate_recommendations(data, symbol)
         return {
             "Symbol": symbol,
@@ -1076,7 +1089,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
     if symbol and data is not None and recommendations is not None:
         st.header(f"📋 {symbol.split('.')[0]} Analysis")
         col1, col2, col3, col4 = st.columns(4)
-        with col1:
+        with RAIcol1:
             current_price = recommendations['Current Price'] if recommendations['Current Price'] is not None else "N/A"
             st.metric(tooltip("Current Price", TOOLTIPS['RSI']), f"₹{current_price}")
         with col2:
@@ -1129,8 +1142,11 @@ if __name__ == "__main__":
         data = fetch_stock_data_cached(symbol)
         if not data.empty:
             data = analyze_stock(data)
-            recommendations = generate_recommendations(data, symbol)
-            display_dashboard(symbol, data, recommendations, stocks_to_analyze)
+            if data is None:
+                st.error(f"⚠️ Insufficient or invalid data for {symbol}")
+            else:
+                recommendations = generate_recommendations(data, symbol)
+                display_dashboard(symbol, data, recommendations, stocks_to_analyze)
         else:
             st.error(f"⚠️ No data found for {symbol}")
     else:
