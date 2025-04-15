@@ -74,6 +74,8 @@ TOOLTIPS = {
     "Ultimate_Osc": "Ultimate Oscillator - Combines short, medium, and long-term momentum",
     "CMO": "Chande Momentum Oscillator - Measures raw momentum (-100 to 100)",
     "VPT": "Volume Price Trend - Tracks trend strength with price and volume",
+    "Pivot Points": "Support and resistance levels based on previous day's prices",
+    "Heikin-Ashi": "Smoothed candlestick chart to identify trends"
 }
 
 SECTORS = {
@@ -324,6 +326,50 @@ def calculate_cmo(close, window=14):
         st.warning(f"⚠️ Failed to compute custom CMO: {str(e)}")
         return None
 
+def calculate_pivot_points(data):
+    try:
+        high = data['High'].iloc[-1]
+        low = data['Low'].iloc[-1]
+        close = data['Close'].iloc[-1]
+        
+        # Standard Pivot Point
+        pivot = (high + low + close) / 3
+        
+        # Support and Resistance Levels
+        support1 = (2 * pivot) - high
+        resistance1 = (2 * pivot) - low
+        support2 = pivot - (high - low)
+        resistance2 = pivot + (high - low)
+        
+        return {
+            'Pivot': pivot,
+            'Support1': support1,
+            'Resistance1': resistance1,
+            'Support2': support2,
+            'Resistance2': resistance2
+        }
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Pivot Points: {str(e)}")
+        return None
+
+def calculate_heikin_ashi(data):
+    try:
+        ha_data = data.copy()
+        ha_data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
+        
+        # Initialize HA Open
+        ha_data['HA_Open'] = data['Open'].copy()
+        for i in range(1, len(data)):
+            ha_data['HA_Open'].iloc[i] = (ha_data['HA_Open'].iloc[i-1] + ha_data['HA_Close'].iloc[i-1]) / 2
+        
+        ha_data['HA_High'] = pd.concat([data['High'], ha_data['HA_Open'], ha_data['HA_Close']], axis=1).max(axis=1)
+        ha_data['HA_Low'] = pd.concat([data['Low'], ha_data['HA_Open'], ha_data['HA_Close']], axis=1).min(axis=1)
+        
+        return ha_data[['HA_Open', 'HA_High', 'HA_Low', 'HA_Close']]
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Heikin-Ashi: {str(e)}")
+        return None
+
 def analyze_stock(data):
     if data.empty or len(data) < 27:
         st.warning("⚠️ Insufficient data to compute indicators.")
@@ -495,6 +541,34 @@ def analyze_stock(data):
     except Exception as e:
         st.warning(f"⚠️ Failed to compute Volume Price Trend: {str(e)}")
         data['VPT'] = None
+    try:
+        pivot_points = calculate_pivot_points(data)
+        if pivot_points:
+            data['Pivot'] = pivot_points['Pivot']
+            data['Support1'] = pivot_points['Support1']
+            data['Resistance1'] = pivot_points['Resistance1']
+            data['Support2'] = pivot_points['Support2']
+            data['Resistance2'] = pivot_points['Resistance2']
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Pivot Points: {str(e)}")
+        data['Pivot'] = None
+        data['Support1'] = None
+        data['Resistance1'] = None
+        data['Support2'] = None
+        data['Resistance2'] = None
+    try:
+        ha_data = calculate_heikin_ashi(data)
+        if ha_data is not None:
+            data['HA_Open'] = ha_data['HA_Open']
+            data['HA_High'] = ha_data['HA_High']
+            data['HA_Low'] = ha_data['HA_Low']
+            data['HA_Close'] = ha_data['HA_Close']
+    except Exception as e:
+        st.warning(f"⚠️ Failed to compute Heikin-Ashi: {str(e)}")
+        data['HA_Open'] = None
+        data['HA_High'] = None
+        data['HA_Low'] = None
+        data['HA_Close'] = None
     return data
 
 def calculate_buy_at(data):
@@ -758,6 +832,32 @@ def generate_recommendations(data, symbol=None):
         elif obv < prev_obv:
             sell_score += 1
     
+    # Pivot Points
+    if ('Pivot' in data.columns and 'Support1' in data.columns and 'Resistance1' in data.columns and 
+        not pd.isna(data['Pivot'].iloc[-1]) and not pd.isna(data['Support1'].iloc[-1]) and 
+        not pd.isna(data['Resistance1'].iloc[-1])):
+        close = data['Close'].iloc[-1]
+        pivot = data['Pivot'].iloc[-1]
+        support1 = data['Support1'].iloc[-1]
+        resistance1 = data['Resistance1'].iloc[-1]
+        if abs(close - support1) / close < 0.01:
+            buy_score += 1
+        elif abs(close - resistance1) / close < 0.01:
+            sell_score += 1
+    
+    # Heikin-Ashi
+    if ('HA_Close' in data.columns and 'HA_Open' in data.columns and 
+        not pd.isna(data['HA_Close'].iloc[-1]) and not pd.isna(data['HA_Open'].iloc[-1]) and
+        not pd.isna(data['HA_Close'].iloc[-2]) and not pd.isna(data['HA_Open'].iloc[-2])):
+        ha_close = data['HA_Close'].iloc[-1]
+        ha_open = data['HA_Open'].iloc[-1]
+        prev_ha_close = data['HA_Close'].iloc[-2]
+        prev_ha_open = data['HA_Open'].iloc[-2]
+        if ha_close > ha_open and prev_ha_close > prev_ha_open:
+            buy_score += 1
+        elif ha_close < ha_open and prev_ha_close < prev_ha_open:
+            sell_score += 1
+    
     # Fundamentals
     if symbol:
         fundamentals = fetch_fundamentals(symbol)
@@ -1003,7 +1103,9 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             "RSI": data['RSI'].iloc[-1] if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) else "N/A",
             "MACD": data['MACD'].iloc[-1] if 'MACD' in data.columns and not pd.isna(data['MACD'].iloc[-1]) else "N/A",
             "ATR": data['ATR'].iloc[-1] if 'ATR' in data.columns and not pd.isna(data['ATR'].iloc[-1]) else "N/A",
-            "VWAP": data['VWAP'].iloc[-1] if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) else "N/A"
+            "VWAP": data['VWAP'].iloc[-1] if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) else "N/A",
+            "Pivot": data['Pivot'].iloc[-1] if 'Pivot' in data.columns and not pd.isna(data['Pivot'].iloc[-1]) else "N/A",
+            "HA_Close": data['HA_Close'].iloc[-1] if 'HA_Close' in data.columns and not pd.isna(data['HA_Close'].iloc[-1]) else "N/A"
         }
         for key, value in indicators.items():
             st.write(f"{tooltip(key, TOOLTIPS.get(key, ''))}: {value}")
@@ -1033,4 +1135,3 @@ if __name__ == "__main__":
             st.error(f"⚠️ No data found for {symbol}")
     else:
         display_dashboard(selected_stocks=stocks_to_analyze)
-
