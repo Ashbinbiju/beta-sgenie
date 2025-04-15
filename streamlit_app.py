@@ -1215,7 +1215,7 @@ if __name__ == "__main__":
     stock_list = fetch_nse_stock_list()
     selected_stocks = st.sidebar.multiselect("Select Stocks or Sectors", 
                                              options=["All NSE Stocks"] + list(SECTORS.keys()), 
-                                             default="top_nse_stocks")
+                                             default="Bank")
     if "All NSE Stocks" in selected_stocks:
         stocks_to_analyze = stock_list
     else:
