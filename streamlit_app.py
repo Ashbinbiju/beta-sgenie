@@ -1232,4 +1232,4 @@ if __name__ == "__main__":
                 recommendations = generate_recommendations(data, symbol)
                 display_dashboard(symbol, data, recommendations, stocks_to_analyze)
         else:
-            st.error(f"⚠️ No data found for {symbol}"
+            st.error(f"⚠️ No data found for {symbol}")
