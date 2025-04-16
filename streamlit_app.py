@@ -17,6 +17,7 @@ import itertools
 from arch import arch_model
 import warnings
 import logging
+import gc  # Added for garbage collection
 
 # Configure logging
 logging.basicConfig(
@@ -264,6 +265,9 @@ def fetch_nse_stock_list():
         return list(set([stock for sector in SECTORS.values() for stock in sector]))
 
 def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"):
+    if not isinstance(symbol, str):
+        logging.error(f"Invalid symbol type: {type(symbol)} for symbol: {symbol}")
+        raise TypeError(f"Symbol must be a string, got {type(symbol)}")
     try:
         if not symbol.endswith(f".{exchange}"):
             symbol += f".{exchange}"
@@ -279,6 +283,10 @@ def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"
             raise ValueError(f"Missing required columns for {symbol}")
         if data['Volume'].mean() < 1000:
             raise ValueError(f"Low trading volume for {symbol}")
+        # Convert to float32 for memory efficiency
+        for col in ['Open', 'High', 'Low', 'Close']:
+            data[col] = data[col].astype(np.float32)
+        data['Volume'] = data['Volume'].astype(np.int32)
         logging.info(f"Successfully fetched data for {symbol}")
         return data
     except Exception as e:
@@ -286,20 +294,7 @@ def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"
         st.warning(f"⚠️ Error fetching data for {symbol}: {str(e)}")
         return pd.DataFrame()
 
-def cache_with_timeout(maxsize=50, timeout=3600):
-    cache = lru_cache(maxsize=maxsize)(fetch_stock_data_with_auth)
-    cache_time = {}
-
-    def wrapper(*args, **kwargs):
-        key = args + tuple(kwargs.items())
-        if key in cache_time and (time.time() - cache_time[key]) > timeout:
-            cache.cache_clear()
-        result = cache(*args, **kwargs)
-        cache_time[key] = time.time()
-        return result
-    return wrapper
-
-@cache_with_timeout(maxsize=50)
+@lru_cache(maxsize=50)
 def fetch_stock_data_cached(symbol, period="5y", interval="1d", exchange="NS"):
     return fetch_stock_data_with_auth(symbol, period, interval, exchange)
 
@@ -422,11 +417,11 @@ def calculate_cmo(close, window=14):
         up_sum = diff.where(diff > 0, 0).rolling(window=window).sum()
         down_sum = abs(diff.where(diff < 0, 0)).rolling(window=window).sum()
         cmo = 100 * (up_sum - down_sum) / (up_sum + down_sum)
-        return cmo
+        return cmo.astype(np.float32)  # Use float32
     except Exception as e:
         logging.error(f"Failed to compute custom CMO: {str(e)}")
         st.warning(f"⚠️ Failed to compute custom CMO: {str(e)}")
-        return pd.Series([None] * len(close), index=close.index)
+        return pd.Series([None] * len(close), index=close.index, dtype=np.float32)
 
 def calculate_pivot_points(data):
     try:
@@ -439,11 +434,11 @@ def calculate_pivot_points(data):
         support2 = pivot - (high - low)
         resistance2 = pivot + (high - low)
         return {
-            'Pivot': pivot,
-            'Support1': support1,
-            'Resistance1': resistance1,
-            'Support2': support2,
-            'Resistance2': resistance2
+            'Pivot': np.float32(pivot),
+            'Support1': np.float32(support1),
+            'Resistance1': np.float32(resistance1),
+            'Support2': np.float32(support2),
+            'Resistance2': np.float32(resistance2)
         }
     except Exception as e:
         logging.error(f"Failed to compute Pivot Points: {str(e)}")
@@ -453,12 +448,13 @@ def calculate_pivot_points(data):
 def calculate_heikin_ashi(data):
     try:
         ha_data = pd.DataFrame(index=data.index)
-        ha_data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
-        ha_data['HA_Open'] = data['Open'].copy()
+        ha_data['HA_Close'] = ((data['Open'] + data['High'] + data['Low'] + data['Close']) / 4).astype(np.float32)
+        ha_data['HA_Open'] = data['Open'].astype(np.float32).copy()
         for i in range(1, len(ha_data)):
             ha_data['HA_Open'].iloc[i] = (ha_data['HA_Open'].iloc[i-1] + ha_data['HA_Close'].iloc[i-1]) / 2
-        ha_data['HA_High'] = np.maximum.reduce([data['High'], ha_data['HA_Open'], ha_data['HA_Close']])
-        ha_data['HA_Low'] = np.minimum.reduce([data['Low'], ha_data['HA_Open'], ha_data['HA_Close']])
+        ha_data['HA_Open'] = ha_data['HA_Open'].astype(np.float32)
+        ha_data['HA_High'] = np.maximum.reduce([data['High'], ha_data['HA_Open'], ha_data['HA_Close']]).astype(np.float32)
+        ha_data['HA_Low'] = np.minimum.reduce([data['Low'], ha_data['HA_Open'], ha_data['HA_Close']]).astype(np.float32)
         return ha_data[['HA_Open', 'HA_High', 'HA_Low', 'HA_Close']]
     except Exception as e:
         logging.error(f"Failed to compute Heikin-Ashi: {str(e)}")
@@ -475,88 +471,97 @@ def analyze_stock(data, indicators=None):
         st.warning(f"⚠️ Missing required columns: {', '.join(missing_cols)}")
         return None
     
-    data = data.fillna(method='ffill').fillna(method='bfill')
-    if indicators is None:
-        indicators = ['RSI', 'MACD', 'ATR', 'VWAP', 'Pivot', 'Heikin-Ashi']
+    data = data.fillna(method='ffill').fillna(method='bfill').copy()  # Create a copy to avoid modifying cached data
+    
+    # Define all available indicators
+    all_indicators = [
+        'RSI', 'MACD', 'SMA_EMA', 'Bollinger', 'Stochastic', 'ATR', 'ADX', 'OBV',
+        'VWAP', 'Volume_Spike', 'Parabolic_SAR', 'Fibonacci', 'Divergence', 'Ichimoku',
+        'CMF', 'Donchian', 'Keltner', 'TRIX', 'Ultimate_Osc', 'CMO', 'VPT', 'Pivot',
+        'Heikin-Ashi'
+    ]
+    
+    # Use all indicators if none specified
+    indicators = all_indicators if indicators is None else indicators
     
     for indicator in indicators:
         try:
             if indicator == 'RSI':
                 rsi_window = optimize_rsi_window(data)
-                data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=rsi_window).rsi()
+                data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=rsi_window).rsi().astype(np.float32)
             elif indicator == 'MACD':
                 macd = ta.trend.MACD(data['Close'], window_slow=26, window_fast=12, window_sign=9)
-                data['MACD'] = macd.macd()
-                data['MACD_signal'] = macd.macd_signal()
-                data['MACD_hist'] = macd.macd_diff()
+                data['MACD'] = macd.macd().astype(np.float32)
+                data['MACD_signal'] = macd.macd_signal().astype(np.float32)
+                data['MACD_hist'] = macd.macd_diff().astype(np.float32)
             elif indicator == 'SMA_EMA':
-                data['SMA_50'] = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator()
-                data['SMA_200'] = ta.trend.SMAIndicator(data['Close'], window=200).sma_indicator()
-                data['EMA_20'] = ta.trend.EMAIndicator(data['Close'], window=20).ema_indicator()
-                data['EMA_50'] = ta.trend.EMAIndicator(data['Close'], window=50).ema_indicator()
+                data['SMA_50'] = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator().astype(np.float32)
+                data['SMA_200'] = ta.trend.SMAIndicator(data['Close'], window=200).sma_indicator().astype(np.float32)
+                data['EMA_20'] = ta.trend.EMAIndicator(data['Close'], window=20).ema_indicator().astype(np.float32)
+                data['EMA_50'] = ta.trend.EMAIndicator(data['Close'], window=50).ema_indicator().astype(np.float32)
             elif indicator == 'Bollinger':
                 bollinger = ta.volatility.BollingerBands(data['Close'], window=20, window_dev=2)
-                data['Upper_Band'] = bollinger.bollinger_hband()
-                data['Middle_Band'] = bollinger.bollinger_mavg()
-                data['Lower_Band'] = bollinger.bollinger_lband()
+                data['Upper_Band'] = bollinger.bollinger_hband().astype(np.float32)
+                data['Middle_Band'] = bollinger.bollinger_mavg().astype(np.float32)
+                data['Lower_Band'] = bollinger.bollinger_lband().astype(np.float32)
             elif indicator == 'Stochastic':
                 stoch = ta.momentum.StochasticOscillator(data['High'], data['Low'], data['Close'], window=14, smooth_window=3)
-                data['SlowK'] = stoch.stoch()
-                data['SlowD'] = stoch.stoch_signal()
+                data['SlowK'] = stoch.stoch().astype(np.float32)
+                data['SlowD'] = stoch.stoch_signal().astype(np.float32)
             elif indicator == 'ATR':
-                data['ATR'] = ta.volatility.AverageTrueRange(data['High'], data['Low'], data['Close'], window=14).average_true_range()
+                data['ATR'] = ta.volatility.AverageTrueRange(data['High'], data['Low'], data['Close'], window=14).average_true_range().astype(np.float32)
             elif indicator == 'ADX':
-                data['ADX'] = ta.trend.ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx()
+                data['ADX'] = ta.trend.ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx().astype(np.float32)
             elif indicator == 'OBV':
-                data['OBV'] = ta.volume.OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume()
+                data['OBV'] = ta.volume.OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume().astype(np.float32)
             elif indicator == 'VWAP':
-                data['Cumulative_TP'] = ((data['High'] + data['Low'] + data['Close']) / 3) * data['Volume']
-                data['Cumulative_Volume'] = data['Volume'].cumsum()
-                data['VWAP'] = data['Cumulative_TP'].cumsum() / data['Cumulative_Volume']
+                data['Cumulative_TP'] = ((data['High'] + data['Low'] + data['Close']) / 3).astype(np.float32) * data['Volume']
+                data['Cumulative_Volume'] = data['Volume'].cumsum().astype(np.float32)
+                data['VWAP'] = (data['Cumulative_TP'].cumsum() / data['Cumulative_Volume']).astype(np.float32)
             elif indicator == 'Volume_Spike':
-                data['Avg_Volume'] = data['Volume'].rolling(window=10).mean()
-                data['Volume_Spike'] = data['Volume'] > (data['Avg_Volume'] * 2.0)
+                data['Avg_Volume'] = data['Volume'].rolling(window=10).mean().astype(np.float32)
+                data['Volume_Spike'] = (data['Volume'] > (data['Avg_Volume'] * 2.0)).astype(bool)
             elif indicator == 'Parabolic_SAR':
-                data['Parabolic_SAR'] = ta.trend.PSARIndicator(data['High'], data['Low'], data['Close']).psar()
+                data['Parabolic_SAR'] = ta.trend.PSARIndicator(data['High'], data['Low'], data['Close']).psar().astype(np.float32)
             elif indicator == 'Fibonacci':
                 high = data['High'].max()
                 low = data['Low'].min()
                 diff = high - low
-                data['Fib_23.6'] = high - diff * 0.236
-                data['Fib_38.2'] = high - diff * 0.382
-                data['Fib_50.0'] = high - diff * 0.5
-                data['Fib_61.8'] = high - diff * 0.618
+                data['Fib_23.6'] = np.float32(high - diff * 0.236)
+                data['Fib_38.2'] = np.float32(high - diff * 0.382)
+                data['Fib_50.0'] = np.float32(high - diff * 0.5)
+                data['Fib_61.8'] = np.float32(high - diff * 0.618)
             elif indicator == 'Divergence':
                 data['Divergence'] = detect_divergence(data)
             elif indicator == 'Ichimoku':
                 ichimoku = ta.trend.IchimokuIndicator(data['High'], data['Low'], window1=9, window2=26, window3=52)
-                data['Ichimoku_Tenkan'] = ichimoku.ichimoku_conversion_line()
-                data['Ichimoku_Kijun'] = ichimoku.ichimoku_base_line()
-                data['Ichimoku_Span_A'] = ichimoku.ichimoku_a()
-                data['Ichimoku_Span_B'] = ichimoku.ichimoku_b()
-                data['Ichimoku_Chikou'] = data['Close'].shift(-26)
+                data['Ichimoku_Tenkan'] = ichimoku.ichimoku_conversion_line().astype(np.float32)
+                data['Ichimoku_Kijun'] = ichimoku.ichimoku_base_line().astype(np.float32)
+                data['Ichimoku_Span_A'] = ichimoku.ichimoku_a().astype(np.float32)
+                data['Ichimoku_Span_B'] = ichimoku.ichimoku_b().astype(np.float32)
+                data['Ichimoku_Chikou'] = data['Close'].shift(-26).astype(np.float32)
             elif indicator == 'CMF':
-                data['CMF'] = ta.volume.ChaikinMoneyFlowIndicator(data['High'], data['Low'], data['Close'], data['Volume'], window=20).chaikin_money_flow()
+                data['CMF'] = ta.volume.ChaikinMoneyFlowIndicator(data['High'], data['Low'], data['Close'], data['Volume'], window=20).chaikin_money_flow().astype(np.float32)
             elif indicator == 'Donchian':
                 donchian = ta.volatility.DonchianChannel(data['High'], data['Low'], data['Close'], window=20)
-                data['Donchian_Upper'] = donchian.donchian_channel_hband()
-                data['Donchian_Lower'] = donchian.donchian_channel_lband()
-                data['Donchian_Middle'] = donchian.donchian_channel_mband()
+                data['Donchian_Upper'] = donchian.donchian_channel_hband().astype(np.float32)
+                data['Donchian_Lower'] = donchian.donchian_channel_lband().astype(np.float32)
+                data['Donchian_Middle'] = donchian.donchian_channel_mband().astype(np.float32)
             elif indicator == 'Keltner':
                 keltner = ta.volatility.KeltnerChannel(data['High'], data['Low'], data['Close'], window=20, window_atr=10)
-                data['Keltner_Upper'] = keltner.keltner_channel_hband()
-                data['Keltner_Middle'] = keltner.keltner_channel_mband()
-                data['Keltner_Lower'] = keltner.keltner_channel_lband()
+                data['Keltner_Upper'] = keltner.keltner_channel_hband().astype(np.float32)
+                data['Keltner_Middle'] = keltner.keltner_channel_mband().astype(np.float32)
+                data['Keltner_Lower'] = keltner.keltner_channel_lband().astype(np.float32)
             elif indicator == 'TRIX':
-                data['TRIX'] = ta.trend.TRIXIndicator(data['Close'], window=15).trix()
+                data['TRIX'] = ta.trend.TRIXIndicator(data['Close'], window=15).trix().astype(np.float32)
             elif indicator == 'Ultimate_Osc':
                 data['Ultimate_Osc'] = ta.momentum.UltimateOscillator(
                     data['High'], data['Low'], data['Close'], window1=7, window2=14, window3=28
-                ).ultimate_oscillator()
+                ).ultimate_oscillator().astype(np.float32)
             elif indicator == 'CMO':
                 data['CMO'] = calculate_cmo(data['Close'], window=14)
             elif indicator == 'VPT':
-                data['VPT'] = ta.volume.VolumePriceTrendIndicator(data['Close'], data['Volume']).volume_price_trend()
+                data['VPT'] = ta.volume.VolumePriceTrendIndicator(data['Close'], data['Volume']).volume_price_trend().astype(np.float32)
             elif indicator == 'Pivot':
                 pivot_points = calculate_pivot_points(data)
                 if pivot_points:
@@ -575,6 +580,14 @@ def analyze_stock(data, indicators=None):
         except Exception as e:
             logging.error(f"Failed to compute {indicator}: {str(e)}")
             st.warning(f"⚠️ Failed to compute {indicator}: {str(e)}")
+    
+    # Drop unused intermediate columns to save memory
+    unused_columns = [
+        'Cumulative_TP', 'Cumulative_Volume', 'Avg_Volume',
+        'MACD_hist'  # Optional: drop if not used in recommendations
+    ]
+    data.drop(columns=[col for col in unused_columns if col in data.columns], inplace=True)
+    
     return data
 
 def calculate_buy_at(data):
@@ -584,7 +597,7 @@ def calculate_buy_at(data):
     last_close = data['Close'].iloc[-1]
     last_rsi = data['RSI'].iloc[-1]
     buy_at = last_close * 0.99 if last_rsi < 30 else last_close
-    return round(buy_at, 2)
+    return round(float(buy_at), 2)
 
 def calculate_stop_loss(data, atr_multiplier=2.5):
     if data is None or 'ATR' not in data.columns or data['ATR'].iloc[-1] is None:
@@ -598,7 +611,7 @@ def calculate_stop_loss(data, atr_multiplier=2.5):
     stop_loss = last_close - (atr_multiplier * last_atr)
     if stop_loss < last_close * 0.85:
         stop_loss = last_close * 0.85
-    return round(stop_loss, 2)
+    return round(float(stop_loss), 2)
 
 def calculate_target(data, risk_reward_ratio=3):
     if data is None:
@@ -615,7 +628,7 @@ def calculate_target(data, risk_reward_ratio=3):
     max_target = last_close * 1.3 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 30 else last_close * 1.2
     if target > max_target:
         target = max_target
-    return round(target, 2)
+    return round(float(target), 2)
 
 def fetch_fundamentals(symbol):
     try:
@@ -627,14 +640,14 @@ def fetch_fundamentals(symbol):
         pe = info.get('trailingPE', 100)
         pe = min(pe, 100) if pe != float('inf') else 100
         return {
-            'P/E': pe,
-            'EPS': info.get('trailingEps', 0),
-            'RevenueGrowth': info.get('revenueGrowth', 0)
+            'P/E': np.float32(pe),
+            'EPS': np.float32(info.get('trailingEps', 0)),
+            'RevenueGrowth': np.float32(info.get('revenueGrowth', 0))
         }
     except Exception as e:
         logging.error(f"Failed to fetch fundamentals for {symbol}: {str(e)}")
         st.warning(f"⚠️ Failed to fetch fundamentals for {symbol}: {str(e)}")
-        return {'P/E': 100, 'EPS': 0, 'RevenueGrowth': 0}
+        return {'P/E': np.float32(100), 'EPS': np.float32(0), 'RevenueGrowth': np.float32(0)}
 
 def generate_recommendations(data, symbol=None):
     default_recommendations = {
@@ -685,19 +698,8 @@ def generate_recommendations(data, symbol=None):
         elif close < vwap:
             sell_score += 1
     
-    if ('Volume' in data.columns and 'Avg_Volume' in data.columns and 
-        not pd.isna(data['Volume'].iloc[-1]) and not pd.isna(data['Avg_Volume'].iloc[-1])):
-        volume_ratio = data['Volume'].iloc[-1] / data['Avg_Volume'].iloc[-1]
-        close = data['Close'].iloc[-1]
-        prev_close = data['Close'].iloc[-2]
-        if volume_ratio > 1.5 and close > prev_close:
-            buy_score += 2
-        elif volume_ratio > 1.5 and close < prev_close:
-            sell_score += 2
-        elif volume_ratio < 0.5:
-            sell_score += 1
-    
-    if 'Volume_Spike' in data.columns and not pd.isna(data['Volume_Spike'].iloc[-1]):
+    if ('Volume' in data.columns and 'Volume_Spike' in data.columns and 
+        not pd.isna(data['Volume'].iloc[-1]) and not pd.isna(data['Volume_Spike'].iloc[-1])):
         spike = data['Volume_Spike'].iloc[-1]
         close = data['Close'].iloc[-1]
         prev_close = data['Close'].iloc[-2]
@@ -921,6 +923,7 @@ def analyze_batch(stock_batch):
             except Exception as e:
                 errors.append(f"⚠️ Error processing stock {symbol}: {str(e)}")
                 logging.error(f"Error processing stock {symbol}: {str(e)}")
+    gc.collect()  # Free memory after batch
     for error in errors:
         st.warning(error)
     return results
@@ -928,7 +931,7 @@ def analyze_batch(stock_batch):
 def analyze_stock_parallel(symbol):
     data = fetch_stock_data_cached(symbol)
     if not data.empty:
-        data = analyze_stock(data, indicators=['RSI', 'MACD', 'ATR', 'VWAP', 'Pivot', 'Heikin-Ashi'])
+        data = analyze_stock(data)  # Compute all indicators
         if data is None:
             return None
         recommendations = generate_recommendations(data, symbol)
@@ -954,7 +957,7 @@ def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
     filtered_stocks = []
     for symbol in stock_list:
         data = fetch_stock_data_cached(symbol)
-        if not data.empty and data['Volume'].mean() > 10000:
+        if not data.empty and data['Volume'].mean() > 10000:  # Filter low-volume stocks
             filtered_stocks.append(symbol)
     
     results = []
@@ -982,7 +985,7 @@ def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
     filtered_stocks = []
     for symbol in stock_list:
         data = fetch_stock_data_cached(symbol, period="1mo", interval="1h")
-        if not data.empty and data['Volume'].mean() > 10000:
+        if not data.empty and data['Volume'].mean() > 10000:  # Filter low-volume stocks
             filtered_stocks.append(symbol)
     
     results = []
@@ -1064,7 +1067,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             "Scanning intraday trends...", "Detecting buy signals...", "Calculating stop-loss levels...",
             "Optimizing targets...", "Finalizing top picks..."
         ])
-        intraday_results = analyzeintraday_stocks(
+        intraday_results = analyze_intraday_stocks(
             selected_stocks,
             batch_size=10,
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
@@ -1146,7 +1149,7 @@ if __name__ == "__main__":
     
     symbol = st.sidebar.text_input("Enter Stock Symbol (e.g., RELIANCE.NS)", "")
     if symbol:
-        data = fetch_stock_data_cached(symbol)
+        data = fetch_stock_data_cached(symbol=symbol)
         if not data.empty:
             data = analyze_stock(data)
             if data is None:
