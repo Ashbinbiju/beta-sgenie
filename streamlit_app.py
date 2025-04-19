@@ -126,21 +126,21 @@ def tooltip(label, explanation):
  return f"{label} 📌 ({explanation})"
 
 def retry(max_retries=3, delay=1, backoff_factor=2, jitter=0.5):
- def decorator(func):
- def wrapper(*args, **kwargs):
- retries = 0
- while retries < max_retries:
- try:
- return func(*args, **kwargs)
- except (requests.exceptions.RequestException, ConnectionError) as e:
- retries += 1
- if retries == max_retries:
- logging.error(f"Failed after {max_retries} retries: {str(e)}")
- return None
- sleep_time = (delay * (backoff_factor ** retries)) + random.uniform(0, jitter)
- time.sleep(sleep_time)
- return wrapper
- return decorator
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except (requests.exceptions.RequestException, ConnectionError) as e:
+                    retries += 1
+                    if retries == max_retries:
+                        logging.error(f"Failed after {max_retries} retries: {str(e)}")
+                        return None
+                    sleep_time = (delay * (backoff_factor ** retries)) + random.uniform(0, jitter)
+                    time.sleep(sleep_time)
+        return wrapper
+    return decorator
 
 @retry(max_retries=3, delay=2)
 def fetch_nse_stock_list():
