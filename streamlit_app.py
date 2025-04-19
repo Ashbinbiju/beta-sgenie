@@ -873,13 +873,13 @@ def generate_recommendations(data, symbol=None):
             default_recommendations["Mean_Reversion"] = "Sell"
 
     if 'Keltner_Upper' in data.columns and not pd.isna(data['Keltner_Upper'].iloc[-1]):
-    close = data['Close'].iloc[-1]
-    upper = data['Keltner_Upper'].iloc[-1]
-    lower = data['Keltner_Lower'].iloc[-1]
-    if close < lower and 'Keltner' in INDICATOR_WEIGHTS:
-        buy_score += INDICATOR_WEIGHTS['Keltner']
-    elif close > upper and 'Keltner' in INDICATOR_WEIGHTS:
-        sell_score += INDICATOR_WEIGHTS['Keltner']
+        close = data['Close'].iloc[-1]
+        upper = data['Keltner_Upper'].iloc[-1]
+        lower = data['Keltner_Lower'].iloc[-1]
+        if close < lower and 'Keltner' in INDICATOR_WEIGHTS:
+            buy_score += INDICATOR_WEIGHTS['Keltner']
+        elif close > upper and 'Keltner' in INDICATOR_WEIGHTS:
+            sell_score += INDICATOR_WEIGHTS['Keltner']
 
     if 'TRIX' in data.columns and not pd.isna(data['TRIX'].iloc[-1]):
         trix = data['TRIX'].iloc[-1]
