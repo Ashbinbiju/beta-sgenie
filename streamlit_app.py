@@ -17,7 +17,13 @@ import itertools
 from arch import arch_model
 import warnings
 import logging
-import gc  # Added for garbage collection
+import gc
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import joblib
+import psutil
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -54,179 +60,34 @@ TOOLTIPS = {
     "CMF": "Chaikin Money Flow - Buying/selling pressure",
     "Donchian": "Donchian Channels - Breakout detection",
     "Keltner": "Keltner Channels - Volatility bands based on EMA and ATR",
-    "TRIX": "Triple Exponential Average - Momentum oscillator with triple smoothing",
-    "Ultimate_Osc": "Ultimate Oscillator - Combines short, medium, and long-term momentum",
+    "TRIX": "Triple Exponential Average - Momentum oscillator",
+    "Ultimate_Osc": "Ultimate Oscillator - Combines short, medium, long-term momentum",
     "CMO": "Chande Momentum Oscillator - Measures raw momentum (-100 to 100)",
     "VPT": "Volume Price Trend - Tracks trend strength with price and volume",
     "Pivot Points": "Support and resistance levels based on previous day's prices",
-    "Heikin-Ashi": "Smoothed candlestick chart to identify trends"
+    "Heikin-Ashi": "Smoothed candlestick chart to identify trends",
+    "P/E": "Price-to-Earnings Ratio - Valuation metric",
+    "EPS": "Earnings Per Share - Profitability metric",
+    "ROE": "Return on Equity - Efficiency of equity use",
+    "Debt/Equity": "Debt-to-Equity Ratio - Financial leverage"
 }
 
-
 SECTORS = {
-  "Bank": [
-    "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS",
-    "INDUSINDBK.NS", "PNB.NS", "BANKBARODA.NS", "CANBK.NS", "UNIONBANK.NS",
-    "IDFCFIRSTB.NS", "FEDERALBNK.NS", "RBLBANK.NS", "BANDHANBNK.NS", "INDIANB.NS",
-    "BANKINDIA.NS", "KARURVYSYA.NS", "CUB.NS", "J&KBANK.NS", "DCBBANK.NS",
-    "AUBANK.NS", "YESBANK.NS", "IDBI.NS", "SOUTHBANK.NS", "CSBBANK.NS",
-    "TMB.NS", "KTKBANK.NS", "EQUITASBNK.NS", "UJJIVANSFB.NS"
-  ],
-  "Software & IT Services": [
-    "TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS", "LTIM.NS",
-    "MPHASIS.NS", "FSL.NS", "BSOFT.NS", "NEWGEN.NS", "ZENSARTECH.NS",
-    "RATEGAIN.NS", "TANLA.NS", "COFORGE.NS", "PERSISTENT.NS", "CYIENT.NS",
-    "SONATSOFTW.NS", "KPITTECH.NS", "BIRLASOFT.NS", "TATAELXSI.NS", "MINDTREE.NS",
-    "INTELLECT.NS", "HAPPSTMNDS.NS", "MASTEK.NS", "ECLERX.NS", "NIITLTD.NS",
-    "RSYSTEMS.NS", "XCHANGING.NS", "OFSS.NS", "AURIONPRO.NS", "DATAMATICS.NS",
-    "QUICKHEAL.NS", "CIGNITITEC.NS", "ALLSEC.NS"
-  ],
-  "Finance": [
-    "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "BAJFINANCE.NS",
-    "AXISBANK.NS", "BAJAJFINSV.NS", "INDUSINDBK.NS", "SHRIRAMFIN.NS", "CHOLAFIN.NS",
-    "SBICARD.NS", "M&MFIN.NS", "MUTHOOTFIN.NS", "LICHSGFIN.NS", "IDFCFIRSTB.NS",
-    "AUBANK.NS", "POONAWALLA.NS", "SUNDARMFIN.NS", "IIFL.NS", "ABCAPITAL.NS",
-    "L&TFH.NS", "CREDITACC.NS", "MANAPPURAM.NS", "DHANI.NS", "JMFINANCIL.NS",
-    "EDELWEISS.NS", "INDIASHLTR.NS", "MOTILALOFS.NS", "CDSL.NS", "BSE.NS",
-    "MCX.NS", "ANGELONE.NS", "KARURVYSYA.NS", "RBLBANK.NS", "PNB.NS",
-    "CANBK.NS", "UNIONBANK.NS", "IOB.NS", "YESBANK.NS", "UCOBANK.NS",
-    "BANKINDIA.NS", "CENTRALBK.NS", "IDBI.NS", "J&KBANK.NS", "DCBBANK.NS",
-    "FEDERALBNK.NS", "SOUTHBANK.NS", "CSBBANK.NS", "TMB.NS", "KTKBANK.NS",
-    "EQUITASBNK.NS", "UJJIVANSFB.NS", "BANDHANBNK.NS", "SURYODAY.NS", "FSL.NS",
-    "PSB.NS", "PFS.NS", "HDFCAMC.NS", "NAM-INDIA.NS", "UTIAMC.NS", "ABSLAMC.NS",
-    "360ONE.NS", "ANANDRATHI.NS", "PNBHOUSING.NS", "HOMEFIRST.NS", "AAVAS.NS",
-    "APTUS.NS", "RECLTD.NS", "PFC.NS", "IREDA.NS", "SMCGLOBAL.NS", "CHOICEIN.NS",
-    "KFINTECH.NS", "CAMSBANK.NS", "MASFIN.NS", "TRIDENT.NS", "SBFC.NS",
-    "UGROCAP.NS", "FUSION.NS", "PAISALO.NS", "CAPITALSFB.NS", "NSIL.NS",
-    "SATIN.NS", "CREDAGRI.NS"
-  ],
-  "Automobile & Ancillaries": [
-    "MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS",
-    "EICHERMOT.NS", "TVSMOTOR.NS", "ASHOKLEY.NS", "MRF.NS", "BALKRISIND.NS",
-    "APOLLOTYRE.NS", "CEATLTD.NS", "JKTYRE.NS", "MOTHERSON.NS", "BHARATFORG.NS",
-    "SUNDRMFAST.NS", "EXIDEIND.NS", "AMARAJABAT.NS", "BOSCHLTD.NS", "ENDURANCE.NS",
-    "MINDAIND.NS", "WABCOINDIA.NS", "GABRIEL.NS", "SUPRAJIT.NS", "LUMAXTECH.NS",
-    "FIEMIND.NS", "SUBROS.NS", "JAMNAAUTO.NS", "SHRIRAMCIT.NS", "ESCORTS.NS",
-    "ATULAUTO.NS", "OLECTRA.NS", "GREAVESCOT.NS", "SMLISUZU.NS", "VSTTILLERS.NS",
-    "HINDMOTORS.NS", "MAHSCOOTER.NS"
-  ],
-  "Healthcare": [
-    "SUNPHARMA.NS", "CIPLA.NS", "DRREDDY.NS", "APOLLOHOSP.NS", "LUPIN.NS",
-    "DIVISLAB.NS", "AUROPHARMA.NS", "ALKEM.NS", "TORNTPHARM.NS", "ZYDUSLIFE.NS",
-    "IPCALAB.NS", "GLENMARK.NS", "BIOCON.NS", "ABBOTINDIA.NS", "SANOFI.NS",
-    "PFIZER.NS", "GLAXO.NS", "NATCOPHARM.NS", "AJANTPHARM.NS", "GRANULES.NS",
-    "LAURUSLABS.NS", "STAR.NS", "JUBLPHARMA.NS", "ASTRAZEN.NS", "WOCKPHARDT.NS",
-    "FORTIS.NS", "MAXHEALTH.NS", "METROPOLIS.NS", "THYROCARE.NS", "POLYMED.NS",
-    "KIMS.NS", "NH.NS", "LALPATHLAB.NS", "MEDPLUS.NS", "ERIS.NS", "INDOCO.NS",
-    "CAPLIPOINT.NS", "NEULANDLAB.NS", "SHILPAMED.NS", "SUVENPHAR.NS", "AARTIDRUGS.NS",
-    "PGHL.NS", "SYNGENE.NS", "VINATIORGA.NS", "GLAND.NS", "JBCHEPHARM.NS",
-    "HCG.NS", "RAINBOW.NS", "ASTERDM.NS", "KRSNAA.NS", "VIJAYA.NS", "MEDANTA.NS",
-    "NETMEDS.NS", "BLISSGVS.NS", "MOREPENLAB.NS", "RPGLIFE.NS"
-  ],
-  "Metals & Mining": [
-    "TATASTEEL.NS", "JSWSTEEL.NS", "HINDALCO.NS", "VEDL.NS", "SAIL.NS",
-    "NMDC.NS", "HINDZINC.NS", "NALCO.NS", "JINDALSTEL.NS", "MOIL.NS",
-    "APLAPOLLO.NS", "RATNAMANI.NS", "JSL.NS", "WELCORP.NS", "TINPLATE.NS",
-    "SHYAMMETL.NS", "MIDHANI.NS", "GRAVITA.NS", "SARDAEN.NS", "ASHAPURMIN.NS",
-    "JTLIND.NS", "RAMASTEEL.NS", "MAITHANALL.NS", "KIOCL.NS", "IMFA.NS",
-    "GMDCLTD.NS", "VISHNU.NS", "SANDUMA.NS"
-  ],
-  "FMCG": [
-    "HINDUNILVR.NS", "ITC.NS", "NESTLEIND.NS", "VARBEV.NS", "BRITANNIA.NS",
-    "GODREJCP.NS", "DABUR.NS", "COLPAL.NS", "MARICO.NS", "PGHH.NS",
-    "EMAMILTD.NS", "GILLETTE.NS", "HATSUN.NS", "JYOTHYLAB.NS", "BAJAJCON.NS",
-    "RADICO.NS", "TATACONSUM.NS", "UNITDSPR.NS", "CCL.NS", "AVANTIFEED.NS",
-    "BIKAJI.NS", "PATANJALI.NS", "VBL.NS", "ZOMATO.NS", "DOMS.NS",
-    "GODREJAGRO.NS", "SAPPHIRE.NS", "VENKEYS.NS", "BECTORFOOD.NS", "KRBL.NS"
-  ],
-  "Power": [
-    "NTPC.NS", "POWERGRID.NS", "ADANIPOWER.NS", "TATAPOWER.NS", "JSWENERGY.NS",
-    "NHPC.NS", "SJVN.NS", "TORNTPOWER.NS", "CESC.NS", "ADANIENSOL.NS",
-    "INDIAGRID.NS", "POWERMECH.NS", "KEC.NS", "INOXWIND.NS", "KALPATPOWR.NS",
-    "SUZLON.NS", "BHEL.NS", "THERMAX.NS", "GEPIL.NS", "VOLTAMP.NS",
-    "TRIL.NS", "TDPOWERSYS.NS", "JYOTISTRUC.NS", "IWEL.NS"
-  ],
-  "Capital Goods": [
-    "LT.NS", "SIEMENS.NS", "ABB.NS", "BEL.NS", "BHEL.NS", "HAL.NS",
-    "CUMMINSIND.NS", "THERMAX.NS", "AIAENG.NS", "SKFINDIA.NS", "GRINDWELL.NS",
-    "TIMKEN.NS", "KSB.NS", "ELGIEQUIP.NS", "LAKSHMIMACH.NS", "KIRLOSENG.NS",
-    "GREAVESCOT.NS", "TRITURBINE.NS", "VOLTAS.NS", "BLUESTARCO.NS", "HAVELLS.NS",
-    "DIXON.NS", "KAYNES.NS", "SYRMA.NS", "AMBER.NS", "SUZLON.NS", "CGPOWER.NS",
-    "APARINDS.NS", "HBLPOWER.NS", "KEI.NS", "POLYCAB.NS", "RRKABEL.NS",
-    "SCHNEIDER.NS", "TDPOWERSYS.NS", "KIRLOSBROS.NS", "JYOTICNC.NS", "DATAPATTNS.NS",
-    "INOXWIND.NS", "KALPATPOWR.NS", "MAZDOCK.NS", "COCHINSHIP.NS", "GRSE.NS",
-    "POWERMECH.NS", "ISGEC.NS", "HPL.NS", "VTL.NS", "DYNAMATECH.NS", "JASH.NS",
-    "GMMPFAUDLR.NS", "ESABINDIA.NS", "CENTURYEXT.NS", "SALASAR.NS", "TITAGARH.NS",
-    "VGUARD.NS", "WABAG.NS"
-  ],
-  "Oil & Gas": [
-    "RELIANCE.NS", "ONGC.NS", "IOC.NS", "BPCL.NS", "HPCL.NS", "GAIL.NS",
-    "PETRONET.NS", "OIL.NS", "IGL.NS", "MGL.NS", "GUJGASLTD.NS", "GSPL.NS",
-    "AEGISCHEM.NS", "CHENNPETRO.NS", "MRPL.NS", "GULFOILLUB.NS", "CASTROLIND.NS",
-    "SOTL.NS", "PANAMAPET.NS", "GOCLCORP.NS"
-  ],
-  "Chemicals": [
-    "PIDILITIND.NS", "SRF.NS", "DEEPAKNTR.NS", "ATUL.NS", "AARTIIND.NS",
-    "NAVINFLUOR.NS", "VINATIORGA.NS", "FINEORG.NS", "ALKYLAMINE.NS", "BALAMINES.NS",
-    "GUJFLUORO.NS", "CLEAN.NS", "JUBLINGREA.NS", "GALAXYSURF.NS", "PCBL.NS",
-    "NOCIL.NS", "BASF.NS", "SUDARSCHEM.NS", "NEOGEN.NS", "PRIVISCL.NS",
-    "ROSSARI.NS", "LXCHEM.NS", "ANURAS.NS", "JUBLPHARMA.NS", "CHEMCON.NS",
-    "DMCC.NS", "TATACHEM.NS", "COROMANDEL.NS", "UPL.NS", "BAYERCROP.NS",
-    "SUMICHEM.NS", "PIIND.NS", "DHARAMSI.NS", "EIDPARRY.NS", "CHEMPLASTS.NS",
-    "VISHNU.NS", "IGPL.NS", "TIRUMALCHM.NS"
-  ],
-  "Telecom": [
-    "BHARTIARTL.NS", "VODAFONEIDEA.NS", "INDUSTOWER.NS", "TATACOMM.NS",
-    "HFCL.NS", "TEJASNET.NS", "STLTECH.NS", "ITI.NS", "ASTEC.NS"
-  ],
-  "Infrastructure": [
-    "LT.NS", "GMRINFRA.NS", "IRB.NS", "NBCC.NS", "RVNL.NS", "KEC.NS",
-    "PNCINFRA.NS", "KNRCON.NS", "GRINFRA.NS", "NCC.NS", "HGINFRA.NS",
-    "ASHOKA.NS", "SADBHAV.NS", "JWL.NS", "PATELENG.NS", "KALPATPOWR.NS",
-    "IRCON.NS", "ENGINERSIN.NS", "AHLUWALIA.NS", "PSPPROJECTS.NS", "CAPACITE.NS",
-    "WELSPUNIND.NS", "TITAGARH.NS", "HCC.NS", "MANINFRA.NS", "RIIL.NS",
-    "DBREALTY.NS", "JWL.NS"
-  ],
-  "Insurance": [
-    "SBILIFE.NS", "HDFCLIFE.NS", "ICICIGI.NS", "ICICIPRULI.NS", "LICI.NS",
-    "GICRE.NS", "NIACL.NS", "STARHEALTH.NS", "BAJAJFINSV.NS", "MAXFIN.NS"
-  ],
-  "Diversified": [
-    "ITC.NS", "RELIANCE.NS", "ADANIENT.NS", "GRASIM.NS", "HINDUNILVR.NS",
-    "DCMSHRIRAM.NS", "3MINDIA.NS", "CENTURYPLY.NS", "KFINTECH.NS", "BALMERLAWRI.NS",
-    "GODREJIND.NS", "VBL.NS", "BIRLACORPN.NS"
-  ],
-  "Construction Materials": [
-    "ULTRACEMCO.NS", "SHREECEM.NS", "AMBUJACEM.NS", "ACC.NS", "JKCEMENT.NS",
-    "DALBHARAT.NS", "RAMCOCEM.NS", "NUVOCO.NS", "JKLAKSHMI.NS", "BIRLACORPN.NS",
-    "HEIDELBERG.NS", "INDIACEM.NS", "PRISMJOHNS.NS", "STARCEMENT.NS", "SAGCEM.NS",
-    "DECCANCE.NS", "KCP.NS", "ORIENTCEM.NS", "HIL.NS", "EVERESTIND.NS",
-    "VISAKAIND.NS", "BIGBLOC.NS"
-  ],
-  "Real Estate": [
-    "DLF.NS", "GODREJPROP.NS", "OBEROIRLTY.NS", "PHOENIXLTD.NS", "PRESTIGE.NS",
-    "BRIGADE.NS", "SOBHA.NS", "SUNTECK.NS", "MAHLIFE.NS", "ANANTRAJ.NS",
-    "KOLTEPATIL.NS", "PURVA.NS", "ARVSMART.NS", "RUSTOMJEE.NS", "DBREALTY.NS",
-    "IBREALEST.NS", "OMAXE.NS", "ASHIANA.NS", "ELDEHSG.NS", "TARC.NS"
-  ],
-  "Aviation": [
-    "INDIGO.NS", "SPICEJET.NS", "AAI.NS", "GMRINFRA.NS"
-  ],
-  "Retailing": [
-    "DMART.NS", "TRENT.NS", "ABFRL.NS", "VMART.NS", "SHOPERSTOP.NS",
-    "BATAINDIA.NS", "METROBRAND.NS", "ARVINDFASN.NS", "CANTABIL.NS", "ZOMATO.NS",
-    "NYKAA.NS", "MANYAVAR.NS", "ELECTRONICSMRKT.NS", "LANDMARK.NS", "V2RETAIL.NS",
-    "THANGAMAYL.NS", "KALYANKJIL.NS", "TITAN.NS"
-  ],
-  "Miscellaneous": [
-    "PIDILITIND.NS", "BSE.NS", "CDSL.NS", "MCX.NS", "NAUKRI.NS",
-    "JUSTDIAL.NS", "TEAMLEASE.NS", "QUESS.NS", "SIS.NS", "DELHIVERY.NS",
-    "PRUDENT.NS", "MEDIASSIST.NS", "AWFIS.NS", "JUBLFOOD.NS", "DEVYANI.NS",
-    "WESTLIFE.NS", "SAPPHIRE.NS", "BARBEQUE.NS", "EASEMYTRIP.NS", "THOMASCOOK.NS",
-    "MSTC.NS", "IRCTC.NS", "POLICYBZR.NS", "PAYTM.NS", "INFIBEAM.NS",
-    "CARTRADE.NS", "HONASA.NS", "ONE97COMM.NS", "SIGNATURE.NS", "RRKABEL.NS",
-    "HMAAGRO.NS", "RKFORGE.NS", "CAMPUS.NS", "SENCO.NS", "CONCORDBIO.NS"
-  ]
+    "Aviation": ["INDIGO.NS", "SPICEJET.NS", "AAI.NS", "GMRINFRA.NS"],
+    "Retailing": [
+        "DMART.NS", "TRENT.NS", "ABFRL.NS", "VMART.NS", "SHOPERSTOP.NS",
+        "BATAINDIA.NS", "METROBRAND.NS", "ARVINDFASN.NS", "CANTABIL.NS", "ZOMATO.NS",
+        "NYKAA.NS", "MANYAVAR.NS", "ELECTRONICSMRKT.NS", "LANDMARK.NS", "V2RETAIL.NS",
+        "THANGAMAYL.NS", "KALYANKJIL.NS", "TITAN.NS"
+    ]
+}
+
+# Indicator weights for scoring
+INDICATOR_WEIGHTS = {
+    'RSI': 1.5, 'MACD': 1.2, 'Bollinger': 1.0, 'VWAP': 1.0, 'Volume_Spike': 0.8,
+    'Divergence': 1.0, 'Ichimoku': 1.5, 'CMF': 0.8, 'Donchian': 1.0, 'K ENSURE CODE CONTINUES FROM HERE eltner': 1.0,
+    'TRIX': 0.7, 'Ultimate_Osc': 0.7, 'CMO': 0.7, 'VPT': 0.8, 'Fibonacci': 0.9,
+    'Parabolic_SAR': 0.9, 'OBV': 0.8, 'Pivot': 1.0, 'Heikin-Ashi': 1.0
 }
 
 def tooltip(label, explanation):
@@ -242,7 +103,7 @@ def retry(max_retries=3, delay=1, backoff_factor=2, jitter=0.5):
                 except (requests.exceptions.RequestException, ConnectionError) as e:
                     retries += 1
                     if retries == max_retries:
-                        raise e
+                        raise Exception(f"Failed after {max_retries} retries: {str(e)}")
                     sleep_time = (delay * (backoff_factor ** retries)) + random.uniform(0, jitter)
                     time.sleep(sleep_time)
         return wrapper
@@ -262,39 +123,43 @@ def fetch_nse_stock_list():
         return stock_list
     except Exception as e:
         logging.error(f"Failed to fetch NSE stock list: {str(e)}")
-        return list(set([stock for sector in SECTORS.values() for stock in sector]))
+        fallback_list = list(set([stock for sector in SECTORS.values() for stock in sector]))
+        st.warning("Failed to fetch stock list. Using fallback sectors.")
+        return fallback_list
 
 def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"):
     if not isinstance(symbol, str):
         logging.error(f"Invalid symbol type: {type(symbol)} for symbol: {symbol}")
-        raise TypeError(f"Symbol must be a string, got {type(symbol)}")
+        raise TypeError("Please provide a valid stock symbol.")
     try:
         if not symbol.endswith(f".{exchange}"):
             symbol += f".{exchange}"
         session = requests.Session()
         session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
         stock = yf.Ticker(symbol, session=session)
-        time.sleep(random.uniform(1, 3))
         data = stock.history(period=period, interval=interval)
         if data.empty:
-            raise ValueError(f"No data found for {symbol}")
+            raise ValueError(f"No data available for {symbol}.")
         required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
         if not all(col in data.columns for col in required_cols):
-            raise ValueError(f"Missing required columns for {symbol}")
-        if data['Volume'].mean() < 1000:
-            raise ValueError(f"Low trading volume for {symbol}")
-        # Convert to float32 for memory efficiency
+            raise ValueError(f"Missing required data columns for {symbol}.")
+        if data['Volume'].mean() < 5000:
+            raise ValueError(f"Insufficient trading volume for {symbol}.")
         for col in ['Open', 'High', 'Low', 'Close']:
             data[col] = data[col].astype(np.float32)
         data['Volume'] = data['Volume'].astype(np.int32)
+        # Check for data gaps
+        expected_dates = pd.date_range(start=data.index.min(), end=data.index.max(), freq='B')
+        if len(data) < 0.8 * len(expected_dates):
+            logging.warning(f"Significant data gaps detected for {symbol}")
         logging.info(f"Successfully fetched data for {symbol}")
         return data
     except Exception as e:
         logging.error(f"Error fetching data for {symbol}: {str(e)}")
-        st.warning(f"⚠️ Error fetching data for {symbol}: {str(e)}")
+        st.warning(f"Unable to fetch data for {symbol}: {str(e)}")
         return pd.DataFrame()
 
-@lru_cache(maxsize=50)
+@lru_cache(maxsize=500)
 def fetch_stock_data_cached(symbol, period="5y", interval="1d", exchange="NS"):
     return fetch_stock_data_with_auth(symbol, period, interval, exchange)
 
@@ -347,7 +212,7 @@ def extract_entities(text):
         entities = [ent.text for ent in doc.ents if ent.label_ == "ORG"]
         return entities
     except OSError:
-        st.error("⚠️ Spacy model 'en_core_web_sm' not found. Please install it using: python -m spacy download en_core_web_sm")
+        st.warning("Spacy model not installed. Install it with: python -m spacy download en_core_web_sm")
         return []
     except Exception as e:
         logging.error(f"Error in extract_entities: {str(e)}")
@@ -357,31 +222,38 @@ def get_trending_stocks():
     try:
         pytrends = TrendReq(hl='en-US', tz=360)
         trending = pytrends.trending_searches(pn='india')
-        return trending
+        return trending[0][:5].tolist()  # Top 5 trending searches
     except Exception as e:
         logging.error(f"Error fetching trending stocks: {str(e)}")
-        return pd.DataFrame()
+        st.warning("Unable to fetch trending stocks.")
+        return []
 
 def calculate_confidence_score(data):
     score = 0
-    if 'RSI' in data.columns and data['RSI'].iloc[-1] is not None and data['RSI'].iloc[-1] < 30:
-        score += 1
-        if 'MACD' in data.columns and 'MACD_signal' in data.columns and data['MACD'].iloc[-1] is not None and data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
+    if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]):
+        rsi = data['RSI'].iloc[-1]
+        if rsi < 30:
             score += 1
-            if 'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and data['Close'].iloc[-1] is not None and data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
-                score += 1
-                if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['Close'].iloc[-1] is not None:
-                    atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
-                    if atr_volatility < 0.02:
-                        score += 0.5
-                    elif atr_volatility > 0.05:
-                        score -= 0.5
-                    return min(max(score / 3.5, 0), 1)
-    return score / 3.5
+        elif rsi > 70:
+            score -= 0.5
+    if 'MACD' in data.columns and 'MACD_signal' in data.columns and not pd.isna(data['MACD'].iloc[-1]):
+        if data['MACD'].iloc[-1] > data['MACD_signal'].iloc[-1]:
+            score += 1
+    if 'Ichimoku_Span_A' in data.columns and not pd.isna(data['Ichimoku_Span_A'].iloc[-1]):
+        if data['Close'].iloc[-1] > max(data['Ichimoku_Span_A'].iloc[-1], data['Ichimoku_Span_B'].iloc[-1]):
+            score += 1
+    if 'ATR' in data.columns and not pd.isna(data['ATR'].iloc[-1]):
+        atr_volatility = data['ATR'].iloc[-1] / data['Close'].iloc[-1]
+        if atr_volatility < 0.02:
+            score += 0.5
+        elif atr_volatility > 0.05:
+            score -= 0.5
+    return min(max(score / 3.5, 0), 1)
 
 def assess_risk(data):
-    if 'ATR' in data.columns and data['ATR'].iloc[-1] is not None and data['ATR'].iloc[-1] > data['ATR'].mean():
-        return "High Volatility Warning"
+    if 'ATR' in data.columns and not pd.isna(data['ATR'].iloc[-1]):
+        if data['ATR'].iloc[-1] > data['ATR'].mean():
+            return "High Volatility Warning"
     return "Low Volatility"
 
 def optimize_rsi_window(data, windows=range(5, 15)):
@@ -397,6 +269,23 @@ def optimize_rsi_window(data, windows=range(5, 15)):
         if sharpe > best_sharpe:
             best_sharpe, best_window = sharpe, window
     return best_window
+
+def optimize_macd_params(data, fast_range=range(8, 16), slow_range=range(20, 30), signal_range=range(5, 12)):
+    best_params = (12, 26, 9)
+    best_sharpe = -float('inf')
+    returns = data['Close'].pct_change().dropna()
+    if len(returns) < 50:
+        return best_params
+    for fast, slow, signal in itertools.product(fast_range, slow_range, signal_range):
+        if fast >= slow:
+            continue
+        macd = ta.trend.MACD(data['Close'], window_fast=fast, window_slow=slow, window_sign=signal)
+        signals = (macd.macd() > macd.macd_signal()).astype(int) - (macd.macd() < macd.macd_signal()).astype(int)
+        strategy_returns = signals.shift(1) * returns
+        sharpe = strategy_returns.mean() / strategy_returns.std() if strategy_returns.std() != 0 else 0
+        if sharpe > best_sharpe:
+            best_sharpe, best_params = sharpe, (fast, slow, signal)
+    return best_params
 
 def detect_divergence(data):
     if 'RSI' not in data.columns or 'Close' not in data.columns:
@@ -416,12 +305,12 @@ def calculate_cmo(close, window=14):
         diff = close.diff()
         up_sum = diff.where(diff > 0, 0).rolling(window=window).sum()
         down_sum = abs(diff.where(diff < 0, 0)).rolling(window=window).sum()
-        cmo = 100 * (up_sum - down_sum) / (up_sum + down_sum)
-        return cmo.astype(np.float32)  # Use float32
+        cmo = 100 * (up_sum - down_sum) / (up_sum + down_sum + 1e-10)
+        return cmo.astype(np.float32)
     except Exception as e:
-        logging.error(f"Failed to compute custom CMO: {str(e)}")
-        st.warning(f"⚠️ Failed to compute custom CMO: {str(e)}")
-        return pd.Series([None] * len(close), index=close.index, dtype=np.float32)
+        logging.error(f"Failed to compute CMO: {str(e)}")
+        st.warning(f"Unable to compute Chande Momentum Oscillator: {str(e)}")
+        return pd.Series([np.nan] * len(close), index=close.index, dtype=np.float32)
 
 def calculate_pivot_points(data):
     try:
@@ -442,55 +331,100 @@ def calculate_pivot_points(data):
         }
     except Exception as e:
         logging.error(f"Failed to compute Pivot Points: {str(e)}")
-        st.warning(f"⚠️ Failed to compute Pivot Points: {str(e)}")
+        st.warning(f"Unable to compute Pivot Points: {str(e)}")
         return None
 
 def calculate_heikin_ashi(data):
     try:
         ha_data = pd.DataFrame(index=data.index)
         ha_data['HA_Close'] = ((data['Open'] + data['High'] + data['Low'] + data['Close']) / 4).astype(np.float32)
-        ha_data['HA_Open'] = data['Open'].astype(np.float32).copy()
-        for i in range(1, len(ha_data)):
-            ha_data['HA_Open'].iloc[i] = (ha_data['HA_Open'].iloc[i-1] + ha_data['HA_Close'].iloc[i-1]) / 2
-        ha_data['HA_Open'] = ha_data['HA_Open'].astype(np.float32)
+        ha_data['HA_Open'] = ((data['Open'].shift(1) + data['Close'].shift(1)) / 2).fillna(data['Open'].iloc[0]).astype(np.float32)
         ha_data['HA_High'] = np.maximum.reduce([data['High'], ha_data['HA_Open'], ha_data['HA_Close']]).astype(np.float32)
         ha_data['HA_Low'] = np.minimum.reduce([data['Low'], ha_data['HA_Open'], ha_data['HA_Close']]).astype(np.float32)
         return ha_data[['HA_Open', 'HA_High', 'HA_Low', 'HA_Close']]
     except Exception as e:
         logging.error(f"Failed to compute Heikin-Ashi: {str(e)}")
-        st.warning(f"⚠️ Failed to compute Heikin-Ashi: {str(e)}")
+        st.warning(f"Unable to compute Heikin-Ashi: {str(e)}")
         return None
 
-def analyze_stock(data, indicators=None):
-    if data.empty or len(data) < 27:
-        st.warning("⚠️ Insufficient data to compute indicators.")
+def calculate_adaptive_volume_spike(data, window=10):
+    try:
+        avg_volume = data['Volume'].rolling(window=window).mean()
+        std_volume = data['Volume'].rolling(window=window).std()
+        threshold = avg_volume + 2 * std_volume
+        return (data['Volume'] > threshold).astype(bool)
+    except Exception as e:
+        logging.error(f"Failed to compute adaptive volume spike: {str(e)}")
+        return pd.Series([False] * len(data), index=data.index)
+
+def train_ml_model(data, indicators):
+    try:
+        features = data[[ind for ind in indicators if ind in data.columns]].dropna()
+        if features.empty:
+            return None
+        returns = data['Close'].pct_change().shift(-1).dropna()
+        labels = (returns > 0).astype(int)
+        features = features.loc[labels.index]
+        if len(features) < 10:
+            return None
+        X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42)
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X_train, y_train)
+        accuracy = accuracy_score(y_test, model.predict(X_test))
+        logging.info(f"ML model trained with accuracy: {accuracy}")
+        return model
+    except Exception as e:
+        logging.error(f"Failed to train ML model: {str(e)}")
+        return None
+
+def analyze_stock(data, indicators=None, symbol=None):
+    min_data_requirements = {
+        'RSI': 14, 'MACD': 26, 'SMA_EMA': 200, 'Bollinger': 20, 'Stochastic': 14,
+        'ATR': 14, 'ADX': 14, 'OBV': 2, 'VWAP': 2, 'Volume_Spike': 10,
+        'Parabolic_SAR': 2, 'Fibonacci': 2, 'Divergence': 14, 'Ichimoku': 52,
+        'CMF': 20, 'Donchian': 20, 'Keltner': 20, 'TRIX': 15, 'Ultimate_Osc': 28,
+        'CMO': 14, 'VPT': 2, 'Pivot': 2, 'Heikin-Ashi': 2
+    }
+
+    if data.empty or len(data) < max(min_data_requirements.values(), default=2):
+        st.warning("Not enough data to analyze this stock.")
         return None
     required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     missing_cols = [col for col in required_columns if col not in data.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing required columns: {', '.join(missing_cols)}")
+        st.warning(f"Missing required data: {', '.join(missing_cols)}")
         return None
-    
-    data = data.fillna(method='ffill').fillna(method='bfill').copy()  # Create a copy to avoid modifying cached data
-    
-    # Define all available indicators
+
+    data = data.copy()
+    data = data.interpolate(method='linear').fillna(method='ffill').fillna(method='bfill')
+
     all_indicators = [
         'RSI', 'MACD', 'SMA_EMA', 'Bollinger', 'Stochastic', 'ATR', 'ADX', 'OBV',
         'VWAP', 'Volume_Spike', 'Parabolic_SAR', 'Fibonacci', 'Divergence', 'Ichimoku',
         'CMF', 'Donchian', 'Keltner', 'TRIX', 'Ultimate_Osc', 'CMO', 'VPT', 'Pivot',
         'Heikin-Ashi'
     ]
-    
-    # Use all indicators if none specified
     indicators = all_indicators if indicators is None else indicators
-    
+    computed_indicators = []
+
+    indicator_order = ['ATR', 'RSI', 'MACD', 'SMA_EMA', 'Bollinger', 'Stochastic', 'ADX', 'OBV',
+                      'VWAP', 'Volume_Spike', 'Parabolic_SAR', 'Fibonacci', 'Divergence',
+                      'Ichimoku', 'CMF', 'Donchian', 'Keltner', 'TRIX', 'Ultimate_Osc',
+                      'CMO', 'VPT', 'Pivot', 'Heikin-Ashi']
+
+    indicators = [ind for ind in indicator_order if ind in indicators]
+
     for indicator in indicators:
+        if len(data) < min_data_requirements.get(indicator, 2):
+            st.warning(f"Not enough data for {indicator} (requires {min_data_requirements[indicator]} periods).")
+            continue
         try:
             if indicator == 'RSI':
                 rsi_window = optimize_rsi_window(data)
                 data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=rsi_window).rsi().astype(np.float32)
             elif indicator == 'MACD':
-                macd = ta.trend.MACD(data['Close'], window_slow=26, window_fast=12, window_sign=9)
+                fast, slow, signal = optimize_macd_params(data)
+                macd = ta.trend.MACD(data['Close'], window_slow=slow, window_fast=fast, window_sign=signal)
                 data['MACD'] = macd.macd().astype(np.float32)
                 data['MACD_signal'] = macd.macd_signal().astype(np.float32)
                 data['MACD_hist'] = macd.macd_diff().astype(np.float32)
@@ -519,13 +453,13 @@ def analyze_stock(data, indicators=None):
                 data['Cumulative_Volume'] = data['Volume'].cumsum().astype(np.float32)
                 data['VWAP'] = (data['Cumulative_TP'].cumsum() / data['Cumulative_Volume']).astype(np.float32)
             elif indicator == 'Volume_Spike':
-                data['Avg_Volume'] = data['Volume'].rolling(window=10).mean().astype(np.float32)
-                data['Volume_Spike'] = (data['Volume'] > (data['Avg_Volume'] * 2.0)).astype(bool)
+                data['Volume_Spike'] = calculate_adaptive_volume_spike(data)
             elif indicator == 'Parabolic_SAR':
                 data['Parabolic_SAR'] = ta.trend.PSARIndicator(data['High'], data['Low'], data['Close']).psar().astype(np.float32)
             elif indicator == 'Fibonacci':
-                high = data['High'].max()
-                low = data['Low'].min()
+                lookback = min(len(data), 100)
+                high = data['High'][-lookback:].max()
+                low = data['Low'][-lookback:].min()
                 diff = high - low
                 data['Fib_23.6'] = np.float32(high - diff * 0.236)
                 data['Fib_38.2'] = np.float32(high - diff * 0.382)
@@ -577,36 +511,39 @@ def analyze_stock(data, indicators=None):
                     data['HA_High'] = ha_data['HA_High']
                     data['HA_Low'] = ha_data['HA_Low']
                     data['HA_Close'] = ha_data['HA_Close']
+            computed_indicators.append(indicator)
         except Exception as e:
             logging.error(f"Failed to compute {indicator}: {str(e)}")
-            st.warning(f"⚠️ Failed to compute {indicator}: {str(e)}")
-    
-    # Drop unused intermediate columns to save memory
-    unused_columns = [
-        'Cumulative_TP', 'Cumulative_Volume', 'Avg_Volume',
-        'MACD_hist'  # Optional: drop if not used in recommendations
-    ]
-    data.drop(columns=[col for col in unused_columns if col in data.columns], inplace=True)
-    
+            st.warning(f"Unable to compute {indicator}: {str(e)}")
+
+    data.drop(columns=[col for col in ['Cumulative_TP', 'Cumulative_Volume', 'MACD_hist'] if col in data.columns], inplace=True)
+
+    if symbol and computed_indicators:
+        model = train_ml_model(data, computed_indicators)
+        if model:
+            joblib.dump(model, f"{symbol}_rf_model.pkl")
+            data['ML_Score'] = model.predict_proba(data[[ind for ind in computed_indicators if ind in data.columns]])[:, 1]
+
     return data
 
 def calculate_buy_at(data):
-    if data is None or 'RSI' not in data.columns or data['RSI'].iloc[-1] is None:
-        st.warning("⚠️ Cannot calculate Buy At due to missing or invalid RSI data.")
+    if data is None or 'RSI' not in data.columns or pd.isna(data['RSI'].iloc[-1]):
+        st.warning("Cannot calculate Buy At price due to missing RSI data.")
         return None
     last_close = data['Close'].iloc[-1]
     last_rsi = data['RSI'].iloc[-1]
-    buy_at = last_close * 0.99 if last_rsi < 30 else last_close
+    support = data['Support1'].iloc[-1] if 'Support1' in data.columns and not pd.isna(data['Support1'].iloc[-1]) else last_close * 0.99
+    buy_at = support if last_rsi < 30 else last_close
     return round(float(buy_at), 2)
 
 def calculate_stop_loss(data, atr_multiplier=2.5):
-    if data is None or 'ATR' not in data.columns or data['ATR'].iloc[-1] is None:
-        st.warning("⚠️ Cannot calculate Stop Loss due to missing or invalid ATR data.")
+    if data is None or 'ATR' not in data.columns or pd.isna(data['ATR'].iloc[-1]):
+        st.warning("Cannot calculate Stop Loss due to missing ATR data.")
         return None
     last_close = data['Close'].iloc[-1]
     last_atr = data['ATR'].iloc[-1]
-    atr_std = data['ATR'].std() if not data['ATR'].std() == 0 else 1
-    atr_multiplier = 3.0 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 25 else 1.5
+    atr_std = data['ATR'].std() if data['ATR'].std() != 0 else 1
+    atr_multiplier = 3.0 if 'ADX' in data.columns and not pd.isna(data['ADX'].iloc[-1]) and data['ADX'].iloc[-1] > 25 else 1.5
     atr_multiplier += (last_atr / atr_std) * 0.5
     stop_loss = last_close - (atr_multiplier * last_atr)
     if stop_loss < last_close * 0.85:
@@ -615,17 +552,17 @@ def calculate_stop_loss(data, atr_multiplier=2.5):
 
 def calculate_target(data, risk_reward_ratio=3):
     if data is None:
-        st.warning("⚠️ Cannot calculate Target due to missing data.")
+        st.warning("Cannot calculate Target price due to missing data.")
         return None
     stop_loss = calculate_stop_loss(data)
     if stop_loss is None:
-        st.warning("⚠️ Cannot calculate Target due to missing Stop Loss data.")
+        st.warning("Cannot calculate Target price due to missing Stop Loss.")
         return None
     last_close = data['Close'].iloc[-1]
     risk = last_close - stop_loss
-    adjusted_ratio = min(risk_reward_ratio, 5) if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 30 else min(risk_reward_ratio, 3)
+    adjusted_ratio = min(risk_reward_ratio, 5) if 'ADX' in data.columns and not pd.isna(data['ADX'].iloc[-1]) and data['ADX'].iloc[-1] > 30 else min(risk_reward_ratio, 3)
     target = last_close + (risk * adjusted_ratio)
-    max_target = last_close * 1.3 if data['ADX'].iloc[-1] is not None and data['ADX'].iloc[-1] > 30 else last_close * 1.2
+    max_target = last_close * 1.3 if 'ADX' in data.columns and not pd.isna(data['ADX'].iloc[-1]) and data['ADX'].iloc[-1] > 30 else last_close * 1.2
     if target > max_target:
         target = max_target
     return round(float(target), 2)
@@ -636,93 +573,90 @@ def fetch_fundamentals(symbol):
         info = stock.info
         if not info:
             logging.warning(f"No fundamentals data for {symbol}")
-            return {'P/E': 100, 'EPS': 0, 'RevenueGrowth': 0}
-        pe = info.get('trailingPE', 100)
-        pe = min(pe, 100) if pe != float('inf') else 100
+            return {'P/E': np.float32(50), 'EPS': np.float32(0), 'RevenueGrowth': np.float32(0),
+                    'Debt/Equity': np.float32(1), 'ROE': np.float32(0)}
+        pe = info.get('trailingPE', 50)
+        pe = min(pe, 50) if pe != float('inf') else 50
+        debt_equity = info.get('debtToEquity', 100) / 100 if info.get('debtToEquity') else 1
+        roe = info.get('returnOnEquity', 0)
         return {
             'P/E': np.float32(pe),
             'EPS': np.float32(info.get('trailingEps', 0)),
-            'RevenueGrowth': np.float32(info.get('revenueGrowth', 0))
+            'RevenueGrowth': np.float32(info.get('revenueGrowth', 0)),
+            'Debt/Equity': np.float32(debt_equity),
+            'ROE': np.float32(roe)
         }
     except Exception as e:
         logging.error(f"Failed to fetch fundamentals for {symbol}: {str(e)}")
-        st.warning(f"⚠️ Failed to fetch fundamentals for {symbol}: {str(e)}")
-        return {'P/E': np.float32(100), 'EPS': np.float32(0), 'RevenueGrowth': np.float32(0)}
+        st.warning(f"Unable to fetch fundamental data for {symbol}.")
+        return {'P/E': np.float32(50), 'EPS': np.float32(0), 'RevenueGrowth': np.float32(0),
+                'Debt/Equity': np.float32(1), 'ROE': np.float32(0)}
 
 def generate_recommendations(data, symbol=None):
     default_recommendations = {
         "Intraday": "N/A", "Swing": "N/A", "Short-Term": "N/A", "Long-Term": "N/A",
         "Mean_Reversion": "N/A", "Breakout": "N/A", "Ichimoku_Trend": "N/A",
         "Current Price": None, "Buy At": None, "Stop Loss": None, "Target": None,
-        "Score": 0, "Net_Score": 0
+        "Score": 0, "Net_Score": 0, "Confidence": 0
     }
-    
-    if data is None or data.empty or 'Close' not in data.columns or data['Close'].iloc[-1] is None:
+
+    if data is None or data.empty or 'Close' not in data.columns or pd.isna(data['Close'].iloc[-1]):
         return default_recommendations
-    
+
     buy_score = 0
     sell_score = 0
-    
+    momentum_score = 0
+    max_momentum_score = sum([INDICATOR_WEIGHTS.get(ind, 1.0) for ind in ['RSI', 'CMO', 'Ultimate_Osc', 'TRIX']])
+
     if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) and 0 <= data['RSI'].iloc[-1] <= 100:
         rsi = data['RSI'].iloc[-1]
-        if rsi <= 20:
-            buy_score += 2
-        elif rsi >= 80:
-            sell_score += 2
-    
-    if ('MACD' in data.columns and 'MACD_signal' in data.columns and 
-        not pd.isna(data['MACD'].iloc[-1]) and not pd.isna(data['MACD_signal'].iloc[-1])):
+        if rsi <= 30:
+            momentum_score += INDICATOR_WEIGHTS['RSI'] * 2
+        elif rsi >= 70:
+            momentum_score -= INDICATOR_WEIGHTS['RSI'] * 2
+
+    if 'MACD' in data.columns and 'MACD_signal' in data.columns and not pd.isna(data['MACD'].iloc[-1]):
         macd = data['MACD'].iloc[-1]
         macd_signal = data['MACD_signal'].iloc[-1]
         if macd > macd_signal:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['MACD']
         elif macd < macd_signal:
-            sell_score += 1
-    
-    if ('Lower_Band' in data.columns and 'Upper_Band' in data.columns and 
-        not pd.isna(data['Close'].iloc[-1]) and not pd.isna(data['Lower_Band'].iloc[-1]) and 
-        not pd.isna(data['Upper_Band'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['MACD']
+
+    if 'Lower_Band' in data.columns and not pd.isna(data['Lower_Band'].iloc[-1]):
         close = data['Close'].iloc[-1]
         lower = data['Lower_Band'].iloc[-1]
         upper = data['Upper_Band'].iloc[-1]
         if close < lower:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Bollinger']
         elif close > upper:
-            sell_score += 1
-    
-    if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) and not pd.isna(data['Close'].iloc[-1]):
+            sell_score += INDICATOR_WEIGHTS['Bollinger']
+
+    if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]):
         vwap = data['VWAP'].iloc[-1]
         close = data['Close'].iloc[-1]
         if close > vwap:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['VWAP']
         elif close < vwap:
-            sell_score += 1
-    
-    if ('Volume' in data.columns and 'Volume_Spike' in data.columns and 
-        not pd.isna(data['Volume'].iloc[-1]) and not pd.isna(data['Volume_Spike'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['VWAP']
+
+    if 'Volume_Spike' in data.columns and not pd.isna(data['Volume_Spike'].iloc[-1]):
         spike = data['Volume_Spike'].iloc[-1]
         close = data['Close'].iloc[-1]
         prev_close = data['Close'].iloc[-2]
         if spike and close > prev_close:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Volume_Spike']
         elif spike and close < prev_close:
-            sell_score += 1
-    
+            sell_score += INDICATOR_WEIGHTS['Volume_Spike']
+
     if 'Divergence' in data.columns:
         divergence = data['Divergence'].iloc[-1]
         if divergence == "Bullish Divergence":
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Divergence']
         elif divergence == "Bearish Divergence":
-            sell_score += 1
-    
-    if ('Ichimoku_Tenkan' in data.columns and 'Ichimoku_Kijun' in data.columns and 
-        'Ichimoku_Span_A' in data.columns and 'Ichimoku_Span_B' in data.columns and
-        'Ichimoku_Chikou' in data.columns and 
-        not pd.isna(data['Ichimoku_Tenkan'].iloc[-1]) and 
-        not pd.isna(data['Ichimoku_Kijun'].iloc[-1]) and 
-        not pd.isna(data['Ichimoku_Span_A'].iloc[-1]) and
-        not pd.isna(data['Ichimoku_Span_B'].iloc[-1]) and
-        not pd.isna(data['Ichimoku_Chikou'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['Divergence']
+
+    if 'Ichimoku_Tenkan' in data.columns and not pd.isna(data['Ichimoku_Tenkan'].iloc[-1]):
         tenkan = data['Ichimoku_Tenkan'].iloc[-1]
         kijun = data['Ichimoku_Kijun'].iloc[-1]
         span_a = data['Ichimoku_Span_A'].iloc[-1]
@@ -732,152 +666,160 @@ def generate_recommendations(data, symbol=None):
         cloud_top = max(span_a, span_b)
         cloud_bottom = min(span_a, span_b)
         if tenkan > kijun and close > cloud_top and chikou > close:
-            buy_score += 2
+            buy_score += INDICATOR_WEIGHTS['Ichimoku'] * 2
             default_recommendations["Ichimoku_Trend"] = "Strong Buy"
         elif tenkan < kijun and close < cloud_bottom and chikou < close:
-            sell_score += 2
+            sell_score += INDICATOR_WEIGHTS['Ichimoku'] * 2
             default_recommendations["Ichimoku_Trend"] = "Strong Sell"
-    
+
     if 'CMF' in data.columns and not pd.isna(data['CMF'].iloc[-1]):
         cmf = data['CMF'].iloc[-1]
         if cmf > 0:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['CMF']
         elif cmf < 0:
-            sell_score += 1
-    
-    if ('Donchian_Upper' in data.columns and 'Donchian_Lower' in data.columns and 
-        not pd.isna(data['Donchian_Upper'].iloc[-1]) and not pd.isna(data['Donchian_Lower'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['CMF']
+
+    if 'Donchian_Upper' in data.columns and not pd.isna(data['Donchian_Upper'].iloc[-1]):
         close = data['Close'].iloc[-1]
         upper = data['Donchian_Upper'].iloc[-1]
         lower = data['Donchian_Lower'].iloc[-1]
         if close > upper:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Donchian']
             default_recommendations["Breakout"] = "Buy"
         elif close < lower:
-            sell_score += 1
+            sell_score += INDICATOR_WEIGHTS['Donchian']
             default_recommendations["Breakout"] = "Sell"
-    
-    if ('RSI' in data.columns and 'Lower_Band' in data.columns and 'Upper_Band' in data.columns and 
-        not pd.isna(data['RSI'].iloc[-1]) and not pd.isna(data['Lower_Band'].iloc[-1]) and 
-        not pd.isna(data['Upper_Band'].iloc[-1])):
+
+    if 'RSI' in data.columns and 'Lower_Band' in data.columns and not pd.isna(data['RSI'].iloc[-1]):
         rsi = data['RSI'].iloc[-1]
         close = data['Close'].iloc[-1]
         lower = data['Lower_Band'].iloc[-1]
         upper = data['Upper_Band'].iloc[-1]
         if rsi < 30 and close >= lower:
-            buy_score += 2
+            momentum_score += INDICATOR_WEIGHTS['RSI'] * 2
             default_recommendations["Mean_Reversion"] = "Buy"
         elif rsi > 70 and close >= upper:
-            sell_score += 2
+            momentum_score -= INDICATOR_WEIGHTS['RSI'] * 2
             default_recommendations["Mean_Reversion"] = "Sell"
-    
-    if ('Keltner_Upper' in data.columns and 'Keltner_Lower' in data.columns and 
-        not pd.isna(data['Keltner_Upper'].iloc[-1]) and not pd.isna(data['Keltner_Lower'].iloc[-1])):
+
+    if 'Keltner_Upper' in data.columns and not pd.isna(data['Keltner_Upper'].iloc[-1]):
         close = data['Close'].iloc[-1]
         upper = data['Keltner_Upper'].iloc[-1]
         lower = data['Keltner_Lower'].iloc[-1]
         if close < lower:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Keltner']
         elif close > upper:
-            sell_score += 1
-    
-    if 'TRIX' in data.columns and not pd.isna(data['TRIX'].iloc[-1]) and not pd.isna(data['TRIX'].iloc[-2]):
+            sell_score += INDICATOR_WEIGHTS['Keltner']
+
+    if 'TRIX' in data.columns and not pd.isna(data['TRIX'].iloc[-1]):
         trix = data['TRIX'].iloc[-1]
         prev_trix = data['TRIX'].iloc[-2]
         if trix > 0 and trix > prev_trix:
-            buy_score += 1
+            momentum_score += INDICATOR_WEIGHTS['TRIX']
         elif trix < 0 and trix < prev_trix:
-            sell_score += 1
-    
+            momentum_score -= INDICATOR_WEIGHTS['TRIX']
+
     if 'Ultimate_Osc' in data.columns and not pd.isna(data['Ultimate_Osc'].iloc[-1]):
         uo = data['Ultimate_Osc'].iloc[-1]
         if uo < 30:
-            buy_score += 1
+            momentum_score += INDICATOR_WEIGHTS['Ultimate_Osc']
         elif uo > 70:
-            sell_score += 1
-    
+            momentum_score -= INDICATOR_WEIGHTS['Ultimate_Osc']
+
     if 'CMO' in data.columns and not pd.isna(data['CMO'].iloc[-1]):
         cmo = data['CMO'].iloc[-1]
         if cmo < -50:
-            buy_score += 1
+            momentum_score += INDICATOR_WEIGHTS['CMO']
         elif cmo > 50:
-            sell_score += 1
-    
-    if 'VPT' in data.columns and not pd.isna(data['VPT'].iloc[-1]) and not pd.isna(data['VPT'].iloc[-2]):
+            momentum_score -= INDICATOR_WEIGHTS['CMO']
+
+    if 'VPT' in data.columns and not pd.isna(data['VPT'].iloc[-1]):
         vpt = data['VPT'].iloc[-1]
         prev_vpt = data['VPT'].iloc[-2]
         if vpt > prev_vpt:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['VPT']
         elif vpt < prev_vpt:
-            sell_score += 1
-    
-    if ('Fib_23.6' in data.columns and 'Fib_38.2' in data.columns and 
-        not pd.isna(data['Fib_23.6'].iloc[-1]) and not pd.isna(data['Fib_38.2'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['VPT']
+
+    if 'Fib_23.6' in data.columns and not pd.isna(data['Fib_23.6'].iloc[-1]):
         current_price = data['Close'].iloc[-1]
-        fib_levels = [data['Fib_23.6'].iloc[-1], data['Fib_38.2'].iloc[-1], 
+        fib_levels = [data['Fib_23.6'].iloc[-1], data['Fib_38.2'].iloc[-1],
                       data['Fib_50.0'].iloc[-1], data['Fib_61.8'].iloc[-1]]
         for level in fib_levels:
             if not pd.isna(level) and abs(current_price - level) / current_price < 0.01:
                 if current_price > level:
-                    buy_score += 1
+                    buy_score += INDICATOR_WEIGHTS['Fibonacci']
                 else:
-                    sell_score += 1
-    
+                    sell_score += INDICATOR_WEIGHTS['Fibonacci']
+
     if 'Parabolic_SAR' in data.columns and not pd.isna(data['Parabolic_SAR'].iloc[-1]):
         sar = data['Parabolic_SAR'].iloc[-1]
         close = data['Close'].iloc[-1]
         if close > sar:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Parabolic_SAR']
         elif close < sar:
-            sell_score += 1
-    
-    if 'OBV' in data.columns and not pd.isna(data['OBV'].iloc[-1]) and not pd.isna(data['OBV'].iloc[-2]):
+            sell_score += INDICATOR_WEIGHTS['Parabolic_SAR']
+
+    if 'OBV' in data.columns and not pd.isna(data['OBV'].iloc[-1]):
         obv = data['OBV'].iloc[-1]
         prev_obv = data['OBV'].iloc[-2]
         if obv > prev_obv:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['OBV']
         elif obv < prev_obv:
-            sell_score += 1
-    
-    if ('Pivot' in data.columns and 'Support1' in data.columns and 'Resistance1' in data.columns and 
-        not pd.isna(data['Pivot'].iloc[-1]) and not pd.isna(data['Support1'].iloc[-1]) and 
-        not pd.isna(data['Resistance1'].iloc[-1])):
+            sell_score += INDICATOR_WEIGHTS['OBV']
+
+    if 'Pivot' in data.columns and not pd.isna(data['Pivot'].iloc[-1]):
         close = data['Close'].iloc[-1]
         pivot = data['Pivot'].iloc[-1]
         support1 = data['Support1'].iloc[-1]
         resistance1 = data['Resistance1'].iloc[-1]
         if abs(close - support1) / close < 0.01:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Pivot']
         elif abs(close - resistance1) / close < 0.01:
-            sell_score += 1
-    
-    if ('HA_Close' in data.columns and 'HA_Open' in data.columns and 
-        not pd.isna(data['HA_Close'].iloc[-1]) and not pd.isna(data['HA_Open'].iloc[-1]) and
-        not pd.isna(data['HA_Close'].iloc[-2]) and not pd.isna(data['HA_Open'].iloc[-2])):
+            sell_score += INDICATOR_WEIGHTS['Pivot']
+
+    if 'HA_Close' in data.columns and not pd.isna(data['HA_Close'].iloc[-1]):
         ha_close = data['HA_Close'].iloc[-1]
         ha_open = data['HA_Open'].iloc[-1]
         prev_ha_close = data['HA_Close'].iloc[-2]
         prev_ha_open = data['HA_Open'].iloc[-2]
         if ha_close > ha_open and prev_ha_close > prev_ha_open:
-            buy_score += 1
+            buy_score += INDICATOR_WEIGHTS['Heikin-Ashi']
         elif ha_close < ha_open and prev_ha_close < prev_ha_open:
-            sell_score += 1
-    
+            sell_score += INDICATOR_WEIGHTS['Heikin-Ashi']
+
     if symbol:
         fundamentals = fetch_fundamentals(symbol)
-        if fundamentals['P/E'] < 15 and fundamentals['EPS'] > 0:
-            buy_score += 2
+        if fundamentals['P/E'] < 20 and fundamentals['EPS'] > 0:
+            buy_score += 1.0
         elif fundamentals['P/E'] > 30 or fundamentals['EPS'] < 0:
-            sell_score += 2
+            sell_score += 1.0
         if fundamentals['RevenueGrowth'] > 0.1:
-            buy_score += 1
+            buy_score += 0.5
         elif fundamentals['RevenueGrowth'] < 0:
-            sell_score += 1
-    
+            sell_score += 0.5
+        if fundamentals['Debt/Equity'] < 0.5:
+            buy_score += 0.5
+        elif fundamentals['Debt/Equity'] > 1.5:
+            sell_score += 0.5
+        if fundamentals['ROE'] > 0.15:
+            buy_score += 0.5
+        elif fundamentals['ROE'] < 0:
+            sell_score += 0.5
+
+    momentum_score = min(momentum_score, max_momentum_score) if momentum_score > 0 else max(momentum_score, -max_momentum_score)
+    buy_score += momentum_score if momentum_score > 0 else 0
+    sell_score += abs(momentum_score) if momentum_score < 0 else 0
+
+    ml_score = data['ML_Score'].iloc[-1] if 'ML_Score' in data.columns and not pd.isna(data['ML_Score'].iloc[-1]) else 0.5
+    buy_score += ml_score * 2
+    sell_score += (1 - ml_score) * 2
+
     total_signals = max(buy_score + sell_score, 5)
     net_score = (buy_score - sell_score) / total_signals * 5
-    
-    if net_score >= 3:
+    confidence = calculate_confidence_score(data)
+
+    if net_score >= 2.5 and confidence > 0.7:
         default_recommendations["Intraday"] = "Strong Buy"
         default_recommendations["Swing"] = "Buy" if net_score >= 2 else "Hold"
         default_recommendations["Short-Term"] = "Buy" if net_score >= 1.5 else "Hold"
@@ -887,7 +829,7 @@ def generate_recommendations(data, symbol=None):
         default_recommendations["Swing"] = "Hold"
         default_recommendations["Short-Term"] = "Hold"
         default_recommendations["Long-Term"] = "Hold"
-    elif net_score <= -3:
+    elif net_score <= -2.5 and confidence > 0.7:
         default_recommendations["Intraday"] = "Strong Sell"
         default_recommendations["Swing"] = "Sell" if net_score <= -2 else "Hold"
         default_recommendations["Short-Term"] = "Sell" if net_score <= -1.5 else "Hold"
@@ -899,31 +841,32 @@ def generate_recommendations(data, symbol=None):
         default_recommendations["Long-Term"] = "Hold"
     else:
         default_recommendations["Intraday"] = "Hold"
-    
+
     default_recommendations["Current Price"] = float(data['Close'].iloc[-1]) if not pd.isna(data['Close'].iloc[-1]) else None
     default_recommendations["Buy At"] = calculate_buy_at(data)
     default_recommendations["Stop Loss"] = calculate_stop_loss(data)
     default_recommendations["Target"] = calculate_target(data)
     default_recommendations["Score"] = buy_score - sell_score
     default_recommendations["Net_Score"] = round(net_score, 2)
-    
+    default_recommendations["Confidence"] = round(confidence, 2)
+
     return default_recommendations
 
-def analyze_batch(stock_batch):
+def analyze_batch(stock_batch, batch_size, timeout=60):
     results = []
     errors = []
-    with ProcessPoolExecutor(max_workers=5) as executor:
+    with ProcessPoolExecutor(max_workers=min(batch_size, os.cpu_count() or 4)) as executor:
         futures = {executor.submit(analyze_stock_parallel, symbol): symbol for symbol in stock_batch}
-        for future in as_completed(futures):
+        for future in as_completed(futures, timeout=timeout):
             symbol = futures[future]
             try:
                 result = future.result()
                 if result:
                     results.append(result)
             except Exception as e:
-                errors.append(f"⚠️ Error processing stock {symbol}: {str(e)}")
-                logging.error(f"Error processing stock {symbol}: {str(e)}")
-    gc.collect()  # Free memory after batch
+                errors.append(f"Error analyzing {symbol}: {str(e)}")
+                logging.error(f"Error analyzing {symbol}: {str(e)}")
+    gc.collect()
     for error in errors:
         st.warning(error)
     return results
@@ -931,7 +874,7 @@ def analyze_batch(stock_batch):
 def analyze_stock_parallel(symbol):
     data = fetch_stock_data_cached(symbol)
     if not data.empty:
-        data = analyze_stock(data)  # Compute all indicators
+        data = analyze_stock(data, symbol=symbol)
         if data is None:
             return None
         recommendations = generate_recommendations(data, symbol)
@@ -949,7 +892,8 @@ def analyze_stock_parallel(symbol):
             "Breakout": recommendations["Breakout"],
             "Ichimoku_Trend": recommendations["Ichimoku_Trend"],
             "Score": recommendations.get("Score", 0),
-            "Net_Score": recommendations.get("Net_Score", 0)
+            "Net_Score": recommendations.get("Net_Score", 0),
+            "Confidence": recommendations.get("Confidence", 0)
         }
     return None
 
@@ -957,53 +901,60 @@ def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
     filtered_stocks = []
     for symbol in stock_list:
         data = fetch_stock_data_cached(symbol)
-        if not data.empty and data['Volume'].mean() > 10000:  # Filter low-volume stocks
+        if not data.empty and data['Close'].iloc[-1] > 10:  # Filter low-price stocks
             filtered_stocks.append(symbol)
-    
+
     results = []
     total_batches = (len(filtered_stocks) // batch_size) + (1 if len(filtered_stocks) % batch_size != 0 else 0)
     for i in range(0, len(filtered_stocks), batch_size):
         batch = filtered_stocks[i:i + batch_size]
-        batch_results = analyze_batch(batch)
+        batch_results = analyze_batch(batch, batch_size)
         results.extend(batch_results)
         if progress_callback:
             progress_callback((i + len(batch)) / len(filtered_stocks))
-    
+        memory_usage = psutil.Process().memory_info().rss / 1024**2
+        if memory_usage > 2000:  # 2GB threshold
+            gc.collect()
+            logging.warning(f"High memory usage detected: {memory_usage} MB")
+
     results_df = pd.DataFrame([r for r in results if r is not None])
     if results_df.empty:
-        st.warning("⚠️ No valid stock data retrieved.")
+        st.warning("No valid stock data retrieved.")
         return pd.DataFrame()
-    if "Score" not in results_df.columns:
-        results_df["Score"] = 0
-    if "Net_Score" not in results_df.columns:
-        results_df["Net_Score"] = 0
-    if "Current Price" not in results_df.columns:
-        results_df["Current Price"] = None
-    return results_df.sort_values(by="Net_Score", ascending=False).head(10)
+    for col in ["Score", "Net_Score", "Confidence", "Current Price"]:
+        if col not in results_df.columns:
+            results_df[col] = 0 if col != "Current Price" else None
+    return results_df.sort_values(by=["Confidence", "Net_Score"], ascending=False).head(10)
 
 def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
     filtered_stocks = []
     for symbol in stock_list:
-        data = fetch_stock_data_cached(symbol, period="1mo", interval="1h")
-        if not data.empty and data['Volume'].mean() > 10000:  # Filter low-volume stocks
+        data = fetch_stock_data_cached(symbol, period="1mo", interval="15m")
+        if not data.empty and data['Close'].iloc[-1] > 10:
             filtered_stocks.append(symbol)
-    
+
     results = []
     total_batches = (len(filtered_stocks) // batch_size) + (1 if len(filtered_stocks) % batch_size != 0 else 0)
     for i in range(0, len(filtered_stocks), batch_size):
         batch = filtered_stocks[i:i + batch_size]
-        batch_results = analyze_batch(batch)
+        batch_results = analyze_batch(batch, batch_size)
         results.extend(batch_results)
         if progress_callback:
             progress_callback((i + len(batch)) / len(filtered_stocks))
-    
+        memory_usage = psutil.Process().memory_info().rss / 1024**2
+        if memory_usage > 2000:
+            gc.collect()
+            logging.warning(f"High memory usage detected: {memory_usage} MB")
+
     results_df = pd.DataFrame([r for r in results if r is not None])
     if results_df.empty:
-        st.warning("⚠️ No valid intraday stock data retrieved.")
+        st.warning("No valid intraday stock data retrieved.")
         return pd.DataFrame()
     if "Net_Score" not in results_df.columns:
         results_df["Net_Score"] = 0
-    return results_df[results_df["Intraday"].isin(["Buy", "Strong Buy"])].sort_values(by="Net_Score", ascending=False).head(5)
+    if "Confidence" not in results_df.columns:
+        results_df["Confidence"] = 0
+    return results_df[results_df["Intraday"].isin(["Buy", "Strong Buy"])].sort_values(by=["Confidence", "Net_Score"], ascending=False).head(5)
 
 def colored_recommendation(recommendation):
     if "Buy" in recommendation:
@@ -1019,10 +970,13 @@ def update_progress(progress_bar, loading_text, progress, messages):
     progress_bar.progress(min(progress, 1.0))
     loading_text.text(next(messages))
 
-def display_dashboard(symbol=None, data=None, recommendations=None, selected_stocks=None):
+def display_dashboard(symbol=None, data=None, recommendations=None, selected_stocks=None, stock_list=None):
     st.title("📊 StockGenie Pro - NSE Analysis")
     st.subheader(f"📅 Analysis for {datetime.now().strftime('%d %b %Y')}")
-    
+
+    ad_ratio = calculate_advance_decline_ratio(stock_list[:50])  # Sample for speed
+    st.metric("Market Sentiment (A/D Ratio)", f"{ad_ratio:.2f}", delta="Bullish" if ad_ratio > 1 else "Bearish")
+
     if st.button("🚀 Generate Daily Top Picks"):
         progress_bar = st.progress(0)
         loading_text = st.empty()
@@ -1032,7 +986,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         ])
         results_df = analyze_all_stocks(
             selected_stocks,
-            batch_size=10,
+            batch_size=st.session_state.get('batch_size', 10),
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         progress_bar.empty()
@@ -1040,7 +994,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not results_df.empty:
             st.subheader("🏆 Today's Top 10 Stocks")
             for _, row in results_df.iterrows():
-                with st.expander(f"{row['Symbol']} - Net Score: {row['Net_Score']}"):
+                with st.expander(f"{row['Symbol']} - Confidence: {row['Confidence']}, Net Score: {row['Net_Score']}"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -1058,8 +1012,8 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
                     Ichimoku Trend: {colored_recommendation(row['Ichimoku_Trend'])}
                     """)
         else:
-            st.warning("⚠️ No top picks available due to data issues.")
-    
+            st.warning("No top picks available due to data issues.")
+
     if st.button("⚡ Generate Intraday Top 5 Picks"):
         progress_bar = st.progress(0)
         loading_text = st.empty()
@@ -1069,7 +1023,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         ])
         intraday_results = analyze_intraday_stocks(
             selected_stocks,
-            batch_size=10,
+            batch_size=st.session_state.get('batch_size', 10),
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         progress_bar.empty()
@@ -1077,7 +1031,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         if not intraday_results.empty:
             st.subheader("🏆 Top 5 Intraday Stocks")
             for _, row in intraday_results.iterrows():
-                with st.expander(f"{row['Symbol']} - Net Score: {row['Net_Score']}"):
+                with st.expander(f"{row['Symbol']} - Confidence: {row['Confidence']}, Net Score: {row['Net_Score']}"):
                     current_price = row['Current Price'] if pd.notnull(row['Current Price']) else "N/A"
                     buy_at = row['Buy At'] if pd.notnull(row['Buy At']) else "N/A"
                     stop_loss = row['Stop Loss'] if pd.notnull(row['Stop Loss']) else "N/A"
@@ -1089,24 +1043,32 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
                     Intraday: {colored_recommendation(row['Intraday'])}  
                     """)
         else:
-            st.warning("⚠️ No intraday picks available due to data issues.")
-    
+            st.warning("No intraday picks available due to data issues.")
+
+    if st.button("🔍 Show Trending Stocks"):
+        trending = get_trending_stocks()
+        if trending:
+            st.subheader("🔥 Trending Stocks in India")
+            st.write(", ".join(trending))
+        else:
+            st.warning("No trending stocks data available.")
+
     if symbol and data is not None and recommendations is not None:
         st.header(f"📋 {symbol.split('.')[0]} Analysis")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             current_price = recommendations['Current Price'] if recommendations['Current Price'] is not None else "N/A"
-            st.metric(tooltip("Current Price", TOOLTIPS['RSI']), f"₹{current_price}")
+            st.metric(tooltip("Current Price", TOOLTIPS['Stop Loss']), f"₹{current_price}")
         with col2:
             buy_at = recommendations['Buy At'] if recommendations['Buy At'] is not None else "N/A"
-            st.metric("Buy At", f"₹{buy_at}")
+            st.metric(tooltip("Buy At", "Recommended entry price"), f"₹{buy_at}")
         with col3:
             stop_loss = recommendations['Stop Loss'] if recommendations['Stop Loss'] is not None else "N/A"
             st.metric(tooltip("Stop Loss", TOOLTIPS['Stop Loss']), f"₹{stop_loss}")
         with col4:
             target = recommendations['Target'] if recommendations['Target'] is not None else "N/A"
-            st.metric("Target", f"₹{target}")
-        
+            st.metric(tooltip("Target", "Expected price target"), f"₹{target}")
+
         st.subheader("Recommendations")
         st.write(f"Intraday: {colored_recommendation(recommendations['Intraday'])}")
         st.write(f"Swing: {colored_recommendation(recommendations['Swing'])}")
@@ -1115,7 +1077,8 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         st.write(f"Mean Reversion: {colored_recommendation(recommendations['Mean_Reversion'])}")
         st.write(f"Breakout: {colored_recommendation(recommendations['Breakout'])}")
         st.write(f"Ichimoku Trend: {colored_recommendation(recommendations['Ichimoku_Trend'])}")
-        
+        st.write(f"Confidence Score: {recommendations['Confidence']}")
+
         st.subheader("Technical Indicators")
         indicators = {
             "RSI": data['RSI'].iloc[-1] if 'RSI' in data.columns and not pd.isna(data['RSI'].iloc[-1]) else "N/A",
@@ -1123,39 +1086,68 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
             "ATR": data['ATR'].iloc[-1] if 'ATR' in data.columns and not pd.isna(data['ATR'].iloc[-1]) else "N/A",
             "VWAP": data['VWAP'].iloc[-1] if 'VWAP' in data.columns and not pd.isna(data['VWAP'].iloc[-1]) else "N/A",
             "Pivot": data['Pivot'].iloc[-1] if 'Pivot' in data.columns and not pd.isna(data['Pivot'].iloc[-1]) else "N/A",
-            "HA_Close": data['HA_Close'].iloc[-1] if 'HA_Close' in data.columns and not pd.isna(data['HA_Close'].iloc[-1]) else "N/A"
+            "Heikin-Ashi Close": data['HA_Close'].iloc[-1] if 'HA_Close' in data.columns and not pd.isna(data['HA_Close'].iloc[-1]) else "N/A"
         }
         for key, value in indicators.items():
             st.write(f"{tooltip(key, TOOLTIPS.get(key, ''))}: {value}")
-        
-        st.subheader("Price Chart")
+
+        st.subheader("Fundamentals")
+        fundamentals = fetch_fundamentals(symbol)
+        st.write(f"{tooltip('P/E Ratio', TOOLTIPS['P/E'])}: {fundamentals['P/E']}")
+        st.write(f"{tooltip('EPS', TOOLTIPS['EPS'])}: {fundamentals['EPS']}")
+        st.write(f"{tooltip('Revenue Growth', 'Year-over-year revenue growth')}: {fundamentals['RevenueGrowth']*100:.2f}%")
+        st.write(f"{tooltip('Debt/Equity', TOOLTIPS['Debt/Equity'])}: {fundamentals['Debt/Equity']}")
+        st.write(f"{tooltip('ROE', TOOLTIPS['ROE'])}: {fundamentals['ROE']*100:.2f}%")
+
+        st.subheader("Price Chart with Indicators")
         fig = px.line(data, x=data.index, y="Close", title=f"{symbol} Price Trend")
+        if 'Upper_Band' in data.columns:
+            fig.add_scatter(x=data.index, y=data['Upper_Band'], name="Bollinger Upper", line=dict(color='red', dash='dash'))
+            fig.add_scatter(x=data.index, y=data['Lower_Band'], name="Bollinger Lower", line=dict(color='red', dash='dash'))
+        if 'Ichimoku_Span_A' in data.columns:
+            fig.add_scatter(x=data.index, y=data['Ichimoku_Span_A'], name="Ichimoku Span A", line=dict(color='green'))
+            fig.add_scatter(x=data.index, y=data['Ichimoku_Span_B'], name="Ichimoku Span B", line=dict(color='red'))
         st.plotly_chart(fig)
 
+        st.subheader("Monte Carlo Simulation")
+        simulations = monte_carlo_simulation(data, simulations=100, days=30)
+        sim_df = pd.DataFrame(simulations).T
+        sim_df.index = [data.index[-1] + timedelta(days=i) for i in range(len(sim_df))]
+        fig_sim = px.line(sim_df, title="30-Day Price Forecast (Monte Carlo)")
+        st.plotly_chart(fig_sim)
+
 if __name__ == "__main__":
+    st.sidebar.header("Settings")
+    batch_size = st.sidebar.slider("Batch Size", min_value=5, max_value=50, value=10, step=5)
+    st.session_state['batch_size'] = batch_size
+    min_volume = st.sidebar.number_input("Minimum Average Volume", min_value=1000, value=10000, step=1000)
+    min_price = st.sidebar.number_input("Minimum Stock Price", min_value=1, value=10, step=1)
+
     stock_list = fetch_nse_stock_list()
-    selected_stocks = st.sidebar.multiselect("Select Stocks or Sectors", 
-                                             options=["All NSE Stocks"] + list(SECTORS.keys()), 
-                                             default="Bank")
+    selected_stocks = st.sidebar.multiselect("Select Stocks or Sectors",
+                                             options=["All NSE Stocks"] + list(SECTORS.keys()),
+                                             default=["Retailing"])
     if not selected_stocks:
-        st.error("⚠️ Please select at least one stock or sector.")
+        st.error("Please select at least one stock or sector.")
         stocks_to_analyze = []
     elif "All NSE Stocks" in selected_stocks:
         stocks_to_analyze = stock_list
     else:
         stocks_to_analyze = list(set([stock for sector in selected_stocks for stock in SECTORS.get(sector, [])]))
         if not stocks_to_analyze:
-            st.error("⚠️ No valid stocks found for the selected sectors.")
-    
+            st.error("No valid stocks found for the selected sectors.")
+
     symbol = st.sidebar.text_input("Enter Stock Symbol (e.g., RELIANCE.NS)", "")
     if symbol:
         data = fetch_stock_data_cached(symbol=symbol)
         if not data.empty:
-            data = analyze_stock(data)
+            data = analyze_stock(data, symbol=symbol)
             if data is None:
-                st.error(f"⚠️ Insufficient or invalid data for {symbol}")
+                st.error(f"Insufficient or invalid data for {symbol}")
             else:
                 recommendations = generate_recommendations(data, symbol)
-                display_dashboard(symbol, data, recommendations, stocks_to_analyze)
+                display_dashboard(symbol, data, recommendations, stocks_to_analyze, stock_list)
         else:
-            st.error(f"⚠️ No data found for {symbol}")
+            st.error(f"No data found for {symbol}")
+    else:
+        display_dashboard(selected_stocks=stocks_to_analyze, stock_list=stock_list)
