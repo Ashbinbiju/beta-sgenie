@@ -144,22 +144,22 @@ def retry(max_retries=3, delay=1, backoff_factor=2, jitter=0.5):
 
 @retry(max_retries=3, delay=2)
 def fetch_nse_stock_list():
- url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
- try:
- session = requests.Session()
- session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
- response = session.get(url, timeout=10)
- response.raise_for_status()
- nse_data = pd.read_csv(io.StringIO(response.text))
- stock_list = [f"{symbol}.NS" for symbol in nse_data['SYMBOL']]
- logging.info("Successfully fetched NSE stock list")
- return stock_list
- except Exception as e:
- logging.error(f"Failed to fetch NSE stock list: {str(e)}")
- if st._is_running_with_streamlit:
- st.warning("Failed to fetch stock list. Using fallback sectors.")
- fallback_list = list(set([stock for sector in SECTORS.values() for stock in sector]))
- return fallback_list
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    try:
+        session = requests.Session()
+        session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
+        response = session.get(url, timeout=10)
+        response.raise_for_status()
+        nse_data = pd.read_csv(io.StringIO(response.text))
+        stock_list = [f"{symbol}.NS" for symbol in nse_data['SYMBOL']]
+        logging.info("Successfully fetched NSE stock list")
+        return stock_list
+    except Exception as e:
+        logging.error(f"Failed to fetch NSE stock list: {str(e)}")
+        if st._is_running_with_streamlit:
+            st.warning("Failed to fetch stock list. Using fallback sectors.")
+        fallback_list = list(set([stock for sector in SECTORS.values() for stock in sector]))
+        return fallback_list
 
 @retry(max_retries=3, delay=2)
 def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"):
