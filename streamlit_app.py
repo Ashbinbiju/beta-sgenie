@@ -192,11 +192,14 @@ def fetch_stock_data_with_auth(symbol, period="5y", interval="1d", exchange="NS"
         if len(data) < 0.8 * len(expected_dates):
             logging.warning(f"Significant data gaps detected for {symbol}")
         logging.info(f"Successfully fetched data for {symbol}")
-        return data.copy()  # Return a copy to avoid mutable caching issues
+        return data.copy()
     except Exception as e:
         logging.error(f"Error fetching data for {symbol}: {str(e)}")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning(f"Unable to fetch data for {symbol}: {str(e)}")
+        except ImportError:
+            pass
         return pd.DataFrame()
 
 
@@ -252,8 +255,11 @@ def monte_carlo_simulation(data, simulations=1000, days=30):
 def extract_entities(text):
     if NLP is None:
         logging.warning("SpaCy model not available")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("Spacy model not installed. Install it with: python -m spacy download en_core_web_sm")
+        except ImportError:
+            pass
         return []
     try:
         doc = NLP(text)
@@ -271,8 +277,11 @@ def get_trending_stocks():
         return trending[0][:5].tolist()
     except Exception as e:
         logging.error(f"Error fetching trending stocks: {str(e)}")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("Unable to fetch trending stocks. Using fallback list.")
+        except ImportError:
+            pass
         return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "SBIN.NS"]
 
 def calculate_confidence_score(data, weights):
@@ -648,16 +657,22 @@ def analyze_stock(data, indicators=None, symbol=None):
 
     if data.empty or len(data) < max(min_data_requirements.values(), default=2):
         logging.warning("Not enough data to analyze stock")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("Not enough data to analyze this stock.")
+        except ImportError:
+            pass
         return None
 
     required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     missing_cols = [col for col in required_columns if col not in data.columns]
     if missing_cols:
         logging.error(f"Missing required data: {', '.join(missing_cols)}")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning(f"Missing required data: {', '.join(missing_cols)}")
+        except ImportError:
+            pass
         return None
 
     data = data.copy().interpolate(method='linear').fillna(method='ffill').fillna(method='bfill')
@@ -676,7 +691,6 @@ def analyze_stock(data, indicators=None, symbol=None):
 
     indicators = [ind for ind in indicator_order if ind in indicators]
 
-    # Indicator calculation mapping
     indicator_functions = {
         'RSI': lambda: calculate_rsi(data),
         'MACD': lambda: calculate_macd(data),
@@ -703,27 +717,29 @@ def analyze_stock(data, indicators=None, symbol=None):
         'Heikin-Ashi': lambda: calculate_heikin_ashi(data)
     }
 
-    # Loop over indicators and calculate them
     for indicator in indicators:
         if len(data) < min_data_requirements.get(indicator, 2):
             logging.warning(f"Not enough data for {indicator} (requires {min_data_requirements[indicator]} periods)")
-            if st._is_running_with_streamlit:
+            try:
+                import streamlit as st
                 st.warning(f"Not enough data for {indicator} (requires {min_data_requirements[indicator]} periods).")
+            except ImportError:
+                pass
             continue
 
         try:
-            # Execute corresponding indicator calculation function
             indicator_functions[indicator]()
             computed_indicators.append(indicator)
         except Exception as e:
             logging.error(f"Failed to compute {indicator}: {str(e)}")
-            if st._is_running_with_streamlit:
+            try:
+                import streamlit as st
                 st.warning(f"Unable to compute {indicator}: {str(e)}")
+            except ImportError:
+                pass
 
-    # Cleanup unnecessary columns
     data.drop(columns=[col for col in ['Cumulative_TP', 'Cumulative_Volume', 'MACD_hist'] if col in data.columns], inplace=True)
 
-    # Machine Learning Model update
     if symbol and computed_indicators:
         weights = update_indicator_weights(data, computed_indicators)
         model, selected_features = train_ml_model(data, computed_indicators)
@@ -802,7 +818,6 @@ def fetch_fundamentals(symbol):
         pe = min(pe, 50) if pe != float('inf') else 50
         debt_equity = info.get('debtToEquity', 100) / 100 if info.get('debtToEquity') else 1
         roe = info.get('returnOnEquity', 0)
-        # Placeholder for FII/DII activity and promoter holding (requires external API)
         fii_activity = info.get('netMoneyFlow', 0) if 'netMoneyFlow' in info else 0
         promoter_holding = info.get('promoterHolding', 50) if 'promoterHolding' in info else 50
         
@@ -818,9 +833,11 @@ def fetch_fundamentals(symbol):
     
     except Exception as e:
         logging.error(f"Failed to fetch fundamentals for {symbol}: {str(e)}")
-        if st._is_running_with_streamlit: 
+        try:
+            import streamlit as st
             st.warning(f"Unable to fetch fundamental data for {symbol}.")
-        
+        except ImportError:
+            pass
         return {
             'P/E': np.float32(50), 'EPS': np.float32(0), 'RevenueGrowth': np.float32(0),
             'Debt/Equity': np.float32(1), 'ROE': np.float32(0), 'FII_Activity': np.float32(0),
@@ -1125,8 +1142,11 @@ def analyze_batch(stock_batch, batch_size, timeout=60):
                 logging.error(f"Error analyzing {symbol}: {str(e)}")
     gc.collect()
     for error in errors:
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning(error)
+        except ImportError:
+            pass
     return results
 
 def analyze_stock_parallel(symbol):
@@ -1178,8 +1198,11 @@ def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
 
     results_df = pd.DataFrame([r for r in results if r is not None])
     if results_df.empty:
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("No valid stock data retrieved.")
+        except ImportError:
+            pass
         return pd.DataFrame()
     for col in ["Score", "Net_Score", "Confidence", "Current Price"]:
         if col not in results_df.columns:
@@ -1208,14 +1231,18 @@ def analyze_intraday_stocks(stock_list, batch_size=10, progress_callback=None):
 
     results_df = pd.DataFrame([r for r in results if r is not None])
     if results_df.empty:
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("No valid intraday stock data retrieved.")
+        except ImportError:
+            pass
         return pd.DataFrame()
     if "Net_Score" not in results_df.columns:
         results_df["Net_Score"] = 0
     if "Confidence" not in results_df.columns:
         results_df["Confidence"] = 0
     return results_df[results_df["Intraday"].isin(["Buy", "Strong Buy"])].sort_values(by=["Confidence", "Net_Score"], ascending=False).head(5)
+ 
 
 def colored_recommendation(recommendation):
     if "Buy" in recommendation:
