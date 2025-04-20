@@ -156,8 +156,11 @@ def fetch_nse_stock_list():
         return stock_list
     except Exception as e:
         logging.error(f"Failed to fetch NSE stock list: {str(e)}")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.warning("Failed to fetch stock list. Using fallback sectors.")
+        except ImportError:
+            pass
         fallback_list = list(set([stock for sector in SECTORS.values() for stock in sector]))
         return fallback_list
 
@@ -1462,5 +1465,8 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         logging.error(f"Application error: {str(e)}")
-        if st._is_running_with_streamlit:
+        try:
+            import streamlit as st
             st.error(f"An unexpected error occurred: {str(e)}")
+        except ImportError:
+            print(f"An unexpected error occurred: {str(e)}")
