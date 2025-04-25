@@ -16,7 +16,7 @@ from pytrends.request import TrendReq
 import numpy as np
 import itertools
 from arch import arch_model
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry,stop_after_attempt, wait_fixed
 
 
 TOOLTIPS = {
