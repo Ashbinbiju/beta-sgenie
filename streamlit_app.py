@@ -16,8 +16,9 @@ from pytrends.request import TrendReq
 import numpy as np
 import itertools
 from arch import arch_model
-from tenacity import retry,stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed  # Added for retry decorator
 
+ALPHA_VANTAGE_KEY = "TCAUKYUCIDZ6PI57"
 
 TOOLTIPS = {
     "RSI": "Relative Strength Index (30=Oversold, 70=Overbought)",
@@ -58,7 +59,7 @@ SECTORS = {
 def tooltip(label, explanation):
     return f"{label} 📌 ({explanation})"
 
-@retry(max_retries=3, delay=2)
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))  # Updated to use tenacity
 def fetch_nse_stock_list():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     try:
@@ -332,6 +333,51 @@ def generate_recommendations(data, symbol=None):
     
     return recommendations
 
+# Added missing colored_recommendation function
+def colored_recommendation(recommendation):
+    """Return a colored recommendation string for display in Streamlit."""
+    color_map = {
+        "Strong Buy": "green",
+        "Buy": "lightgreen",
+        "Hold": "gray",
+        "Sell": "lightcoral",
+        "Strong Sell": "red",
+        "Buy on Dips": "lightgreen",
+        "Sell on Rallies": "lightcoral"
+    }
+    color = color_map.get(recommendation, "gray")
+    return f'<span style="color:{color}">{recommendation}</span>'
+
+# Added missing analyze_all_stocks function
+def analyze_all_stocks(stock_list):
+    """Analyze multiple stocks and return top 10 based on confidence score."""
+    results = []
+    for symbol in tqdm(stock_list, desc="Analyzing stocks"):
+        try:
+            data = fetch_stock_data_cached(symbol)
+            if not data.empty:
+                data = analyze_stock(data)
+                recommendations = generate_recommendations(data, symbol)
+                results.append({
+                    "Symbol": symbol,
+                    "Current Price": recommendations["Current Price"],
+                    "Buy At": recommendations["Buy At"],
+                    "Stop Loss": recommendations["Stop Loss"],
+                    "Target": recommendations["Target"],
+                    "Intraday": recommendations["Intraday"],
+                    "Swing": recommendations["Swing"],
+                    "Position": recommendations["Position"],
+                    "Confidence": recommendations["Confidence"],
+                    "Risk": recommendations["Risk"],
+                    "Position Size": recommendations["Position Size"]
+                })
+        except Exception:
+            continue
+    results_df = pd.DataFrame(results)
+    if not results_df.empty:
+        results_df = results_df.sort_values(by="Confidence", ascending=False).head(10)
+    return results_df
+
 def display_dashboard(symbol=None, data=None, recommendations=None, selected_stocks=None):
     st.title("📊 Enhanced StockGenie Pro")
     
@@ -350,7 +396,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
                         **Swing:** {colored_recommendation(row['Swing'])}  
                         **Position:** {colored_recommendation(row['Position'])}  
                         **Risk:** {row['Risk']} | **Position Size:** {row['Position Size']}
-                        """)
+                        """, unsafe_allow_html=True)  # Enable HTML for colored text
     
     if symbol and not data.empty:
         st.header(f"{symbol.split('.')[0]} Analysis")
@@ -365,9 +411,9 @@ def display_dashboard(symbol=None, data=None, recommendations=None, selected_sto
         # Recommendations
         st.subheader("Trading Recommendations")
         rec_cols = st.columns(3)
-        rec_cols[0].markdown(f"**Intraday**\n\n{colored_recommendation(recommendations['Intraday'])}")
-        rec_cols[1].markdown(f"**Swing**\n\n{colored_recommendation(recommendations['Swing'])}")
-        rec_cols[2].markdown(f"**Position**\n\n{colored_recommendation(recommendations['Position'])}")
+        rec_cols[0].markdown(f"**Intraday**\n\n{colored_recommendation(recommendations['Intraday'])}", unsafe_allow_html=True)
+        rec_cols[1].markdown(f"**Swing**\n\n{colored_recommendation(recommendations['Swing'])}", unsafe_allow_html=True)
+        rec_cols[2].markdown(f"**Position**\n\n{colored_recommendation(recommendations['Position'])}", unsafe_allow_html=True)
         
         # Charts
         tab1, tab2, tab3 = st.tabs(["Price Action", "Indicators", "Advanced"])
