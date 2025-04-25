@@ -16,8 +16,8 @@ from pytrends.request import TrendReq
 import numpy as np
 import itertools
 from arch import arch_model
+from tenacity import retry, stop_after_attempt, wait_fixed
 
-ALPHA_VANTAGE_KEY = "TCAUKYUCIDZ6PI57"
 
 TOOLTIPS = {
     "RSI": "Relative Strength Index (30=Oversold, 70=Overbought)",
