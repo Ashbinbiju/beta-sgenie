@@ -7,12 +7,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import warnings
 import sqlite3
-from arch import arch_model
 import requests
-import io
+import pyotp
+import time
 import random
-import itertools
 import os
+from smartapi import SmartConnect
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -26,6 +26,14 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/124.0.2478.80 Safari/537.36"
 ]
+
+# Angel One Smart API Credentials
+CLIENT_ID = "AAAG399109"
+PASSWORD = "1503"
+TOTP_SECRET = "OLRQ3CYBLPN2XWQPHLKMB7WEKI"
+HISTORICAL_API_KEY = "c3C0tMGn"
+TRADING_API_KEY = "ruseeaBq"
+MARKET_API_KEY = "PflRFXyd"
 
 # Database setup
 def init_database():
@@ -49,6 +57,32 @@ def init_database():
     ''')
     conn.close()
 
+# Smart API Session Manager
+class SmartAPISession:
+    def __init__(self):
+        self.client = SmartConnect(api_key=HISTORICAL_API_KEY)
+        self.totp = pyotp.TOTP(TOTP_SECRET)
+        self.session = None
+
+    def login(self):
+        try:
+            totp_code = self.totp.now()
+            self.session = self.client.generateSession(CLIENT_ID, PASSWORD, totp_code)
+            if self.session['status']:
+                print("Smart API login successful")
+                return True
+            else:
+                print("Smart API login failed:", self.session['message'])
+                return False
+        except Exception as e:
+            print(f"Error during Smart API login: {str(e)}")
+            return False
+
+    def get_client(self):
+        if not self.session:
+            self.login()
+        return self.client
+
 # Data fetching functions
 def retry(max_retries=5, delay=5, backoff_factor=2, jitter=1):
     def decorator(func):
@@ -57,8 +91,8 @@ def retry(max_retries=5, delay=5, backoff_factor=2, jitter=1):
             while retries < max_retries:
                 try:
                     return func(*args, **kwargs)
-                except requests.exceptions.HTTPError as e:
-                    if e.response.status_code == 429:
+                except Exception as e:
+                    if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 429:
                         retries += 1
                         if retries == max_retries:
                             raise e
@@ -66,44 +100,75 @@ def retry(max_retries=5, delay=5, backoff_factor=2, jitter=1):
                         print(f"Rate limit hit. Retrying after {sleep_time:.2f} seconds...")
                         time.sleep(sleep_time)
                     else:
-                        raise e
-                except (requests.exceptions.RequestException, ConnectionError) as e:
-                    retries += 1
-                    if retries == max_retries:
-                        raise e
-                    sleep_time = (delay * (backoff_factor ** retries)) + random.uniform(0, jitter)
-                    time.sleep(sleep_time)
+                        retries += 1
+                        if retries == max_retries:
+                            raise e
+                        sleep_time = (delay * (backoff_factor ** retries)) + random.uniform(0, jitter)
+                        time.sleep(sleep_time)
         return wrapper
     return decorator
 
 @retry(max_retries=5, delay=5)
 def fetch_stock_data(symbol, period="5y", interval="1d"):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval={interval}&range={period}"
-        headers = {"User-Agent": random.choice(USER_AGENTS)}
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        if 'chart' not in data or 'result' not in data['chart'] or not data['chart']['result']:
+        # Initialize Smart API session
+        session = SmartAPISession()
+        client = session.get_client()
+        if not client:
             return pd.DataFrame()
+
+        # Convert Yahoo Finance symbol to Smart API format (e.g., RELIANCE.NS -> RELIANCE-EQ)
+        symbol_name = symbol.replace(".NS", "-EQ")
         
-        result = data['chart']['result'][0]
-        timestamps = result['timestamp']
-        quotes = result['indicators']['quote'][0]
+        # Map symbol to token (simplified; ideally, fetch from instrument list)
+        symbol_map = {
+            "RELIANCE-EQ": "2885",
+            "TATASTEEL-EQ": "3499",
+            "HDFCBANK-EQ": "1333",
+            "INFY-EQ": "1594",
+            "ICICIBANK-EQ": "1394",
+            "BHARTIARTL-EQ": "106",
+            "ITC-EQ": "1660",
+            "KOTAKBANK-EQ": "1922",
+            "HINDUNILVR-EQ": "1348",
+            "SBIN-EQ": "3045",
+            "BAJFINANCE-EQ": "317",
+            "TCS-EQ": "11536"
+        }
         
-        df = pd.DataFrame({
-            'Date': pd.to_datetime(timestamps, unit='s'),
-            'Open': quotes['open'],
-            'High': quotes['high'],
-            'Low': quotes['low'],
-            'Close': quotes['close'],
-            'Volume': quotes['volume']
-        }).dropna()
+        if symbol_name not in symbol_map:
+            print(f"Symbol {symbol_name} not found in token map")
+            return pd.DataFrame()
+
+        symbol_token = symbol_map[symbol_name]
         
-        df.set_index('Date', inplace=True)
-        return df
-    
+        # Calculate date range
+        end_date = datetime.now()
+        if period == "5y":
+            start_date = end_date - timedelta(days=5*365)
+        else:
+            print(f"Unsupported period: {period}")
+            return pd.DataFrame()
+
+        # Fetch historical data
+        historical_data = client.getCandleData({
+            "exchange": "NSE",
+            "symboltoken": symbol_token,
+            "interval": "ONE_DAY" if interval == "1d" else interval,
+            "fromdate": start_date.strftime('%Y-%m-%d %H:%M'),
+            "todate": end_date.strftime('%Y-%m-%d %H:%M')
+        })
+
+        if historical_data['status'] and historical_data['data']:
+            data = historical_data['data']
+            df = pd.DataFrame(data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+            df['Date'] = pd.to_datetime(df['Date'])
+            df.set_index('Date', inplace=True)
+            return df.dropna()
+        else:
+            print(f"No data returned for {symbol}: {historical_data.get('message', 'Unknown error')}")
+            return pd.DataFrame()
+
     except Exception as e:
         print(f"Error fetching data for {symbol}: {str(e)}")
         return pd.DataFrame()
@@ -473,7 +538,7 @@ def main():
     #######################################################
     """)
     
-    # Example stocks to backtest (NSE symbols)
+    # Example stocks to backtest (NSE symbols in Yahoo Finance format)
     stock_list = [
         "RELIANCE.NS", "TATASTEEL.NS", "HDFCBANK.NS", 
         "INFY.NS", "ICICIBANK.NS", "BHARTIARTL.NS",
