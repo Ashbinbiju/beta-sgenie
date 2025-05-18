@@ -16,3 +16,5 @@ pycryptodome==3.20.0
 python-dotenv
 pyotp
 matplotlib
+smartapi
+smartapi-python
