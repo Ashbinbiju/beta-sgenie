@@ -1715,31 +1715,27 @@ def insert_top_picks(results_df, pick_type="daily"):
 
 def analyze_batch(stock_batch):
     """
-    Analyzes a batch of stocks in parallel, aggregating errors for summary reporting.
-    Returns a list of valid results.
+    Sequential analysis (no parallelism) to avoid rate limits.
     """
     results = []
     errors = []
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(analyze_stock_parallel, symbol): symbol for symbol in stock_batch}
-        for future in as_completed(futures):
-            symbol = futures[future]
-            try:
-                result = future.result()
-                if result:
-                    results.append(result)
-            except Exception as e:
-                error_msg = f"Error processing {symbol}: {str(e)}"
-                errors.append(error_msg)
-                logging.error(error_msg)
+    for symbol in tqdm(stock_batch, desc="Processing batch"):  # Add tqdm for progress
+        try:
+            result = analyze_stock_parallel(symbol)
+            if result:
+                results.append(result)
+            time.sleep(5)  # 5s delay per stock (adjust to 10 if still failing)
+        except Exception as e:
+            error_msg = f"Error processing {symbol}: {str(e)}"
+            errors.append(error_msg)
+            logging.error(error_msg)
+            time.sleep(2)  # Shorter delay on error
 
     if errors:
         logging.error(f"Batch errors: {len(errors)} total\n" + "\n".join(errors))
-        # Display summary warning in main thread
-        st.session_state['batch_errors'] = f"Encountered {len(errors)} errors during batch processing. Check logs for details."
+        st.session_state['batch_errors'] = f"Encountered {len(errors)} errors. Check logs."
 
     return results
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_stock_parallel(symbol):
@@ -1815,7 +1811,7 @@ def analyze_stock_parallel(symbol):
         logging.error(error_msg)
         return None
 
-def analyze_all_stocks(stock_list, batch_size=5, progress_callback=None):
+def analyze_all_stocks(stock_list, batch_size=3, progress_callback=None):  # Reduced batch_size
     results = []
     total_batches = (len(stock_list) // batch_size) + (1 if len(stock_list) % batch_size != 0 else 0)
     for i in range(0, len(stock_list), batch_size):
@@ -1824,7 +1820,7 @@ def analyze_all_stocks(stock_list, batch_size=5, progress_callback=None):
         results.extend([r for r in batch_results if r is not None])
         if progress_callback:
             progress_callback((i + len(batch)) / len(stock_list))
-        time.sleep(3)
+        time.sleep(10)  # 10s delay between batches
     
     results_df = pd.DataFrame(results)
     if results_df.empty:
