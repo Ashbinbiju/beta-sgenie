@@ -1815,7 +1815,7 @@ def analyze_stock_parallel(symbol):
         logging.error(error_msg)
         return None
 
-def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
+def analyze_all_stocks(stock_list, batch_size=5, progress_callback=None):
     results = []
     total_batches = (len(stock_list) // batch_size) + (1 if len(stock_list) % batch_size != 0 else 0)
     for i in range(0, len(stock_list), batch_size):
@@ -1839,7 +1839,7 @@ def analyze_all_stocks(stock_list, batch_size=10, progress_callback=None):
         results_df = results_df[results_df["Recommendation"].str.contains("Buy|Sell", na=False)]
     return results_df.sort_values(by="Score", ascending=False).head(5)
 
-def analyze_intraday_stocks(stock_list, batch_size=10, delay=3, top_n=5, progress_callback=None):
+def analyze_intraday_stocks(stock_list, batch_size=5, delay=3, top_n=5, progress_callback=None):
     if not stock_list:
         st.warning("Empty stock list provided.")
         return pd.DataFrame()
@@ -1982,7 +1982,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None):
         ])
         results_df = analyze_all_stocks(
             selected_stocks,
-            batch_size=10,
+            batch_size=5,
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         insert_top_picks(results_df, pick_type="daily")
@@ -2033,7 +2033,7 @@ def display_dashboard(symbol=None, data=None, recommendations=None):
         ])
         intraday_results = analyze_intraday_stocks(
             selected_stocks,
-            batch_size=10,
+            batch_size=5,
             progress_callback=lambda x: update_progress(progress_bar, loading_text, x, loading_messages)
         )
         insert_top_picks(intraday_results, pick_type="intraday")
