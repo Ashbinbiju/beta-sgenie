@@ -29,6 +29,23 @@ from scipy.stats.mstats import winsorize
 from streamlit import cache_data
 from itertools import cycle
 
+# Global session cache
+_global_smart_api = None
+_session_timestamp = None
+SESSION_EXPIRY = 900  # 15 mins in seconds
+
+def get_global_smart_api():
+    global _global_smart_api, _session_timestamp
+    now = time.time()
+    if _global_smart_api is None or (now - _session_timestamp) > SESSION_EXPIRY:
+        st.info("🔄 Refreshing SmartAPI session...")
+        _global_smart_api = init_smartapi_client()
+        _session_timestamp = now
+        if not _global_smart_api:
+            st.error("❌ Failed to initialize global session.")
+            return None
+    return _global_smart_api
+    
 load_dotenv()
 
 @st.cache_data(ttl=86400)
@@ -375,9 +392,9 @@ def fetch_stock_data_with_auth(symbol, period="2y", interval="1d"):
         if "-EQ" not in symbol:
             symbol = f"{symbol.split('.')[0]}-EQ"
 
-        smart_api = init_smartapi_client()
+        smart_api = get_global_smart_api()
         if not smart_api:
-            raise ValueError("SmartAPI client initialization failed")
+            raise ValueError("Global SmartAPI session unavailable")
 
         end_date = datetime.now()
         if period == "2y":
@@ -1739,16 +1756,12 @@ def analyze_batch(stock_batch):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_stock_parallel(symbol):
-    """
-    Analyzes a single stock, logging detailed context on errors.
-    Returns a dictionary with analysis results or None on failure.
-    """
     try:
-        logging.info(f"Starting analysis for {symbol}")
+        logging.info(f"Fetching data for {symbol}...")
         data = fetch_stock_data_cached(symbol)
-
+        logging.info(f"Fetched {len(data)} rows for {symbol}")
         if data.empty or len(data) < 50:
-            logging.warning(f"No sufficient data for {symbol}: {len(data)} rows")
+            logging.warning(f"Insufficient data for {symbol}: {len(data)} rows")
             return None
 
         data = analyze_stock(data)
@@ -1807,8 +1820,7 @@ def analyze_stock_parallel(symbol):
             }
 
     except Exception as e:
-        error_msg = f"Error in analyze_stock_parallel for {symbol}: {str(e)} (data shape: {data.shape if 'data' in locals() else 'N/A'})"
-        logging.error(error_msg)
+        logging.error(f"Full error for {symbol}: {str(e)}")
         return None
 
 def analyze_all_stocks(stock_list, batch_size=3, progress_callback=None):  # Reduced batch_size
