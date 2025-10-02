@@ -266,8 +266,8 @@ SECTORS = {
         "ZEEL-EQ", "SUNTV-EQ", "TVTODAY-EQ", "DISHTV-EQ", "HATHWAY-EQ",
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
     ]
-}
-]
+ }
+
 TOOLTIPS = {
     "Score": "Signal strength (0-100). 50=neutral, 65+=buy zone, 35-=sell zone",
     "RSI": "Momentum indicator (30=oversold, 70=overbought)",
