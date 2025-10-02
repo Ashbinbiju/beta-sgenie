@@ -2147,7 +2147,7 @@ def main():
     selected_sectors = st.sidebar.multiselect(
         "Select Sectors",
         sector_options,
-        default=["ALL"],
+        default=["All"],
         help="Choose sectors"
     )
     
