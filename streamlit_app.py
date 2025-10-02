@@ -1,7 +1,7 @@
 # ============================================================================
-# STOCKGENIE PRO - PRODUCTION VERSION V2.2 (WITH INDEX TREND INTEGRATION)
+# STOCKGENIE PRO - PRODUCTION VERSION V2.3 (WITH MARKET BREADTH)
 # Enhanced Swing + Intraday Trading System
-# NEW: Index alignment for better accuracy
+# NEW: Market breadth, sector performance, industry analysis
 # ============================================================================
 
 import pandas as pd
@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
 load_dotenv()
 
-# Environment variables - ALL FROM .ENV NOW
+# Environment variables
 CLIENT_ID = os.getenv("CLIENT_ID")
 PASSWORD = os.getenv("PASSWORD")
 TOTP_SECRET = os.getenv("TOTP_SECRET")
@@ -49,7 +49,7 @@ API_KEYS = {
 # Global session cache
 _global_smart_api = None
 _session_timestamp = None
-SESSION_EXPIRY = 3600  # 1 hour
+SESSION_EXPIRY = 3600
 
 cache = Cache("stock_data_cache")
 
@@ -97,6 +97,19 @@ SECTORS = {
     ]
 }
 
+# Industry mapping for stocks
+INDUSTRY_MAP = {
+    "Financial Services": ["HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ", 
+                          "INDUSINDBK-EQ", "PNB-EQ", "BANKBARODA-EQ", "CANBK-EQ", "UNIONBANK-EQ"],
+    "Information Technology": ["TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ"],
+    "Automobile and Auto Components": ["MARUTI-EQ", "TATAMOTORS-EQ", "M&M-EQ", "BAJAJ-AUTO-EQ", "HEROMOTOCO-EQ"],
+    "Healthcare": ["SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "DIVISLAB-EQ", "AUROPHARMA-EQ", "APOLLOHOSP-EQ"],
+    "Fast Moving Consumer Goods": ["HINDUNILVR-EQ", "ITC-EQ", "NESTLEIND-EQ", "BRITANNIA-EQ", "DABUR-EQ"],
+    "Oil Gas & Consumable Fuels": ["RELIANCE-EQ", "ONGC-EQ", "IOC-EQ", "BPCL-EQ", "HPCL-EQ"],
+    "Metals & Mining": ["TATASTEEL-EQ", "JSWSTEEL-EQ", "HINDALCO-EQ", "VEDL-EQ", "SAIL-EQ"],
+    "Construction Materials": ["ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ"]
+}
+
 # Tooltips
 TOOLTIPS = {
     "Score": "Signal strength (0-100). 50=neutral, 65+=buy zone, 35-=sell zone",
@@ -106,14 +119,278 @@ TOOLTIPS = {
     "ADX": "Trend strength (>25 = strong, <20 = weak/choppy)",
     "VWAP": "Volume-weighted price - intraday benchmark",
     "EMA": "Exponential Moving Average - trend filter",
-    "OR": "Opening Range - first 15-30min high/low levels"
+    "OR": "Opening Range - first 15-30min high/low levels",
+    "Breadth": "Market internals - advancing vs declining stocks"
 }
+
+# ============================================================================
+# MARKET BREADTH & SECTOR PERFORMANCE INTEGRATION
+# ============================================================================
+
+@st.cache_data(ttl=900)  # Cache for 15 minutes
+def fetch_market_breadth():
+    """Fetch overall market breadth data"""
+    try:
+        response = requests.get(
+            "https://brkpoint.in/api/market-stats",
+            timeout=10,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.warning(f"Market breadth API failed: {str(e)}")
+        return None
+
+@st.cache_data(ttl=900)
+def fetch_sector_performance():
+    """Fetch sector indices performance (Nifty50, SmallCap, MidCap, etc.)"""
+    try:
+        response = requests.get(
+            "https://brkpoint.in/api/sector-indices-performance",
+            timeout=10,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.warning(f"Sector performance API failed: {str(e)}")
+        return None
+
+def calculate_market_health_score():
+    """
+    Calculate overall market health score (0-100)
+    Based on breadth, sector performance, and volatility
+    """
+    breadth_data = fetch_market_breadth()
+    sector_data = fetch_sector_performance()
+    
+    if not breadth_data or not sector_data:
+        return 50, "Unknown", {}  # Neutral if data unavailable
+    
+    score = 0
+    factors = {}
+    
+    # ===== MARKET BREADTH (40 points max) =====
+    breadth = breadth_data.get('breadth', {})
+    total = breadth.get('total', 1)
+    advancing = breadth.get('advancing', 0)
+    declining = breadth.get('declining', 0)
+    
+    adv_ratio = (advancing / total) * 100 if total > 0 else 50
+    factors['advance_ratio'] = adv_ratio
+    
+    # Breadth scoring
+    if adv_ratio > 70:
+        score += 40
+        breadth_signal = "Very Strong"
+    elif adv_ratio > 60:
+        score += 30
+        breadth_signal = "Strong"
+    elif adv_ratio > 50:
+        score += 20
+        breadth_signal = "Moderate"
+    elif adv_ratio > 40:
+        score += 10
+        breadth_signal = "Weak"
+    else:
+        score += 0
+        breadth_signal = "Very Weak"
+    
+    factors['breadth_signal'] = breadth_signal
+    
+    # ===== SECTOR INDICES MOMENTUM (30 points max) =====
+    sectors = sector_data.get('data', [])
+    
+    # Calculate average momentum across major indices
+    nifty50 = next((s for s in sectors if s['sector_index'] == 'Nifty50'), None)
+    nifty500 = next((s for s in sectors if s['sector_index'] == 'Nifty500'), None)
+    
+    avg_momentum = 0
+    count = 0
+    
+    if nifty50:
+        avg_momentum += nifty50.get('momentum', 0)
+        count += 1
+    
+    if nifty500:
+        avg_momentum += nifty500.get('momentum', 0)
+        count += 1
+    
+    avg_momentum = avg_momentum / count if count > 0 else 0
+    factors['avg_momentum'] = avg_momentum
+    
+    # Momentum scoring
+    if avg_momentum > 25:
+        score += 30
+        momentum_signal = "Very Strong"
+    elif avg_momentum > 15:
+        score += 20
+        momentum_signal = "Strong"
+    elif avg_momentum > 5:
+        score += 10
+        momentum_signal = "Moderate"
+    elif avg_momentum > -5:
+        score += 5
+        momentum_signal = "Weak"
+    else:
+        score += 0
+        momentum_signal = "Very Weak"
+    
+    factors['momentum_signal'] = momentum_signal
+    
+    # ===== VOLATILITY & RISK (30 points max) =====
+    if nifty50:
+        volatility = nifty50.get('volatility_score', 0)
+        factors['volatility'] = volatility
+        
+        # Lower volatility is better for trading
+        if volatility < 5:
+            score += 30
+            vol_signal = "Very Low (Ideal)"
+        elif volatility < 10:
+            score += 20
+            vol_signal = "Low (Good)"
+        elif volatility < 15:
+            score += 10
+            vol_signal = "Moderate"
+        elif volatility < 20:
+            score += 5
+            vol_signal = "High"
+        else:
+            score += 0
+            vol_signal = "Very High (Risky)"
+        
+        factors['volatility_signal'] = vol_signal
+    
+    # Overall signal
+    if score >= 80:
+        overall_signal = "Very Bullish"
+    elif score >= 60:
+        overall_signal = "Bullish"
+    elif score >= 40:
+        overall_signal = "Neutral"
+    elif score >= 20:
+        overall_signal = "Bearish"
+    else:
+        overall_signal = "Very Bearish"
+    
+    return score, overall_signal, factors
+
+def get_industry_performance(symbol):
+    """Get industry performance for a specific stock"""
+    breadth_data = fetch_market_breadth()
+    
+    if not breadth_data:
+        return None
+    
+    # Find which industry the stock belongs to
+    stock_industry = None
+    for industry, stocks in INDUSTRY_MAP.items():
+        if symbol in stocks:
+            stock_industry = industry
+            break
+    
+    if not stock_industry:
+        return None
+    
+    # Get industry performance
+    industries = breadth_data.get('industry', [])
+    industry_data = next((ind for ind in industries if ind['Industry'] == stock_industry), None)
+    
+    return industry_data
+
+def calculate_industry_alignment_score(industry_data, signal_direction):
+    """
+    Calculate bonus/penalty based on industry performance
+    
+    Args:
+        industry_data: Industry performance data
+        signal_direction: 'bullish' or 'bearish'
+    
+    Returns:
+        Score adjustment (-5 to +5)
+    """
+    if not industry_data:
+        return 0
+    
+    avg_change = industry_data.get('avgChange', 0)
+    advance_ratio = (industry_data.get('advancing', 0) / industry_data.get('total', 1)) * 100
+    
+    score_adjustment = 0
+    
+    if signal_direction == 'bullish':
+        # Industry is strong
+        if avg_change > 1.5 and advance_ratio > 70:
+            score_adjustment += 5
+        elif avg_change > 1.0 and advance_ratio > 60:
+            score_adjustment += 3
+        elif avg_change > 0.5 and advance_ratio > 50:
+            score_adjustment += 1
+        # Industry is weak
+        elif avg_change < 0 or advance_ratio < 40:
+            score_adjustment -= 3
+    
+    elif signal_direction == 'bearish':
+        # Industry is weak (good for shorts)
+        if avg_change < -1.0 and advance_ratio < 30:
+            score_adjustment += 5
+        elif avg_change < -0.5 and advance_ratio < 40:
+            score_adjustment += 3
+        # Industry is strong (bad for shorts)
+        elif avg_change > 1.0 or advance_ratio > 60:
+            score_adjustment -= 3
+    
+    return score_adjustment
+
+def get_market_cap_category(symbol):
+    """Determine if stock is large/mid/small cap based on sector membership"""
+    # This is a simplified version - you could enhance with actual market cap data
+    large_cap_stocks = SECTORS.get('Bank', []) + SECTORS.get('IT', [])[:5]
+    
+    if symbol in large_cap_stocks:
+        return "Nifty50"
+    else:
+        return "Niftymidcap100"
+
+def calculate_market_breadth_alignment(signal_direction):
+    """
+    Calculate alignment with overall market breadth
+    
+    Returns:
+        Score adjustment (-10 to +10)
+    """
+    market_health, market_signal, factors = calculate_market_health_score()
+    
+    score_adjustment = 0
+    
+    if signal_direction == 'bullish':
+        if market_health >= 80:
+            score_adjustment += 10
+        elif market_health >= 60:
+            score_adjustment += 5
+        elif market_health <= 30:
+            score_adjustment -= 8
+        elif market_health <= 40:
+            score_adjustment -= 3
+    
+    elif signal_direction == 'bearish':
+        if market_health <= 20:
+            score_adjustment += 10
+        elif market_health <= 40:
+            score_adjustment += 5
+        elif market_health >= 70:
+            score_adjustment -= 8
+        elif market_health >= 60:
+            score_adjustment -= 3
+    
+    return score_adjustment
 
 # ============================================================================
 # INDEX TREND INTEGRATION
 # ============================================================================
 
-@st.cache_data(ttl=900)  # Cache for 15 minutes
+@st.cache_data(ttl=900)
 def fetch_index_trend():
     """Fetch Nifty & Bank Nifty trend from external API"""
     try:
@@ -187,9 +464,9 @@ def calculate_index_alignment_score(trend_data, signal_direction):
         elif 'Uptrend' in trend or 'Weak Uptrend' in trend:
             score_adjustment += 5
         elif 'Downtrend' in trend:
-            score_adjustment -= 8  # Penalty for counter-trend
+            score_adjustment -= 8
         elif 'Consolidation' in trend and adx < 20:
-            score_adjustment += 2  # Slight bonus in choppy markets
+            score_adjustment += 2
     
     elif signal_direction == 'bearish':
         if 'Strong Downtrend' in trend:
@@ -282,10 +559,7 @@ def retry(max_retries=3, delay=5, backoff_factor=2):
     return decorator
     
 def calculate_rma(series, period):
-    """
-    Wilder's smoothing (RMA) used in ATR calculation.
-    Matches TradingView's ta.rma() function.
-    """
+    """Wilder's smoothing (RMA) used in ATR calculation"""
     alpha = 1.0 / period
     return series.ewm(alpha=alpha, adjust=False).mean()
     
@@ -352,9 +626,9 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
             
             # Intelligent cache expiry
             if interval == "1d":
-                expire = 86400  # 24 hours for daily data
+                expire = 86400
             else:
-                expire = 300  # 5 minutes for intraday data
+                expire = 300
             
             buffer = io.BytesIO()
             data.to_pickle(buffer)
@@ -369,7 +643,7 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
         return pd.DataFrame()
 
 def fetch_stock_data_cached(symbol, period="1y", interval="1d"):
-    """Wrapper for stock data fetching - uses disk cache only"""
+    """Wrapper for stock data fetching"""
     return fetch_stock_data_with_auth(symbol, period, interval)
 
 # ============================================================================
@@ -401,19 +675,17 @@ def validate_data(data, required_columns=None, min_length=50):
     return True
 
 # ============================================================================
-# SWING TRADING INDICATORS (DAILY TIMEFRAME)
+# SWING TRADING INDICATORS
 # ============================================================================
 
 def calculate_swing_indicators(data):
-    """
-    Calculate swing trading indicators matching TradingView defaults
-    """
+    """Calculate swing trading indicators matching TradingView defaults"""
     if not validate_data(data, min_length=200):
         return data
     
     df = data.copy()
     
-    # ==================== MACD (EMA-based, matching TradingView) ====================
+    # MACD
     df['EMA_12'] = ta.trend.EMAIndicator(df['Close'], window=12).ema_indicator()
     df['EMA_26'] = ta.trend.EMAIndicator(df['Close'], window=26).ema_indicator()
     df['MACD'] = df['EMA_12'] - df['EMA_26']
@@ -421,16 +693,16 @@ def calculate_swing_indicators(data):
     df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
     df.drop(['EMA_12', 'EMA_26'], axis=1, inplace=True)
     
-    # ==================== 200 EMA ====================
+    # 200 EMA
     df['EMA_200'] = ta.trend.EMAIndicator(df['Close'], window=200).ema_indicator()
     df['Above_EMA200'] = df['Close'] > df['EMA_200']
     
-    # ==================== RSI ====================
+    # RSI
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
     df['RSI_Oversold'] = np.where(df['Above_EMA200'], 40, 30)
     df['RSI_Overbought'] = np.where(df['Above_EMA200'], 70, 60)
     
-    # ==================== ATR (RMA/Wilder's smoothing) ====================
+    # ATR
     df['TR'] = np.maximum(
         df['High'] - df['Low'],
         np.maximum(
@@ -442,7 +714,7 @@ def calculate_swing_indicators(data):
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
     df.drop('TR', axis=1, inplace=True)
     
-    # ==================== Bollinger Bands ====================
+    # Bollinger Bands
     bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = bb.bollinger_hband()
     df['BB_Middle'] = bb.bollinger_mavg()
@@ -450,11 +722,11 @@ def calculate_swing_indicators(data):
     df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
     df['BB_Position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
     
-    # ==================== ADX ====================
+    # ADX
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
     df['Trending'] = df['ADX'] > 25
     
-    # ==================== Volume ====================
+    # Volume
     df['Volume_SMA'] = df['Volume'].rolling(20).mean()
     df['Volume_Spike'] = df['Volume'] > (df['Volume_SMA'] * 1.5)
     df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA'].clip(lower=0.001)
@@ -495,7 +767,7 @@ def detect_swing_regime(df):
         return "Neutral"
 
 def calculate_swing_score(df, symbol=None, timeframe='1d'):
-    """Calculate swing trading score with INDEX ALIGNMENT"""
+    """Calculate swing trading score with INDEX + MARKET BREADTH + INDUSTRY ALIGNMENT"""
     score = 0
     
     close = df['Close'].iloc[-1]
@@ -555,29 +827,37 @@ def calculate_swing_score(df, symbol=None, timeframe='1d'):
         else:
             score -= 1
     
-    # ===== INDEX ALIGNMENT (NEW) =====
+    # ===== MARKET CONTEXT ADJUSTMENTS =====
     if symbol:
+        signal_direction = 'bullish' if score > 0 else 'bearish'
+        
+        # 1. Index Alignment (±10)
         index_trends = get_index_trend_for_timeframe(timeframe)
         if index_trends:
             relevant_index = get_relevant_index(symbol)
             index_data = index_trends.get(relevant_index)
-            
-            signal_direction = 'bullish' if score > 0 else 'bearish'
             index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
             score += index_adjustment
+        
+        # 2. Market Breadth Alignment (±10)
+        breadth_adjustment = calculate_market_breadth_alignment(signal_direction)
+        score += breadth_adjustment
+        
+        # 3. Industry Performance (±5)
+        industry_data = get_industry_performance(symbol)
+        industry_adjustment = calculate_industry_alignment_score(industry_data, signal_direction)
+        score += industry_adjustment
     
     # Normalize to 0-100
-    normalized = np.clip(50 + (score * 5), 0, 100)
+    normalized = np.clip(50 + (score * 4), 0, 100)
     return round(normalized, 1)
 
 # ============================================================================
-# INTRADAY INDICATORS WITH ENHANCED OR & VWAP
+# INTRADAY INDICATORS
 # ============================================================================
 
 def calculate_intraday_indicators(data, timeframe='15m'):
-    """
-    Enhanced intraday indicators with CORRECTED VWAP bands
-    """
+    """Enhanced intraday indicators with CORRECTED VWAP bands"""
     if len(data) < 200:
         return data
     
@@ -586,12 +866,12 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
     
-    # ==================== EMA CROSSOVER ====================
+    # EMA CROSSOVER
     if timeframe == '5m':
         fast, slow = 9, 21
         rsi_period = 7
         macd_fast, macd_slow, macd_sign = 5, 13, 5
-    else:  # 15m, 30m
+    else:
         fast, slow = 20, 50
         rsi_period = 9
         macd_fast, macd_slow, macd_sign = 12, 26, 9
@@ -602,42 +882,37 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['EMA_Crossover'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & df['EMA_Bullish']
     df['EMA_Crossunder'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & ~df['EMA_Bullish']
     
-    # ==================== VWAP WITH BANDS (CORRECTED TO MATCH TRADINGVIEW) ====================
+    # VWAP WITH BANDS
     df['Date'] = df.index.date
     df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
     
-    # Vectorized VWAP calculation
     df['TPV'] = df['Typical_Price'] * df['Volume']
     df['Cumul_TPV'] = df.groupby('Date')['TPV'].cumsum()
     df['Cumul_Vol'] = df.groupby('Date')['Volume'].cumsum()
     df['VWAP'] = df['Cumul_TPV'] / df['Cumul_Vol'].replace(0, np.nan)
     
-    # VWAP standard deviation (simple, not volume-weighted)
     df['Deviation_Squared'] = (df['Typical_Price'] - df['VWAP']) ** 2
     df['Cumul_Dev_Sq'] = df.groupby('Date')['Deviation_Squared'].cumsum()
     df['Bar_Count'] = df.groupby('Date').cumcount() + 1
     df['VWAP_Std'] = np.sqrt(df['Cumul_Dev_Sq'] / df['Bar_Count'])
     
-    # VWAP bands
     df['VWAP_Upper1'] = df['VWAP'] + (df['VWAP_Std'] * 1)
     df['VWAP_Upper2'] = df['VWAP'] + (df['VWAP_Std'] * 2)
     df['VWAP_Lower1'] = df['VWAP'] - (df['VWAP_Std'] * 1)
     df['VWAP_Lower2'] = df['VWAP'] - (df['VWAP_Std'] * 2)
     
-    # VWAP position indicators
     df['Above_VWAP'] = df['Close'] > df['VWAP']
     df['At_VWAP_Upper_Extreme'] = df['Close'] >= df['VWAP_Upper2']
     df['At_VWAP_Lower_Extreme'] = df['Close'] <= df['VWAP_Lower2']
     df['In_VWAP_Channel'] = (df['Close'] >= df['VWAP_Lower1']) & (df['Close'] <= df['VWAP_Upper1'])
     
-    # VWAP band breakouts
     df['VWAP_Upper_Breakout'] = (df['Close'] > df['VWAP_Upper1']) & (df['Close'].shift(1) <= df['VWAP_Upper1'])
     df['VWAP_Lower_Breakdown'] = (df['Close'] < df['VWAP_Lower1']) & (df['Close'].shift(1) >= df['VWAP_Lower1'])
     
-    # ==================== RSI ====================
+    # RSI
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=rsi_period).rsi()
     
-    # ==================== ATR (RMA/Wilder's smoothing, 14 period) ====================
+    # ATR
     df['TR'] = np.maximum(
         df['High'] - df['Low'],
         np.maximum(
@@ -649,13 +924,13 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
     df.drop('TR', axis=1, inplace=True)
 
-    # ==================== VOLUME ====================
+    # VOLUME
     df['Avg_Volume'] = df['Volume'].rolling(20).mean()
     df['RVOL'] = df['Volume'] / df['Avg_Volume'].clip(lower=0.001)
     df['Volume_Spike'] = df['RVOL'] > 1.5
     df['High_Volume'] = df['RVOL'] > 2.0
     
-    # ==================== OPENING RANGE ====================
+    # OPENING RANGE
     df['Time'] = df.index.time
     
     or_window = time(9, 30) if timeframe == '5m' else time(9, 45)
@@ -664,18 +939,15 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['OR_High'] = df[df['Is_OR']].groupby('Date')['High'].transform('max')
     df['OR_Low'] = df[df['Is_OR']].groupby('Date')['Low'].transform('min')
     
-    # Forward fill OR levels
     df['OR_High'] = df.groupby('Date')['OR_High'].transform(lambda x: x.ffill())
     df['OR_Low'] = df.groupby('Date')['OR_Low'].transform(lambda x: x.ffill())
     
     df['OR_Mid'] = (df['OR_High'] + df['OR_Low']) / 2
     df['OR_Range'] = df['OR_High'] - df['OR_Low']
     
-    # OR states
     df['After_OR'] = df['Time'] > or_window
     df['Inside_OR'] = (df['Close'] >= df['OR_Low']) & (df['Close'] <= df['OR_High'])
     
-    # OR breakouts (after OR period)
     df['OR_Breakout_Long'] = (
         df['After_OR'] & 
         (df['Close'] > df['OR_High']) & 
@@ -688,13 +960,12 @@ def calculate_intraday_indicators(data, timeframe='15m'):
         (df['Close'].shift(1) >= df['OR_Low'])
     )
     
-    # Failed breakouts
     df['Failed_OR_Breakout'] = (
         ((df['High'].shift(1) > df['OR_High']) | (df['Low'].shift(1) < df['OR_Low'])) &
         df['Inside_OR']
     )
     
-    # ==================== MACD (EMA-based) ====================
+    # MACD
     df['EMA_Fast_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_fast).ema_indicator()
     df['EMA_Slow_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_slow).ema_indicator()
     df['MACD'] = df['EMA_Fast_MACD'] - df['EMA_Slow_MACD']
@@ -704,11 +975,11 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['MACD_Hist_Rising'] = df['MACD_Hist'] > df['MACD_Hist'].shift(1)
     df.drop(['EMA_Fast_MACD', 'EMA_Slow_MACD'], axis=1, inplace=True)
     
-    # ==================== ADX ====================
+    # ADX
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
     df['Trending_Intraday'] = df['ADX'] > 20
     
-    # ==================== TIME FILTERS ====================
+    # TIME FILTERS
     df['Pre_Market'] = df['Time'] < time(9, 15)
     df['Opening_Range_Period'] = df['Is_OR']
     df['Safe_Hours'] = (df['Time'] >= time(9, 30)) & (df['Time'] <= time(15, 0))
@@ -789,11 +1060,9 @@ def calculate_opening_range_score(df):
     or_range = df['OR_Range'].iloc[-1]
     atr = df['ATR'].iloc[-1]
     
-    # Require decent range
     if pd.isna(or_range) or pd.isna(atr) or or_range < (atr * 0.5):
         return 0
     
-    # Bullish OR breakout
     if or_breakout_long:
         score += 5
         
@@ -812,7 +1081,6 @@ def calculate_opening_range_score(df):
         if adx > 20:
             score += 2
     
-    # Bearish OR breakout
     elif or_breakout_short:
         score -= 5
         
@@ -831,7 +1099,6 @@ def calculate_opening_range_score(df):
         if adx > 20:
             score -= 2
     
-    # Failed breakout (reversal)
     elif failed_breakout:
         if df['High'].shift(1).iloc[-1] > df['OR_High'].iloc[-1]:
             score -= 3
@@ -855,7 +1122,6 @@ def calculate_vwap_mean_reversion_score(df):
     vwap_lower1 = df['VWAP_Lower1'].iloc[-1]
     vwap_upper1 = df['VWAP_Upper1'].iloc[-1]
     
-    # Extreme oversold
     if at_lower_extreme and rsi < 30:
         rsi_strength = (30 - rsi) / 30
         score += 4 * rsi_strength
@@ -866,7 +1132,6 @@ def calculate_vwap_mean_reversion_score(df):
         if rvol > 1.5:
             score += 1
     
-    # Extreme overbought
     elif at_upper_extreme and rsi > 70:
         rsi_strength = (rsi - 70) / 30
         score -= 4 * rsi_strength
@@ -877,13 +1142,11 @@ def calculate_vwap_mean_reversion_score(df):
         if rvol > 1.5:
             score -= 1
     
-    # Moderate levels
     elif close <= vwap_lower1 and rsi < 40:
         score += 2
     elif close >= vwap_upper1 and rsi > 60:
         score -= 2
     
-    # Trend breakouts
     if vwap_upper_breakout and rvol > 2.0 and adx > 20:
         score = max(score, 0)
         score += 2
@@ -908,7 +1171,6 @@ def calculate_intraday_trend_score(df):
     rvol = df['RVOL'].iloc[-1]
     adx = df['ADX'].iloc[-1]
     
-    # Bullish
     if close > vwap:
         score += 2
         
@@ -933,7 +1195,6 @@ def calculate_intraday_trend_score(df):
         elif adx > 20:
             score += 1
     
-    # Bearish
     elif close < vwap:
         score -= 2
         
@@ -961,10 +1222,9 @@ def calculate_intraday_trend_score(df):
     return score
 
 def calculate_intraday_score(df, symbol=None, timeframe='15m'):
-    """Unified intraday scoring with INDEX ALIGNMENT"""
+    """Unified intraday scoring with INDEX + MARKET BREADTH + INDUSTRY ALIGNMENT"""
     regime = detect_intraday_regime(df)
     
-    # Block unsafe times
     if regime in ["Pre-Market", "Closing Session", "Unknown", "Last 30 Min (Exit Only)", "Opening Range Formation"]:
         return 50
     
@@ -975,46 +1235,50 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
     if not safe_hours:
         return 50
     
-    # Calculate strategy scores
     or_score = calculate_opening_range_score(df)
     mean_reversion_score = calculate_vwap_mean_reversion_score(df)
     trend_score = calculate_intraday_trend_score(df)
     
-    # Strategy selection
     current_time = df.index[-1].time()
     
-    # OR window (9:45-11:00)
     if time(9, 45) <= current_time <= time(11, 0):
         if or_score != 0:
             raw_score = or_score
         else:
             raw_score = trend_score * 0.5
     
-    # Trending markets (avoid lunch)
     elif regime in ["Strong Uptrend", "Strong Downtrend"] and not lunch_hours:
         raw_score = trend_score
     
-    # Prime hours (regime-based strategy selection)
     elif prime_hours:
         if regime in ["Choppy (VWAP Range)", "Weak Uptrend", "Weak Downtrend"]:
             raw_score = mean_reversion_score
         else:
             raw_score = trend_score
     
-    # Default fallback
     else:
         raw_score = trend_score
     
-    # ===== INDEX ALIGNMENT (NEW) =====
+    # ===== MARKET CONTEXT ADJUSTMENTS =====
     if symbol:
+        signal_direction = 'bullish' if raw_score > 0 else 'bearish'
+        
+        # 1. Index Alignment (±10)
         index_trends = get_index_trend_for_timeframe(timeframe)
         if index_trends:
             relevant_index = get_relevant_index(symbol)
             index_data = index_trends.get(relevant_index)
-            
-            signal_direction = 'bullish' if raw_score > 0 else 'bearish'
             index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
             raw_score += index_adjustment
+        
+        # 2. Market Breadth Alignment (±10)
+        breadth_adjustment = calculate_market_breadth_alignment(signal_direction)
+        raw_score += breadth_adjustment
+        
+        # 3. Industry Performance (±5)
+        industry_data = get_industry_performance(symbol)
+        industry_adjustment = calculate_industry_alignment_score(industry_data, signal_direction)
+        raw_score += industry_adjustment
     
     # Time modifiers
     if prime_hours:
@@ -1023,7 +1287,7 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
         raw_score *= 0.7
     
     # Normalize
-    normalized = np.clip(50 + (raw_score * 3.33), 0, 100)
+    normalized = np.clip(50 + (raw_score * 3), 0, 100)
     return round(normalized, 1)
 
 # ============================================================================
@@ -1031,7 +1295,7 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
 # ============================================================================
 
 def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
-    """Calculate swing position parameters with FIXED stop-loss logic"""
+    """Calculate swing position parameters"""
     close = df['Close'].iloc[-1]
     atr = df['ATR'].iloc[-1]
     ema200 = df['EMA_200'].iloc[-1]
@@ -1041,8 +1305,7 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     
     buy_at = round(close * 1.001, 2)
     
-    # Stop loss logic
-    max_loss_pct = 0.08  # Never risk more than 8%
+    max_loss_pct = 0.08
     max_acceptable_stop = close * (1 - max_loss_pct)
     
     if regime in ["Strong Uptrend", "Weak Uptrend"]:
@@ -1057,7 +1320,6 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     stop_loss = max(stop_loss, max_acceptable_stop)
     stop_loss = round(stop_loss, 2)
     
-    # Target
     risk = buy_at - stop_loss
     if regime == "Strong Uptrend":
         rr_ratio = 3
@@ -1069,7 +1331,6 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     target = buy_at + (risk * rr_ratio)
     target = round(target, 2)
     
-    # Position size
     risk_amount = account_size * risk_pct
     position_size = int(risk_amount / risk) if risk > 0 else 0
     max_position = int((account_size * 0.1) / buy_at)
@@ -1103,8 +1364,7 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     
     buy_at = round(close, 2)
     
-    # Stop loss logic
-    max_loss_pct = 0.03  # Never risk more than 3% intraday
+    max_loss_pct = 0.03
     max_acceptable_stop = close * (1 - max_loss_pct)
     
     if regime == "Strong Uptrend":
@@ -1125,7 +1385,6 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     stop_loss = max(stop_loss, max_acceptable_stop)
     stop_loss = round(stop_loss, 2)
     
-    # Target
     risk = buy_at - stop_loss
     
     if regime == "Strong Uptrend":
@@ -1140,7 +1399,6 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     
     target = round(target, 2)
     
-    # Position sizing
     risk_amount = account_size * risk_pct
     position_size = int(risk_amount / risk) if risk > 0 else 0
     max_position = int((account_size * 0.05) / buy_at)
@@ -1149,7 +1407,6 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     trailing_stop = close - (1.0 * atr)
     trailing_stop = round(trailing_stop, 2)
     
-    # Time to close
     current_time = df.index[-1].time()
     minutes_to_close = (15 * 60 + 15) - (current_time.hour * 60 + current_time.minute)
     hours_to_close = round(minutes_to_close / 60, 2)
@@ -1177,7 +1434,7 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
 # ============================================================================
 
 def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000):
-    """Generate unified recommendations with INDEX CONTEXT"""
+    """Generate unified recommendations with COMPLETE MARKET CONTEXT"""
     
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
@@ -1190,6 +1447,9 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         regime = detect_intraday_regime(df)
         score = calculate_intraday_score(df, symbol, timeframe)
         position = calculate_intraday_position(df, account_size)
+    
+    # Get market context
+    market_health, market_signal, market_factors = calculate_market_health_score()
     
     # Get index context
     index_trends = get_index_trend_for_timeframe(timeframe)
@@ -1208,6 +1468,18 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
                 'trend_strength': index_data['analysis'].get('trend_strength', 'Unknown'),
                 'supertrend': index_data.get('indicators', {}).get('Supertrend', 0)
             }
+    
+    # Get industry context
+    industry_data = get_industry_performance(symbol)
+    industry_context = None
+    if industry_data:
+        industry_context = {
+            'industry_name': industry_data.get('Industry'),
+            'avg_change': industry_data.get('avgChange', 0),
+            'advancing': industry_data.get('advancing', 0),
+            'declining': industry_data.get('declining', 0),
+            'total': industry_data.get('total', 1)
+        }
     
     # Signal
     if score >= 75:
@@ -1265,9 +1537,14 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         elif df['OR_Breakout_Short'].iloc[-1]:
             reasons.append("OR breakdown (bearish)")
     
-    # Add index context to reasons
+    # Add market context
     if index_context:
         reasons.append(f"{index_context['index_name']}: {index_context['trend']}")
+    
+    if industry_context:
+        reasons.append(f"Industry: {industry_context['avg_change']:.2f}%")
+    
+    reasons.append(f"Market: {market_signal}")
     
     return {
         "symbol": symbol,
@@ -1278,6 +1555,10 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         "regime": regime,
         "reason": ", ".join(reasons),
         "index_context": index_context,
+        "industry_context": industry_context,
+        "market_health": market_health,
+        "market_signal": market_signal,
+        "market_factors": market_factors,
         "processed_data": df, 
         **position
     }
@@ -1303,10 +1584,9 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
     if len(data) < 200:
         return results
     
-    # Transaction costs
-    BROKERAGE = 0.0003  # 0.03%
-    STT = 0.001  # 0.1% on sell side
-    SLIPPAGE = 0.0005  # 0.05%
+    BROKERAGE = 0.0003
+    STT = 0.001
+    SLIPPAGE = 0.0005
     
     cash = initial_capital
     position = None
@@ -1324,7 +1604,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             current_price = data['Close'].iloc[i]
             current_date = data.index[i]
             
-            # Sell
             if position and rec['signal'] in ['Sell', 'Strong Sell']:
                 exit_price_effective = current_price * (1 - BROKERAGE - STT - SLIPPAGE)
                 pnl = (exit_price_effective - entry_price) * qty
@@ -1343,7 +1622,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
                 position = None
                 qty = 0
             
-            # Buy
             if not position and rec['signal'] in ['Buy', 'Strong Buy']:
                 entry_price = current_price * (1 + BROKERAGE + SLIPPAGE)
                 entry_date = current_date
@@ -1358,7 +1636,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             logging.warning(f"Backtest error at {current_date}: {str(e)}")
             continue
     
-    # Close final position
     if position:
         current_price = data['Close'].iloc[-1]
         exit_price_effective = current_price * (1 - BROKERAGE - STT - SLIPPAGE)
@@ -1374,7 +1651,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             "return_pct": (pnl / (entry_price * qty)) * 100
         })
     
-    # Calculate metrics
     if trades:
         results['trades'] = len(trades)
         results['trades_list'] = trades
@@ -1397,7 +1673,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             results['sharpe_ratio'] = (mean_return / (std_return + 1e-9)) * annualization_factor
             results['annual_return'] = mean_return * periods_per_year.get(timeframe, 252) * 100
     
-    # Drawdown
     if results['equity_curve']:
         equity_df = pd.DataFrame(results['equity_curve'], columns=['Date', 'Equity'])
         equity_df['Peak'] = equity_df['Equity'].cummax()
@@ -1525,7 +1800,6 @@ def display_intraday_chart(rec, data):
     """Enhanced intraday chart with OR and VWAP"""
     fig = go.Figure()
     
-    # Candlesticks
     fig.add_trace(go.Candlestick(
         x=data.index,
         open=data['Open'],
@@ -1535,7 +1809,6 @@ def display_intraday_chart(rec, data):
         name='Price'
     ))
     
-    # VWAP
     if 'VWAP' in data.columns:
         fig.add_trace(go.Scatter(
             x=data.index, y=data['VWAP'],
@@ -1543,7 +1816,6 @@ def display_intraday_chart(rec, data):
             line=dict(color='blue', width=2)
         ))
     
-    # VWAP Bands
     if 'VWAP_Upper1' in data.columns:
         fig.add_trace(go.Scatter(
             x=data.index, y=data['VWAP_Upper1'],
@@ -1556,14 +1828,12 @@ def display_intraday_chart(rec, data):
             line=dict(color='orange', width=1, dash='dash')
         ))
     
-    # OR levels
     if rec.get('or_high'):
         fig.add_hline(y=rec['or_high'], line_dash="dot", 
                      annotation_text="OR High", line_color="green")
         fig.add_hline(y=rec['or_low'], line_dash="dot", 
                      annotation_text="OR Low", line_color="red")
     
-    # Trade levels
     fig.add_hline(y=rec['buy_at'], line_dash="solid", 
                  annotation_text="Entry", line_color="white")
     fig.add_hline(y=rec['stop_loss'], line_dash="dash", 
@@ -1587,8 +1857,8 @@ def main():
     init_database()
     
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.2 - NSE Analysis")
-    st.caption("✨ NEW: Index alignment for improved accuracy | VWAP bands corrected | Transaction costs included")
+    st.title("📊 StockGenie Pro V2.3 - Professional NSE Analysis")
+    st.caption("✨ NEW: Market breadth + Sector performance + Industry analysis | Complete institutional-grade system")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # Sidebar
@@ -1624,12 +1894,33 @@ def main():
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, max_value=10000000, value=30000, step=5000)
     
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
     
     # TAB 1: Analysis
     with tab1:
+        # ===== MARKET HEALTH DASHBOARD =====
+        st.subheader("🌍 Market Health")
+        
+        market_health, market_signal, market_factors = calculate_market_health_score()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        health_color = "🟢" if market_health >= 60 else "🟡" if market_health >= 40 else "🔴"
+        col1.metric("Market Health", f"{health_color} {market_health}/100", market_signal)
+        
+        if 'advance_ratio' in market_factors:
+            col2.metric("Breadth", f"{market_factors['advance_ratio']:.1f}%", market_factors.get('breadth_signal', ''))
+        
+        if 'avg_momentum' in market_factors:
+            col3.metric("Momentum", f"{market_factors['avg_momentum']:.1f}", market_factors.get('momentum_signal', ''))
+        
+        if 'volatility' in market_factors:
+            col4.metric("Volatility", f"{market_factors['volatility']:.1f}", market_factors.get('volatility_signal', ''))
+        
+        st.divider()
+        
         # ===== INDEX DASHBOARD =====
-        st.subheader("📊 Market Context")
+        st.subheader("📊 Index Trends")
         index_trends = get_index_trend_for_timeframe(timeframe)
         
         if index_trends:
@@ -1657,10 +1948,9 @@ def main():
                     st.metric("Bank Nifty", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
                     st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
         else:
-            st.info("⚠️ Index trend data unavailable (will work with reduced accuracy)")
+            st.info("⚠️ Index trend data unavailable")
         
         st.divider()
-        # ===== END INDEX DASHBOARD =====
         
         if st.button("🔍 Analyze Selected Stock"):
             with st.spinner(f"Analyzing {symbol}..."):
@@ -1689,18 +1979,37 @@ def main():
                         else:
                             col5.metric("Timeframe", timeframe_display)
                         
-                        # ===== COUNTER-TREND WARNING =====
+                        # ===== ALIGNMENT WARNINGS =====
+                        signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
+                        
+                        # Index alignment
                         if rec.get('index_context'):
                             idx = rec['index_context']
-                            signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
                             index_bullish = 'Uptrend' in idx['trend']
                             
                             if signal_bullish and not index_bullish:
-                                st.warning(f"⚠️ **Counter-Trend Trade**: Stock bullish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                                st.warning(f"⚠️ **Counter-Index Trade**: Stock bullish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
                             elif not signal_bullish and index_bullish:
-                                st.warning(f"⚠️ **Counter-Trend Trade**: Stock bearish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                                st.warning(f"⚠️ **Counter-Index Trade**: Stock bearish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
                             elif signal_bullish and index_bullish:
-                                st.success(f"✅ **Aligned with Market**: {idx['index_name']} also in {idx['trend']}")
+                                st.success(f"✅ **Index Aligned**: {idx['index_name']} also in {idx['trend']}")
+                        
+                        # Market breadth alignment
+                        market_bullish = rec['market_signal'] in ['Very Bullish', 'Bullish']
+                        if signal_bullish and not market_bullish:
+                            st.warning(f"⚠️ **Weak Market Breadth**: Stock bullish but overall market is {rec['market_signal']}. Reduce position size!")
+                        elif signal_bullish and market_bullish:
+                            st.success(f"✅ **Strong Market Support**: Breadth is {rec['market_signal']}")
+                        
+                        # Industry alignment
+                        if rec.get('industry_context'):
+                            ind = rec['industry_context']
+                            industry_bullish = ind['avg_change'] > 0.5
+                            
+                            if signal_bullish and not industry_bullish:
+                                st.warning(f"⚠️ **Weak Industry**: {ind['industry_name']} avg {ind['avg_change']:.2f}%")
+                            elif signal_bullish and industry_bullish:
+                                st.success(f"✅ **Strong Industry**: {ind['industry_name']} avg +{ind['avg_change']:.2f}%")
                         
                         # Trade setup
                         st.subheader("📋 Trade Setup")
@@ -1860,6 +2169,47 @@ def main():
                 st.info("No historical data available")
         except Exception as e:
             st.error(f"❌ Database error: {str(e)}")
+    
+    # TAB 5: Market Dashboard
+    with tab5:
+        st.subheader("🌍 Complete Market Overview")
+        
+        # Market breadth
+        breadth_data = fetch_market_breadth()
+        
+        if breadth_data:
+            st.markdown("### 📊 Market Breadth")
+            breadth = breadth_data.get('breadth', {})
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Stocks", breadth.get('total', 0))
+            col2.metric("Advancing", breadth.get('advancing', 0), delta_color="normal")
+            col3.metric("Declining", breadth.get('declining', 0), delta_color="inverse")
+            col4.metric("Unchanged", breadth.get('unchanged', 0))
+            
+            # Industry leaders
+            st.markdown("### 🏆 Top Performing Industries")
+            industries = breadth_data.get('industry', [])[:10]
+            
+            if industries:
+                industry_df = pd.DataFrame(industries)
+                industry_df = industry_df[['Industry', 'avgChange', 'advancing', 'declining', 'total']]
+                industry_df.columns = ['Industry', 'Avg Change %', 'Advancing', 'Declining', 'Total']
+                st.dataframe(industry_df, use_container_width=True)
+        
+        # Sector indices
+        sector_data = fetch_sector_performance()
+        
+        if sector_data:
+            st.markdown("### 📈 Sector Indices Performance")
+            
+            sectors = sector_data.get('data', [])
+            
+            if sectors:
+                sector_df = pd.DataFrame(sectors)
+                sector_df = sector_df[['sector_index', 'avg_change', 'advance_ratio', 'momentum', 'signal', 'volatility_score']]
+                sector_df.columns = ['Index', 'Avg Change %', 'Advance Ratio %', 'Momentum', 'Signal', 'Volatility']
+                st.dataframe(sector_df, use_container_width=True)
 
 if __name__ == "__main__":
     main()
