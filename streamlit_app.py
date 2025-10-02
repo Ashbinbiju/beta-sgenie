@@ -1,7 +1,7 @@
 # ============================================================================
-# STOCKGENIE PRO - PRODUCTION VERSION V2.3 (BALANCED SCORING)
+# STOCKGENIE PRO - PRODUCTION VERSION V2.3 (SCANNER FIXED)
 # Enhanced Swing + Intraday Trading System
-# FIXED: Proper score distribution across sectors
+# FIXED: Scanner freezing, rate limiting, session timeouts
 # ============================================================================
 
 import pandas as pd
@@ -20,6 +20,7 @@ import io
 import random
 import warnings
 import sqlite3
+import gc
 from diskcache import Cache
 from SmartApi import SmartConnect
 import pyotp
@@ -32,7 +33,7 @@ from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 load_dotenv()
 
@@ -49,11 +50,20 @@ API_KEYS = {
 # Global session cache
 _global_smart_api = None
 _session_timestamp = None
-SESSION_EXPIRY = 3600
+SESSION_EXPIRY = 1800  # 30 minutes for safety
 
 cache = Cache("stock_data_cache")
 
-# User agents for API calls
+# Scan configuration
+SCAN_CONFIG = {
+    "batch_size": 5,
+    "delay_within_batch": 2,
+    "delay_between_batches": 5,
+    "session_refresh_interval": 20,
+    "max_stocks_per_scan": 40
+}
+
+# User agents
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -97,7 +107,7 @@ SECTORS = {
     ]
 }
 
-# Industry mapping for stocks
+# Industry mapping
 INDUSTRY_MAP = {
     "Financial Services": ["HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ", 
                           "INDUSINDBK-EQ", "PNB-EQ", "BANKBARODA-EQ", "CANBK-EQ", "UNIONBANK-EQ"],
@@ -110,7 +120,6 @@ INDUSTRY_MAP = {
     "Construction Materials": ["ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ"]
 }
 
-# Tooltips
 TOOLTIPS = {
     "Score": "Signal strength (0-100). 50=neutral, 65+=buy zone, 35-=sell zone",
     "RSI": "Momentum indicator (30=oversold, 70=overbought)",
@@ -124,7 +133,7 @@ TOOLTIPS = {
 }
 
 # ============================================================================
-# MARKET BREADTH & SECTOR PERFORMANCE INTEGRATION
+# MARKET BREADTH & SECTOR PERFORMANCE
 # ============================================================================
 
 @st.cache_data(ttl=900)
@@ -168,11 +177,9 @@ def calculate_market_health_score():
     score = 0
     factors = {}
     
-    # Market Breadth (40 points max)
     breadth = breadth_data.get('breadth', {})
     total = breadth.get('total', 1)
     advancing = breadth.get('advancing', 0)
-    declining = breadth.get('declining', 0)
     
     adv_ratio = (advancing / total) * 100 if total > 0 else 50
     factors['advance_ratio'] = adv_ratio
@@ -195,9 +202,7 @@ def calculate_market_health_score():
     
     factors['breadth_signal'] = breadth_signal
     
-    # Sector Indices Momentum (30 points max)
     sectors = sector_data.get('data', [])
-    
     nifty50 = next((s for s in sectors if s['sector_index'] == 'Nifty50'), None)
     nifty500 = next((s for s in sectors if s['sector_index'] == 'Nifty500'), None)
     
@@ -233,7 +238,6 @@ def calculate_market_health_score():
     
     factors['momentum_signal'] = momentum_signal
     
-    # Volatility & Risk (30 points max)
     if nifty50:
         volatility = nifty50.get('volatility_score', 0)
         factors['volatility'] = volatility
@@ -256,7 +260,6 @@ def calculate_market_health_score():
         
         factors['volatility_signal'] = vol_signal
     
-    # Overall signal
     if score >= 80:
         overall_signal = "Very Bullish"
     elif score >= 60:
@@ -322,7 +325,7 @@ def calculate_industry_alignment_score(industry_data, signal_direction):
     return score_adjustment
 
 def calculate_market_breadth_alignment(signal_direction):
-    """Calculate alignment with overall market breadth (±5 points - REDUCED)"""
+    """Calculate alignment with overall market breadth (±5 points)"""
     market_health, market_signal, factors = calculate_market_health_score()
     
     score_adjustment = 0
@@ -399,7 +402,7 @@ def get_relevant_index(symbol):
         return 'nifty'
 
 def calculate_index_alignment_score(trend_data, signal_direction):
-    """Calculate bonus/penalty based on index alignment (±5 points - REDUCED)"""
+    """Calculate bonus/penalty based on index alignment (±5 points)"""
     if not trend_data or 'analysis' not in trend_data:
         return 0
     
@@ -428,7 +431,6 @@ def calculate_index_alignment_score(trend_data, signal_direction):
         elif 'Uptrend' in trend:
             score_adjustment -= 5
     
-    # Supertrend confirmation
     if signal_direction == 'bullish' and supertrend == 1:
         score_adjustment += 2
     elif signal_direction == 'bearish' and supertrend == -1:
@@ -441,8 +443,12 @@ def calculate_index_alignment_score(trend_data, signal_direction):
     return score_adjustment
 
 # ============================================================================
-# API & DATA FETCHING
+# API & DATA FETCHING (ROBUST VERSION)
 # ============================================================================
+
+def cleanup_memory():
+    """Force garbage collection to free memory"""
+    gc.collect()
 
 def get_global_smart_api():
     """Manage global SmartAPI session with auto-refresh"""
@@ -450,9 +456,14 @@ def get_global_smart_api():
     now = time_module.time()
     
     if _global_smart_api is None or (now - _session_timestamp) > SESSION_EXPIRY:
-        _global_smart_api = init_smartapi_client()
-        _session_timestamp = now
-        if not _global_smart_api:
+        try:
+            _global_smart_api = init_smartapi_client()
+            _session_timestamp = now
+            if not _global_smart_api:
+                logging.error("Failed to create SmartAPI session")
+                return None
+        except Exception as e:
+            logging.error(f"Session creation error: {str(e)}")
             return None
     
     return _global_smart_api
@@ -465,12 +476,13 @@ def init_smartapi_client():
         data = smart_api.generateSession(CLIENT_ID, PASSWORD, totp.now())
         
         if data['status']:
+            logging.info("SmartAPI session created successfully")
             return smart_api
         else:
-            st.error(f"⚠️ SmartAPI auth failed: {data.get('message', 'Unknown error')}")
+            logging.error(f"SmartAPI auth failed: {data.get('message', 'Unknown error')}")
             return None
     except Exception as e:
-        st.error(f"⚠️ Error initializing SmartAPI: {str(e)}")
+        logging.error(f"Error initializing SmartAPI: {str(e)}")
         return None
 
 @st.cache_data(ttl=86400)
@@ -478,7 +490,7 @@ def load_symbol_token_map():
     """Load instrument token mapping"""
     try:
         url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
-        response = requests.get(url)
+        response = requests.get(url, timeout=15)
         response.raise_for_status()
         data = response.json()
         return {entry["symbol"]: entry["token"] for entry in data if "symbol" in entry and "token" in entry}
@@ -486,8 +498,8 @@ def load_symbol_token_map():
         logging.warning(f"Failed to load instrument list: {str(e)}")
         return {}
 
-def retry(max_retries=3, delay=5, backoff_factor=2):
-    """Retry decorator with exponential backoff"""
+def retry_with_exponential_backoff(max_retries=5, base_delay=3):
+    """Enhanced retry with exponential backoff and jitter"""
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -497,32 +509,49 @@ def retry(max_retries=3, delay=5, backoff_factor=2):
                 except requests.exceptions.HTTPError as e:
                     if e.response.status_code == 429:
                         if attempt == max_retries:
+                            logging.error(f"Rate limit exceeded after {max_retries} attempts")
                             raise
-                        sleep_time = delay * (backoff_factor ** (attempt - 1))
+                        sleep_time = base_delay * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                        logging.warning(f"Rate limited. Waiting {sleep_time:.1f}s (attempt {attempt}/{max_retries})")
                         time_module.sleep(sleep_time)
                     else:
                         raise
+                except requests.exceptions.Timeout:
+                    if attempt == max_retries:
+                        logging.error("Request timeout after retries")
+                        raise
+                    sleep_time = base_delay * attempt
+                    logging.warning(f"Timeout. Retrying in {sleep_time}s...")
+                    time_module.sleep(sleep_time)
                 except Exception as e:
                     if attempt == max_retries:
+                        logging.error(f"Max retries reached: {str(e)}")
                         raise
-                    time_module.sleep(delay)
-            raise RuntimeError("Max retries exhausted")
+                    sleep_time = base_delay
+                    logging.warning(f"Error: {str(e)}. Retrying in {sleep_time}s...")
+                    time_module.sleep(sleep_time)
+            
+            raise RuntimeError(f"Failed after {max_retries} attempts")
         return wrapper
     return decorator
-    
+
 def calculate_rma(series, period):
     """Wilder's smoothing (RMA) used in ATR calculation"""
     alpha = 1.0 / period
     return series.ewm(alpha=alpha, adjust=False).mean()
-    
-@retry(max_retries=3, delay=5)
+
+@retry_with_exponential_backoff(max_retries=5, base_delay=3)
 def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
-    """Fetch stock data from SmartAPI with intelligent caching"""
+    """Fetch stock data from SmartAPI with robust error handling"""
     cache_key = f"{symbol}_{period}_{interval}"
-    cached_data = cache.get(cache_key)
     
-    if cached_data is not None:
-        return pd.read_pickle(io.BytesIO(cached_data))
+    # Try cache first
+    try:
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return pd.read_pickle(io.BytesIO(cached_data))
+    except Exception as e:
+        logging.warning(f"Cache read error for {symbol}: {str(e)}")
     
     try:
         if "-EQ" not in symbol:
@@ -564,14 +593,24 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
             "todate": end_date.strftime("%Y-%m-%d %H:%M")
         })
         
-        if historical_data['status'] and historical_data['data']:
-            data = pd.DataFrame(
-                historical_data['data'],
-                columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-            )
-            data['Date'] = pd.to_datetime(data['Date'])
-            data.set_index('Date', inplace=True)
-            
+        if not historical_data or not historical_data.get('status'):
+            error_msg = historical_data.get('message', 'Unknown error') if historical_data else 'No response'
+            logging.warning(f"API error for {symbol}: {error_msg}")
+            return pd.DataFrame()
+        
+        if not historical_data.get('data'):
+            logging.warning(f"No data returned for {symbol}")
+            return pd.DataFrame()
+        
+        data = pd.DataFrame(
+            historical_data['data'],
+            columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+        )
+        data['Date'] = pd.to_datetime(data['Date'])
+        data.set_index('Date', inplace=True)
+        
+        # Cache with error handling
+        try:
             if interval == "1d":
                 expire = 86400
             else:
@@ -580,10 +619,10 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
             buffer = io.BytesIO()
             data.to_pickle(buffer)
             cache.set(cache_key, buffer.getvalue(), expire=expire)
-            
-            return data
-        else:
-            raise ValueError(f"No data for {symbol}")
+        except Exception as e:
+            logging.warning(f"Cache write error for {symbol}: {str(e)}")
+        
+        return data
     
     except Exception as e:
         logging.error(f"Error fetching {symbol}: {str(e)}")
@@ -592,6 +631,25 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
 def fetch_stock_data_cached(symbol, period="1y", interval="1d"):
     """Wrapper for stock data fetching"""
     return fetch_stock_data_with_auth(symbol, period, interval)
+
+def check_api_health():
+    """Verify API session is working"""
+    try:
+        smart_api = get_global_smart_api()
+        if not smart_api:
+            return False, "Session not initialized"
+        
+        test_symbol = "SBIN-EQ"
+        symbol_token_map = load_symbol_token_map()
+        token = symbol_token_map.get(test_symbol)
+        
+        if not token:
+            return False, "Symbol map not loaded"
+        
+        return True, "API healthy"
+    
+    except Exception as e:
+        return False, str(e)
 
 # ============================================================================
 # DATA VALIDATION
@@ -774,7 +832,7 @@ def calculate_swing_score(df, symbol=None, timeframe='1d'):
         else:
             score -= 1
     
-    # ===== MARKET CONTEXT ADJUSTMENTS (BALANCED) =====
+    # Market context adjustments
     if symbol:
         signal_direction = 'bullish' if score > 0 else 'bearish'
         
@@ -796,11 +854,7 @@ def calculate_swing_score(df, symbol=None, timeframe='1d'):
             industry_adjustment = calculate_industry_alignment_score(industry_data, signal_direction)
             score += industry_adjustment
     
-    # IMPROVED NORMALIZATION (prevents ceiling effect)
-    # Technical base: -15 to +15
-    # Context bonus: -13 to +13
-    # Total range: -28 to +28
-    
+    # Improved normalization
     if score >= 0:
         normalized = 50 + (score * 1.8)
     else:
@@ -1214,7 +1268,7 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
     else:
         raw_score = trend_score
     
-    # ===== MARKET CONTEXT ADJUSTMENTS (BALANCED) =====
+    # Market context adjustments
     if symbol:
         signal_direction = 'bullish' if raw_score > 0 else 'bearish'
         
@@ -1242,7 +1296,7 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
     elif lunch_hours:
         raw_score *= 0.7
     
-    # IMPROVED NORMALIZATION
+    # Improved normalization
     if raw_score >= 0:
         normalized = 50 + (raw_score * 2.5)
     else:
@@ -1643,60 +1697,130 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
     return results
 
 # ============================================================================
-# BATCH ANALYSIS WITH SECTOR DIVERSITY
+# BATCH ANALYSIS WITH ROBUST ERROR HANDLING
 # ============================================================================
 
-def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d'):
-    """Analyze single stock with error handling"""
-    try:
-        data = fetch_stock_data_cached(symbol, interval=timeframe)
+def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', max_retries=3):
+    """Analyze single stock with comprehensive error handling"""
+    
+    for attempt in range(max_retries):
+        try:
+            data = fetch_stock_data_cached(symbol, interval=timeframe)
+            
+            if data.empty:
+                logging.warning(f"{symbol}: No data available")
+                return None
+            
+            if len(data) < 200:
+                logging.warning(f"{symbol}: Insufficient data ({len(data)} bars)")
+                return None
+            
+            rec = generate_recommendation(data, symbol, trading_style, timeframe)
+            
+            return {
+                "Symbol": rec['symbol'],
+                "Score": rec['score'],
+                "Signal": rec['signal'],
+                "Regime": rec['regime'],
+                "Current Price": rec['current_price'],
+                "Buy At": rec['buy_at'],
+                "Stop Loss": rec['stop_loss'],
+                "Target": rec['target'],
+                "R:R": rec['rr_ratio'],
+                "Position Size": rec['position_size'],
+                "Reason": rec['reason']
+            }
         
-        if data.empty or len(data) < 200:
+        except KeyError as e:
+            logging.error(f"{symbol}: Missing key {str(e)}")
             return None
         
-        rec = generate_recommendation(data, symbol, trading_style, timeframe)
-        
-        return {
-            "Symbol": rec['symbol'],
-            "Score": rec['score'],
-            "Signal": rec['signal'],
-            "Regime": rec['regime'],
-            "Current Price": rec['current_price'],
-            "Buy At": rec['buy_at'],
-            "Stop Loss": rec['stop_loss'],
-            "Target": rec['target'],
-            "R:R": rec['rr_ratio'],
-            "Position Size": rec['position_size'],
-            "Reason": rec['reason']
-        }
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logging.warning(f"{symbol}: Attempt {attempt + 1} failed: {str(e)}. Retrying...")
+                time_module.sleep(2 * (attempt + 1))
+                continue
+            else:
+                logging.error(f"{symbol}: All attempts failed: {str(e)}")
+                return None
     
-    except Exception as e:
-        logging.error(f"Error analyzing {symbol}: {str(e)}")
-        return None
+    return None
 
 def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None):
-    """Analyze multiple stocks with SECTOR DIVERSITY"""
+    """
+    Analyze multiple stocks with:
+    - Batch processing
+    - Session refresh
+    - Error recovery
+    - Memory management
+    """
     all_results = []
+    failed_stocks = []
+    batch_size = SCAN_CONFIG["batch_size"]
     
-    for i, symbol in enumerate(stock_list):
-        try:
-            result = analyze_stock_batch(symbol, trading_style, timeframe)
-            if result:
-                # Add sector information
-                for sector_name, sector_stocks in SECTORS.items():
-                    if symbol in sector_stocks:
-                        result['Sector'] = sector_name
-                        break
-                all_results.append(result)
-        except Exception as e:
-            logging.error(f"Failed to analyze {symbol}: {str(e)}")
-            
-        if progress_callback:
-            progress_callback((i + 1) / len(stock_list))
+    total_stocks = min(len(stock_list), SCAN_CONFIG["max_stocks_per_scan"])
+    stock_list = stock_list[:total_stocks]
+    
+    logging.info(f"Starting scan of {total_stocks} stocks")
+    
+    for batch_idx in range(0, total_stocks, batch_size):
+        batch = stock_list[batch_idx:batch_idx + batch_size]
         
-        time_module.sleep(5)
+        # Refresh session periodically
+        if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0:
+            logging.info(f"Refreshing API session at stock {batch_idx}/{total_stocks}")
+            global _global_smart_api, _session_timestamp
+            _global_smart_api = None
+            time_module.sleep(3)
+        
+        for i, symbol in enumerate(batch):
+            overall_index = batch_idx + i
+            
+            try:
+                # Update progress
+                if progress_callback:
+                    progress_callback((overall_index + 1) / total_stocks)
+                
+                logging.info(f"Processing {overall_index + 1}/{total_stocks}: {symbol}")
+                
+                result = analyze_stock_batch(symbol, trading_style, timeframe, max_retries=3)
+                
+                if result:
+                    # Add sector information
+                    for sector_name, sector_stocks in SECTORS.items():
+                        if symbol in sector_stocks:
+                            result['Sector'] = sector_name
+                            break
+                    all_results.append(result)
+                else:
+                    failed_stocks.append(symbol)
+                
+            except KeyboardInterrupt:
+                logging.warning("Scan interrupted by user")
+                break
+            
+            except Exception as e:
+                logging.error(f"Critical error analyzing {symbol}: {str(e)}")
+                failed_stocks.append(symbol)
+                continue
+            
+            # Adaptive delay
+            if i < len(batch) - 1:
+                time_module.sleep(SCAN_CONFIG["delay_within_batch"])
+            else:
+                time_module.sleep(SCAN_CONFIG["delay_between_batches"])
+        
+        # Memory cleanup every 10 stocks
+        if batch_idx % 10 == 0:
+            cleanup_memory()
+    
+    # Log summary
+    logging.info(f"Scan complete: {len(all_results)} successful, {len(failed_stocks)} failed")
+    if failed_stocks:
+        logging.warning(f"Failed stocks: {', '.join(failed_stocks[:10])}")
     
     if not all_results:
+        logging.warning("No results found")
         return pd.DataFrame()
     
     df = pd.DataFrame(all_results)
@@ -1705,13 +1829,16 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     if trading_style == 'intraday':
         df = df[df['Signal'].str.contains('Buy', na=False)]
     else:
-        # For swing, show Buy signals AND scores > 60
         df = df[(df['Signal'].str.contains('Buy', na=False)) | (df['Score'] >= 60)]
     
-    # ENSURE SECTOR DIVERSITY - Take top 2 from each sector
+    if df.empty:
+        logging.warning("No stocks passed filters")
+        return df
+    
+    # Ensure sector diversity
     diverse_results = []
     
-    if 'Sector' in df.columns and not df.empty:
+    if 'Sector' in df.columns:
         for sector in df['Sector'].unique():
             sector_df = df[df['Sector'] == sector].nlargest(2, 'Score')
             diverse_results.append(sector_df)
@@ -1845,7 +1972,7 @@ def main():
     
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
     st.title("📊 StockGenie Pro V2.3 - Professional NSE Analysis")
-    st.caption("✨ BALANCED SCORING: Proper sector diversity + Realistic score distribution")
+    st.caption("✨ FIXED: Scanner stability + Sector diversity + Realistic scoring")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # Sidebar
@@ -1885,7 +2012,6 @@ def main():
     
     # TAB 1: Analysis
     with tab1:
-        # Market Health Dashboard
         st.subheader("🌍 Market Health")
         
         market_health, market_signal, market_factors = calculate_market_health_score()
@@ -1906,7 +2032,6 @@ def main():
         
         st.divider()
         
-        # Index Dashboard
         st.subheader("📊 Index Trends")
         index_trends = get_index_trend_for_timeframe(timeframe)
         
@@ -1952,7 +2077,6 @@ def main():
                         )
                         processed_data = rec.get('processed_data', data)
                         
-                        # Metrics
                         col1, col2, col3, col4, col5 = st.columns(5)
                         col1.metric("Score", f"{rec['score']}/100")
                         col2.metric("Signal", rec['signal'])
@@ -1966,7 +2090,6 @@ def main():
                         else:
                             col5.metric("Timeframe", timeframe_display)
                         
-                        # Alignment Warnings
                         signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
                         
                         if rec.get('index_context'):
@@ -1995,7 +2118,6 @@ def main():
                             elif signal_bullish and industry_bullish:
                                 st.success(f"✅ **Strong Industry**: {ind['industry_name']} avg +{ind['avg_change']:.2f}%")
                         
-                        # Trade Setup
                         st.subheader("📋 Trade Setup")
                         col1, col2, col3 = st.columns(3)
                         
@@ -2012,7 +2134,6 @@ def main():
                         st.write(f"**R:R Ratio**: {rec['rr_ratio']}:1")
                         st.write(f"**Trailing Stop**: ₹{rec['trailing_stop']}")
                         
-                        # Intraday Levels
                         if trading_style == "Intraday Trading":
                             st.subheader("🎯 Key Intraday Levels")
                             col1, col2 = st.columns(2)
@@ -2034,7 +2155,6 @@ def main():
                         
                         st.info(f"**Reason**: {rec['reason']}")
                         
-                        # Chart
                         if trading_style == "Intraday Trading":
                             fig = display_intraday_chart(rec, data)
                         else:
@@ -2064,18 +2184,45 @@ def main():
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
     
-    # TAB 2: Scanner
+    # TAB 2: Scanner (IMPROVED)
     with tab2:
-        if st.button("🚀 Scan Top Picks (Max 2 per sector)"):
+        st.markdown("### 📡 Stock Scanner")
+        
+        # Check API health before scan
+        health_status, health_msg = check_api_health()
+        if not health_status:
+            st.warning(f"⚠️ API Issue: {health_msg}. Trying to reconnect...")
+            global _global_smart_api
+            _global_smart_api = None
+        
+        with st.expander("📋 Scan Settings", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"**Stocks to scan**: {min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])}")
+                st.info(f"**Estimated time**: ~{min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan']) * 3} seconds")
+            with col2:
+                st.info(f"**Trading style**: {trading_style}")
+                st.info(f"**Timeframe**: {timeframe_display}")
+                st.info(f"**Batch size**: {SCAN_CONFIG['batch_size']} stocks")
+        
+        if st.button("🚀 Start Scan", type="primary"):
             progress = st.progress(0)
             status_text = st.empty()
+            results_placeholder = st.empty()
             
             try:
+                status_text.info("🔄 Initializing scan...")
+                
+                def update_progress(pct):
+                    progress.progress(pct)
+                    scan_count = min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])
+                    status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count} stocks)")
+                
                 results = analyze_multiple_stocks(
-                    stock_list[:40],  # Scan more stocks for diversity
+                    stock_list,
                     'swing' if trading_style == "Swing Trading" else 'intraday',
                     timeframe,
-                    lambda p: (progress.progress(p), status_text.text(f"Scanning... {int(p*100)}%"))
+                    progress_callback=update_progress
                 )
                 
                 progress.empty()
@@ -2083,20 +2230,46 @@ def main():
                 
                 if not results.empty:
                     save_picks(results, trading_style)
-                    st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
-                    st.dataframe(results, use_container_width=True)
+                    results_placeholder.success(f"✅ Found {len(results)} opportunities!")
                     
-                    csv = results.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download as CSV",
-                        data=csv,
-                        file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv"
-                    )
+                    st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
+                    
+                    def highlight_score(val):
+                        if val >= 75:
+                            return 'background-color: #90EE90'
+                        elif val >= 60:
+                            return 'background-color: #FFFFE0'
+                        else:
+                            return ''
+                    
+                    styled_df = results.style.applymap(highlight_score, subset=['Score'])
+                    st.dataframe(styled_df, use_container_width=True)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        csv = results.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv,
+                            file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                            mime="text/csv"
+                        )
+                    
+                    with col2:
+                        avg_score = results['Score'].mean()
+                        st.metric("Average Score", f"{avg_score:.1f}")
+                
                 else:
-                    st.warning("No picks found")
+                    results_placeholder.warning("⚠️ No stocks met the criteria. Try adjusting filters or sectors.")
+            
+            except KeyboardInterrupt:
+                progress.empty()
+                status_text.warning("⚠️ Scan cancelled by user")
+            
             except Exception as e:
-                st.error(f"❌ Scanner error: {str(e)}")
+                progress.empty()
+                status_text.error(f"❌ Scan failed: {str(e)}")
+                logging.error(f"Scanner error: {str(e)}", exc_info=True)
     
     # TAB 3: Backtest
     with tab3:
