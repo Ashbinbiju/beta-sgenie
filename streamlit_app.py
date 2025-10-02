@@ -15,6 +15,7 @@ import random
 import warnings
 import sqlite3
 import gc
+import json
 from diskcache import Cache
 from SmartApi import SmartConnect
 import pyotp
@@ -278,6 +279,58 @@ TOOLTIPS = {
     "OR": "Opening Range - first 15-30min high/low levels",
     "Breadth": "Market internals - advancing vs declining stocks"
 }
+
+# ============================================================================
+# AUTO-RESUME CHECKPOINT SYSTEM
+# ============================================================================
+
+CHECKPOINT_FILE = "scan_checkpoint.json"
+
+def save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe):
+    """Save scan progress to checkpoint file"""
+    checkpoint = {
+        "timestamp": datetime.now().isoformat(),
+        "trading_style": trading_style,
+        "timeframe": timeframe,
+        "completed_stocks": completed_stocks,
+        "all_results": all_results,
+        "failed_stocks": failed_stocks
+    }
+    try:
+        with open(CHECKPOINT_FILE, 'w') as f:
+            json.dump(checkpoint, f)
+        logging.info(f"Checkpoint saved: {len(completed_stocks)} stocks completed")
+    except Exception as e:
+        logging.warning(f"Failed to save checkpoint: {str(e)}")
+
+def load_checkpoint():
+    """Load previous scan checkpoint"""
+    try:
+        if os.path.exists(CHECKPOINT_FILE):
+            with open(CHECKPOINT_FILE, 'r') as f:
+                checkpoint = json.load(f)
+            
+            # Check if checkpoint is less than 1 hour old
+            checkpoint_time = datetime.fromisoformat(checkpoint['timestamp'])
+            if (datetime.now() - checkpoint_time).seconds < 3600:
+                logging.info(f"Checkpoint found: {len(checkpoint['completed_stocks'])} stocks already processed")
+                return checkpoint
+            else:
+                logging.info("Checkpoint expired (>1 hour old)")
+                clear_checkpoint()
+        return None
+    except Exception as e:
+        logging.warning(f"Failed to load checkpoint: {str(e)}")
+        return None
+
+def clear_checkpoint():
+    """Clear checkpoint file after successful completion"""
+    try:
+        if os.path.exists(CHECKPOINT_FILE):
+            os.remove(CHECKPOINT_FILE)
+            logging.info("Checkpoint cleared")
+    except Exception as e:
+        logging.warning(f"Failed to clear checkpoint: {str(e)}")
 
 # ============================================================================
 # MARKET BREADTH & SECTOR PERFORMANCE
@@ -1893,9 +1946,10 @@ def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', max_retri
     
     return None
 
-def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None):
+def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None, resume=False):
     """
     Analyze multiple stocks with:
+    - Auto-resume capability
     - Batch processing
     - Session refresh
     - Error recovery
@@ -1903,63 +1957,122 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     """
     all_results = []
     failed_stocks = []
+    completed_stocks = []
+    
+    # Try to load checkpoint if resume is enabled
+    checkpoint = None
+    if resume:
+        checkpoint = load_checkpoint()
+        
+        if checkpoint:
+            # Verify checkpoint matches current scan parameters
+            if (checkpoint['trading_style'] == trading_style and 
+                checkpoint['timeframe'] == timeframe):
+                
+                all_results = checkpoint['all_results']
+                failed_stocks = checkpoint['failed_stocks']
+                completed_stocks = checkpoint['completed_stocks']
+                
+                st.info(f"🔄 Resuming from checkpoint: {len(completed_stocks)} stocks already processed")
+                logging.info(f"Resuming scan from checkpoint with {len(completed_stocks)} completed stocks")
+            else:
+                st.warning("⚠️ Checkpoint found but parameters don't match. Starting fresh scan.")
+                clear_checkpoint()
+    
     batch_size = SCAN_CONFIG["batch_size"]
     
     total_stocks = min(len(stock_list), SCAN_CONFIG["max_stocks_per_scan"])
-    stock_list = stock_list[:total_stocks]
     
-    logging.info(f"Starting scan of {total_stocks} stocks")
+    # Filter out already completed stocks
+    remaining_stocks = [s for s in stock_list if s not in completed_stocks]
+    remaining_stocks = remaining_stocks[:total_stocks - len(completed_stocks)]
     
-    for batch_idx in range(0, total_stocks, batch_size):
-        batch = stock_list[batch_idx:batch_idx + batch_size]
-        
-        # Refresh session periodically
-        if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0:
-            logging.info(f"Refreshing API session at stock {batch_idx}/{total_stocks}")
-            global _global_smart_api, _session_timestamp
-            _global_smart_api = None
-            time_module.sleep(3)
-        
-        for i, symbol in enumerate(batch):
-            overall_index = batch_idx + i
+    if not remaining_stocks:
+        logging.info("All stocks already processed")
+        if all_results:
+            return pd.DataFrame(all_results)
+        return pd.DataFrame()
+    
+    logging.info(f"Starting scan of {len(remaining_stocks)} remaining stocks (Total: {total_stocks})")
+    
+    try:
+        for batch_idx in range(0, len(remaining_stocks), batch_size):
+            batch = remaining_stocks[batch_idx:batch_idx + batch_size]
             
-            try:
-                # Update progress
-                if progress_callback:
-                    progress_callback((overall_index + 1) / total_stocks)
+            # Refresh session periodically
+            if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0:
+                logging.info(f"Refreshing API session at stock {batch_idx + len(completed_stocks)}/{total_stocks}")
+                global _global_smart_api, _session_timestamp
+                _global_smart_api = None
+                time_module.sleep(3)
+            
+            for i, symbol in enumerate(batch):
+                overall_index = batch_idx + i + len(completed_stocks)
                 
-                logging.info(f"Processing {overall_index + 1}/{total_stocks}: {symbol}")
+                try:
+                    # Update progress
+                    if progress_callback:
+                        progress_callback((overall_index + 1) / total_stocks)
+                    
+                    logging.info(f"Processing {overall_index + 1}/{total_stocks}: {symbol}")
+                    
+                    result = analyze_stock_batch(symbol, trading_style, timeframe, max_retries=3)
+                    
+                    if result:
+                        # Add sector information
+                        for sector_name, sector_stocks in SECTORS.items():
+                            if symbol in sector_stocks:
+                                result['Sector'] = sector_name
+                                break
+                        all_results.append(result)
+                    else:
+                        failed_stocks.append(symbol)
+                    
+                    # Mark as completed
+                    completed_stocks.append(symbol)
+                    
+                    # Save checkpoint every 5 stocks
+                    if len(completed_stocks) % 5 == 0:
+                        save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe)
+                    
+                except KeyboardInterrupt:
+                    logging.warning("Scan interrupted by user")
+                    save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe)
+                    st.warning(f"⚠️ Scan paused. Progress saved: {len(completed_stocks)}/{total_stocks} stocks")
+                    raise
                 
-                result = analyze_stock_batch(symbol, trading_style, timeframe, max_retries=3)
-                
-                if result:
-                    # Add sector information
-                    for sector_name, sector_stocks in SECTORS.items():
-                        if symbol in sector_stocks:
-                            result['Sector'] = sector_name
-                            break
-                    all_results.append(result)
-                else:
+                except Exception as e:
+                    logging.error(f"Critical error analyzing {symbol}: {str(e)}")
                     failed_stocks.append(symbol)
+                    completed_stocks.append(symbol)  # Mark as completed to skip on resume
+                    
+                    # Save checkpoint on error
+                    save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe)
+                    continue
                 
-            except KeyboardInterrupt:
-                logging.warning("Scan interrupted by user")
-                break
+                # Adaptive delay
+                if i < len(batch) - 1:
+                    time_module.sleep(SCAN_CONFIG["delay_within_batch"])
+                else:
+                    time_module.sleep(SCAN_CONFIG["delay_between_batches"])
             
-            except Exception as e:
-                logging.error(f"Critical error analyzing {symbol}: {str(e)}")
-                failed_stocks.append(symbol)
-                continue
-            
-            # Adaptive delay
-            if i < len(batch) - 1:
-                time_module.sleep(SCAN_CONFIG["delay_within_batch"])
-            else:
-                time_module.sleep(SCAN_CONFIG["delay_between_batches"])
+            # Memory cleanup every batch
+            if batch_idx % 10 == 0:
+                cleanup_memory()
         
-        # Memory cleanup every 10 stocks
-        if batch_idx % 10 == 0:
-            cleanup_memory()
+        # Successful completion - clear checkpoint
+        clear_checkpoint()
+        
+    except KeyboardInterrupt:
+        # Don't clear checkpoint on interruption
+        logging.info("Scan interrupted - checkpoint preserved")
+        raise
+    
+    except Exception as e:
+        logging.error(f"Fatal scan error: {str(e)}")
+        # Preserve checkpoint for recovery
+        save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe)
+        raise
     
     # Log summary
     logging.info(f"Scan complete: {len(all_results)} successful, {len(failed_stocks)} failed")
@@ -2118,8 +2231,8 @@ def main():
     init_database()
     
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.3 - Professional NSE Analysis")
-    st.caption("✨ FIXED: Scanner stability + Sector diversity + Realistic scoring")
+    st.title("📊 StockGenie Pro V2.4 - Professional NSE Analysis")
+    st.caption("✨ NEW: Auto-resume scanner + Better readability + Crash recovery")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # Sidebar
@@ -2331,9 +2444,20 @@ def main():
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
     
-    # TAB 2: Scanner (IMPROVED)
+    # TAB 2: Scanner (IMPROVED WITH AUTO-RESUME)
     with tab2:
         st.markdown("### 📡 Stock Scanner")
+        
+        # Check for existing checkpoint
+        checkpoint = load_checkpoint()
+        if checkpoint:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"🔄 Found incomplete scan: {len(checkpoint['completed_stocks'])} stocks already processed")
+            with col2:
+                if st.button("🗑️ Clear & Start Fresh"):
+                    clear_checkpoint()
+                    st.rerun()
         
         # Check API health before scan
         health_status, health_msg = check_api_health()
@@ -2352,13 +2476,33 @@ def main():
                 st.info(f"**Timeframe**: {timeframe_display}")
                 st.info(f"**Batch size**: {SCAN_CONFIG['batch_size']} stocks")
         
-        if st.button("🚀 Start Scan", type="primary"):
+        # Resume or Start Fresh
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
+        
+        with col2:
+            resume_enabled = checkpoint is not None
+            resume_button = st.button(
+                f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
+                disabled=not resume_enabled,
+                use_container_width=True
+            )
+        
+        if scan_button or resume_button:
+            resume = resume_button and checkpoint is not None
+            
             progress = st.progress(0)
             status_text = st.empty()
             results_placeholder = st.empty()
             
             try:
-                status_text.info("🔄 Initializing scan...")
+                if resume:
+                    status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
+                else:
+                    status_text.info("🔄 Initializing fresh scan...")
+                    clear_checkpoint()  # Clear old checkpoint for fresh scan
                 
                 def update_progress(pct):
                     progress.progress(pct)
@@ -2369,7 +2513,8 @@ def main():
                     stock_list,
                     'swing' if trading_style == "Swing Trading" else 'intraday',
                     timeframe,
-                    progress_callback=update_progress
+                    progress_callback=update_progress,
+                    resume=resume
                 )
                 
                 progress.empty()
@@ -2381,13 +2526,16 @@ def main():
                     
                     st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
                     
+                    # IMPROVED STYLING WITH BETTER CONTRAST
                     def highlight_score(val):
                         if val >= 75:
-                            return 'background-color: #90EE90'
+                            return 'background-color: #90EE90; color: #000000; font-weight: bold'  # Light green with black text
                         elif val >= 60:
-                            return 'background-color: #4c4c43'
+                            return 'background-color: #FFFACD; color: #000000; font-weight: bold'  # Light yellow with black text
+                        elif val <= 40:
+                            return 'background-color: #FFB6C1; color: #000000; font-weight: bold'  # Light red with black text
                         else:
-                            return ''
+                            return 'color: #000000'
                     
                     styled_df = results.style.applymap(highlight_score, subset=['Score'])
                     st.dataframe(styled_df, use_container_width=True)
@@ -2411,11 +2559,12 @@ def main():
             
             except KeyboardInterrupt:
                 progress.empty()
-                status_text.warning("⚠️ Scan cancelled by user")
+                status_text.warning("⚠️ Scan paused. Click 'Resume Scan' to continue from where you left off.")
             
             except Exception as e:
                 progress.empty()
                 status_text.error(f"❌ Scan failed: {str(e)}")
+                st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
                 logging.error(f"Scanner error: {str(e)}", exc_info=True)
     
     # TAB 3: Backtest
