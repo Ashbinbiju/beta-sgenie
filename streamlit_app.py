@@ -59,7 +59,19 @@ SCAN_CONFIG = {
     "session_refresh_interval": 20,
     "max_stocks_per_scan": 1000
 }
-
+def get_unique_stock_list(sectors_dict):
+    """Get unique stock list from SECTORS dictionary"""
+    all_stocks = []
+    for sector_stocks in sectors_dict.values():
+        all_stocks.extend(sector_stocks)
+    
+    unique_stocks = list(dict.fromkeys(all_stocks))  # Preserves order
+    
+    if len(all_stocks) != len(unique_stocks):
+        duplicates = len(all_stocks) - len(unique_stocks)
+        logging.warning(f"Found {duplicates} duplicate stocks in SECTORS")
+    
+    return unique_stocks
 # User agents
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -75,6 +87,7 @@ USER_AGENTS = [
 ]
 
 # Sector definitions
+# FIXED SECTORS (NO DUPLICATES)
 SECTORS = {
     "Bank": [
         "HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ",
@@ -89,7 +102,7 @@ SECTORS = {
         "TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ",
         "MPHASIS-EQ", "FSL-EQ", "BSOFT-EQ", "NEWGEN-EQ", "ZENSARTECH-EQ",
         "RATEGAIN-EQ", "TANLA-EQ", "COFORGE-EQ", "PERSISTENT-EQ", "CYIENT-EQ",
-        "SONATSOFTW-EQ", "KPITTECH-EQ", "BSOFT-EQ", "TATAELXSI-EQ",
+        "SONATSOFTW-EQ", "KPITTECH-EQ", "TATAELXSI-EQ",
         "INTELLECT-EQ", "HAPPSTMNDS-EQ", "MASTEK-EQ", "ECLERX-EQ", "NIITLTD-EQ",
         "RSYSTEMS-EQ", "OFSS-EQ", "AURIONPRO-EQ", "DATAMATICS-EQ",
         "QUICKHEAL-EQ", "CIGNITITEC-EQ", "SAGILITY-EQ", "ALLDIGI-EQ"
@@ -106,8 +119,8 @@ SECTORS = {
         "CANBK-EQ", "UNIONBANK-EQ", "IOB-EQ", "YESBANK-EQ", "UCOBANK-EQ",
         "BANKINDIA-EQ", "CENTRALBK-EQ", "IDBI-EQ", "J&KBANK-EQ", "DCBBANK-EQ",
         "FEDERALBNK-EQ", "SOUTHBANK-EQ", "CSBBANK-EQ", "TMB-EQ", "KTKBANK-EQ",
-        "EQUITASBNK-EQ", "UJJIVANSFB-EQ", "BANDHANBNK-EQ", "SURYODAY-EQ", "FSL-EQ",
-        "PSB-EQ", "PFS-EQ", "HDFCAMC-EQ", "UTIAMC-EQ", "ABSLAMC-EQ",
+        "EQUITASBNK-EQ", "UJJIVANSFB-EQ", "BANDHANBNK-EQ", "SURYODAY-EQ", "PSB-EQ",
+        "PFS-EQ", "HDFCAMC-EQ", "UTIAMC-EQ", "ABSLAMC-EQ",
         "360ONE-EQ", "ANANDRATHI-EQ", "PNBHOUSING-EQ", "HOMEFIRST-EQ", "AAVAS-EQ",
         "APTUS-EQ", "RECLTD-EQ", "PFC-EQ", "IREDA-EQ", "SMCGLOBAL-EQ", "CHOICEIN-EQ",
         "KFINTECH-EQ", "MASFIN-EQ", "TRIDENT-EQ", "SBFC-EQ",
@@ -192,10 +205,10 @@ SECTORS = {
         "NAVINFLUOR-EQ", "VINATIORGA-EQ", "FINEORG-EQ", "ALKYLAMINE-EQ", "BALAMINES-EQ",
         "GUJFLUORO-EQ", "CLEAN-EQ", "JUBLINGREA-EQ", "GALAXYSURF-EQ", "PCBL-EQ",
         "NOCIL-EQ", "BASF-EQ", "SUDARSCHEM-EQ", "NEOGEN-EQ", "PRIVISCL-EQ",
-        "ROSSARI-EQ", "LXCHEM-EQ", "ANURAS-EQ", "JUBLPHARMA-EQ", "CHEMCON-EQ",
+        "ROSSARI-EQ", "LXCHEM-EQ", "ANURAS-EQ", "CHEMCON-EQ",
         "DMCC-EQ", "TATACHEM-EQ", "COROMANDEL-EQ", "UPL-EQ", "BAYERCROP-EQ",
-        "SUMICHEM-EQ", "PIIND-EQ", "DMCC-EQ", "EIDPARRY-EQ", "CHEMPLASTS-EQ",
-        "VISHNU-EQ", "IGPL-EQ", "TIRUMALCHM-EQ", "RALLIS-EQ"
+        "SUMICHEM-EQ", "PIIND-EQ", "EIDPARRY-EQ", "CHEMPLASTS-EQ",
+        "IGPL-EQ", "TIRUMALCHM-EQ", "RALLIS-EQ"
     ],
 
     "Telecom": [
@@ -208,24 +221,24 @@ SECTORS = {
         "PNCINFRA-EQ", "KNRCON-EQ", "GRINFRA-EQ", "NCC-EQ", "HGINFRA-EQ",
         "ASHOKA-EQ", "SADBHAV-EQ", "JWL-EQ", "PATELENG-EQ", "KALPATPOWR-EQ",
         "IRCON-EQ", "ENGINERSIN-EQ", "AHLUWALIA-EQ", "PSPPROJECTS-EQ", "CAPACITE-EQ",
-        "WELSPUNIND-EQ", "TITAGARH-EQ", "HCC-EQ", "MANINFRA-EQ", "RIIL-EQ",
-        "DBREALTY-EQ", "JWL-EQ", "JAYBARMARU-EQ"
+        "WELSPUNIND-EQ", "HCC-EQ", "MANINFRA-EQ", "RIIL-EQ",
+        "JAYBARMARU-EQ"
     ],
 
     "Insurance": [
         "SBILIFE-EQ", "HDFCLIFE-EQ", "ICICIGI-EQ", "ICICIPRULI-EQ", "LICI-EQ",
-        "GICRE-EQ", "NIACL-EQ", "STARHEALTH-EQ", "BAJAJFINSV-EQ", "MAXFIN-EQ"
+        "GICRE-EQ", "NIACL-EQ", "STARHEALTH-EQ", "MAXFIN-EQ"
     ],
 
     "Diversified": [
-        "ITC-EQ", "RELIANCE-EQ", "ADANIENT-EQ", "GRASIM-EQ", "HINDUNILVR-EQ",
+        "ADANIENT-EQ", "GRASIM-EQ",
         "DCMSHRIRAM-EQ", "3MINDIA-EQ", "CENTURYPLY-EQ", "KFINTECH-EQ", "BALMERLAWRI-EQ",
-        "GODREJIND-EQ", "VBL-EQ", "BIRLACORPN-EQ"
+        "GODREJIND-EQ", "BIRLACORPN-EQ"
     ],
 
     "Cement": [
         "ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ", "JKCEMENT-EQ",
-        "DALBHARAT-EQ", "RAMCOCEM-EQ", "NUVOCO-EQ", "JKLAKSHMI-EQ", "BIRLACORPN-EQ",
+        "DALBHARAT-EQ", "RAMCOCEM-EQ", "NUVOCO-EQ", "JKLAKSHMI-EQ",
         "HEIDELBERG-EQ", "INDIACEM-EQ", "PRISMJOHNS-EQ", "STARCEMENT-EQ", "SAGCEM-EQ",
         "DECCANCE-EQ", "KCP-EQ", "ORIENTCEM-EQ", "HIL-EQ", "EVERESTIND-EQ",
         "VISAKAIND-EQ", "BIGBLOC-EQ"
@@ -254,20 +267,7 @@ SECTORS = {
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
     ]
 }
-
-# Industry mapping
-INDUSTRY_MAP = {
-    "Financial Services": ["HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ", 
-                          "INDUSINDBK-EQ", "PNB-EQ", "BANKBARODA-EQ", "CANBK-EQ", "UNIONBANK-EQ"],
-    "Information Technology": ["TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ"],
-    "Automobile and Auto Components": ["MARUTI-EQ", "TATAMOTORS-EQ", "M&M-EQ", "BAJAJ-AUTO-EQ", "HEROMOTOCO-EQ"],
-    "Healthcare": ["SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "DIVISLAB-EQ", "AUROPHARMA-EQ", "APOLLOHOSP-EQ"],
-    "Fast Moving Consumer Goods": ["HINDUNILVR-EQ", "ITC-EQ", "NESTLEIND-EQ", "BRITANNIA-EQ", "DABUR-EQ"],
-    "Oil Gas & Consumable Fuels": ["RELIANCE-EQ", "ONGC-EQ", "IOC-EQ", "BPCL-EQ", "HPCL-EQ"],
-    "Metals & Mining": ["TATASTEEL-EQ", "JSWSTEEL-EQ", "HINDALCO-EQ", "VEDL-EQ", "SAIL-EQ"],
-    "Construction Materials": ["ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ"]
-}
-
+]
 TOOLTIPS = {
     "Score": "Signal strength (0-100). 50=neutral, 65+=buy zone, 35-=sell zone",
     "RSI": "Momentum indicator (30=oversold, 70=overbought)",
@@ -2008,6 +2008,9 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     failed_stocks = []
     completed_stocks = []
     
+    # STEP 1: Remove duplicates from stock_list FIRST
+    stock_list = list(dict.fromkeys(stock_list))  # Preserves order, removes duplicates
+    
     # Try to load checkpoint if resume is enabled
     checkpoint = None
     if resume:
@@ -2029,9 +2032,10 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     
     batch_size = SCAN_CONFIG["batch_size"]
     
+    # STEP 2: Calculate total properly
     total_stocks = min(len(stock_list), SCAN_CONFIG["max_stocks_per_scan"])
     
-    # Filter out already completed stocks
+    # STEP 3: Filter out already completed stocks
     remaining_stocks = [s for s in stock_list if s not in completed_stocks]
     remaining_stocks = remaining_stocks[:total_stocks - len(completed_stocks)]
     
@@ -2055,14 +2059,16 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                 time_module.sleep(3)
             
             for i, symbol in enumerate(batch):
-                overall_index = batch_idx + i + len(completed_stocks)
+                # FIXED PROGRESS CALCULATION
+                current_count = len(completed_stocks) + 1  # Number of stocks completed (including current)
+                progress_value = min(current_count / total_stocks, 1.0)  # CAP AT 1.0
                 
                 try:
-                    # Update progress
+                    # Update progress with SAFE value
                     if progress_callback:
-                        progress_callback((overall_index + 1) / total_stocks)
+                        progress_callback(progress_value)
                     
-                    logging.info(f"Processing {overall_index + 1}/{total_stocks}: {symbol}")
+                    logging.info(f"Processing {current_count}/{total_stocks}: {symbol}")
                     
                     result = analyze_stock_batch(symbol, trading_style, timeframe, contrarian_mode, max_retries=3)
                     
@@ -2159,7 +2165,6 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
         result_df = df.sort_values('Score', ascending=False).head(10)
     
     return result_df
-
 # ============================================================================
 # DATABASE
 # ============================================================================
@@ -2320,9 +2325,10 @@ def main():
     )
     
     if "All" in selected_sectors:
-        stock_list = [s for sector in SECTORS.values() for s in sector]
+        stock_list = get_unique_stock_list(SECTORS)
     else:
-        stock_list = [s for sector in selected_sectors for s in SECTORS.get(sector, [])]
+        temp_list = [s for sector in selected_sectors for s in SECTORS.get(sector, [])]
+        stock_list = list(dict.fromkeys(temp_list))  # Remove duplicates
     
     symbol = st.sidebar.selectbox("Select Stock", stock_list, index=0)
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, max_value=10000000, value=30000, step=5000)
