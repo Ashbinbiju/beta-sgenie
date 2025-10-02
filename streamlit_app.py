@@ -178,7 +178,15 @@ def retry(max_retries=3, delay=5, backoff_factor=2):
             raise RuntimeError("Max retries exhausted")
         return wrapper
     return decorator
-
+    
+def calculate_rma(series, period):
+    """
+    Wilder's smoothing (RMA) used in ATR calculation.
+    Matches TradingView's ta.rma() function.
+    """
+    alpha = 1.0 / period
+    return series.ewm(alpha=alpha, adjust=False).mean()
+    
 @retry(max_retries=3, delay=5)
 def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
     """Fetch stock data from SmartAPI with intelligent caching"""
@@ -297,42 +305,43 @@ def validate_data(data, required_columns=None, min_length=50):
 
 def calculate_swing_indicators(data):
     """
-    Calculate swing trading indicators:
-    - MACD (12/26/9)
-    - 200 EMA
-    - RSI (14) with dynamic thresholds
-    - ATR (14)
-    - Bollinger Bands (20,2)
-    - ADX (14)
-    - Volume analysis
+    Calculate swing trading indicators matching TradingView defaults
     """
     if not validate_data(data, min_length=200):
         return data
     
     df = data.copy()
     
-    # MACD (Trend)
-    macd = ta.trend.MACD(df['Close'], window_slow=26, window_fast=12, window_sign=9)
-    df['MACD'] = macd.macd()
-    df['MACD_Signal'] = macd.macd_signal()
-    df['MACD_Hist'] = macd.macd_diff()
+    # ==================== MACD (EMA-based, matching TradingView) ====================
+    df['EMA_12'] = ta.trend.EMAIndicator(df['Close'], window=12).ema_indicator()
+    df['EMA_26'] = ta.trend.EMAIndicator(df['Close'], window=26).ema_indicator()
+    df['MACD'] = df['EMA_12'] - df['EMA_26']
+    df['MACD_Signal'] = ta.trend.EMAIndicator(df['MACD'], window=9).ema_indicator()
+    df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
+    df.drop(['EMA_12', 'EMA_26'], axis=1, inplace=True)
     
-    # 200 EMA (Primary trend filter)
+    # ==================== 200 EMA ====================
     df['EMA_200'] = ta.trend.EMAIndicator(df['Close'], window=200).ema_indicator()
     df['Above_EMA200'] = df['Close'] > df['EMA_200']
     
-    # RSI with dynamic thresholds
+    # ==================== RSI ====================
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
     df['RSI_Oversold'] = np.where(df['Above_EMA200'], 40, 30)
     df['RSI_Overbought'] = np.where(df['Above_EMA200'], 70, 60)
     
-    # ATR (Volatility)
-    df['ATR'] = ta.volatility.AverageTrueRange(
-        df['High'], df['Low'], df['Close'], window=14
-    ).average_true_range()
+    # ==================== ATR (RMA/Wilder's smoothing) ====================
+    df['TR'] = np.maximum(
+        df['High'] - df['Low'],
+        np.maximum(
+            abs(df['High'] - df['Close'].shift(1)),
+            abs(df['Low'] - df['Close'].shift(1))
+        )
+    )
+    df['ATR'] = calculate_rma(df['TR'], 14)
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
+    df.drop('TR', axis=1, inplace=True)
     
-    # Bollinger Bands
+    # ==================== Bollinger Bands ====================
     bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = bb.bollinger_hband()
     df['BB_Middle'] = bb.bollinger_mavg()
@@ -340,14 +349,14 @@ def calculate_swing_indicators(data):
     df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
     df['BB_Position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
     
-    # ADX (Trend strength)
+    # ==================== ADX ====================
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
     df['Trending'] = df['ADX'] > 25
     
-    # Volume
+    # ==================== Volume ====================
     df['Volume_SMA'] = df['Volume'].rolling(20).mean()
     df['Volume_Spike'] = df['Volume'] > (df['Volume_SMA'] * 1.5)
-    df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA'].replace(0, 1)  # FIXED: Division by zero
+    df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA'].clip(lower=0.001)
     
     return df
 
@@ -492,7 +501,6 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['VWAP'] = df['Cumul_TPV'] / df['Cumul_Vol'].replace(0, np.nan)
     
     # CRITICAL FIX: Use simple standard deviation (NOT volume-weighted)
-    # This matches TradingView's ta.vwap() function
     df['Deviation_Squared'] = (df['Typical_Price'] - df['VWAP']) ** 2
     df['Cumul_Dev_Sq'] = df.groupby('Date')['Deviation_Squared'].cumsum()
     df['Bar_Count'] = df.groupby('Date').cumcount() + 1
@@ -517,18 +525,23 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     # ==================== RSI ====================
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=rsi_period).rsi()
     
-    # ==================== ATR ====================
-    df['ATR'] = ta.volatility.AverageTrueRange(
-        df['High'], df['Low'], df['Close'], window=10
-    ).average_true_range()
+    # ==================== ATR (RMA/Wilder's smoothing, 14 period) ====================
+    df['TR'] = np.maximum(
+        df['High'] - df['Low'],
+        np.maximum(
+            abs(df['High'] - df['Close'].shift(1)),
+            abs(df['Low'] - df['Close'].shift(1))
+        )
+    )
+    df['ATR'] = calculate_rma(df['TR'], 14)
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
-    
+    df.drop('TR', axis=1, inplace=True)
+
     # ==================== VOLUME ====================
     df['Avg_Volume'] = df['Volume'].rolling(20).mean()
-    df['RVOL'] = df['Volume'] / df['Avg_Volume'].replace(0, 1)  # FIXED: Division by zero
+    df['RVOL'] = df['Volume'] / df['Avg_Volume'].clip(lower=0.001)
     df['Volume_Spike'] = df['RVOL'] > 1.5
     df['High_Volume'] = df['RVOL'] > 2.0
-    
     # ==================== OPENING RANGE ====================
     df['Time'] = df.index.time
     
@@ -568,18 +581,15 @@ def calculate_intraday_indicators(data, timeframe='15m'):
         df['Inside_OR']
     )
     
-    # ==================== MACD ====================
-    macd = ta.trend.MACD(
-        df['Close'], 
-        window_slow=macd_slow, 
-        window_fast=macd_fast, 
-        window_sign=macd_sign
-    )
-    df['MACD'] = macd.macd()
-    df['MACD_Signal'] = macd.macd_signal()
-    df['MACD_Hist'] = macd.macd_diff()
+   # ==================== MACD (EMA-based) ====================
+    df['EMA_Fast_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_fast).ema_indicator()
+    df['EMA_Slow_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_slow).ema_indicator()
+    df['MACD'] = df['EMA_Fast_MACD'] - df['EMA_Slow_MACD']
+    df['MACD_Signal'] = ta.trend.EMAIndicator(df['MACD'], window=macd_sign).ema_indicator()
+    df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
     df['MACD_Bullish'] = df['MACD'] > df['MACD_Signal']
     df['MACD_Hist_Rising'] = df['MACD_Hist'] > df['MACD_Hist'].shift(1)
+    df.drop(['EMA_Fast_MACD', 'EMA_Slow_MACD'], axis=1, inplace=True)
     
     # ==================== ADX ====================
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
