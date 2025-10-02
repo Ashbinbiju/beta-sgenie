@@ -481,22 +481,24 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['EMA_Crossover'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & df['EMA_Bullish']
     df['EMA_Crossunder'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & ~df['EMA_Bullish']
     
-    # ==================== VWAP WITH BANDS (FIXED FORMULA) ====================
+# ==================== VWAP WITH BANDS (CORRECTED TO MATCH TRADINGVIEW) ====================
     df['Date'] = df.index.date
     df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
     
-    # Standard VWAP
-    df['VWAP'] = df.groupby('Date').apply(
-        lambda x: (x['Typical_Price'] * x['Volume']).cumsum() / x['Volume'].cumsum()
-    ).reset_index(level=0, drop=True)
+    # Vectorized VWAP calculation (much faster)
+    df['TPV'] = df['Typical_Price'] * df['Volume']
+    df['Cumul_TPV'] = df.groupby('Date')['TPV'].cumsum()
+    df['Cumul_Vol'] = df.groupby('Date')['Volume'].cumsum()
+    df['VWAP'] = df['Cumul_TPV'] / df['Cumul_Vol'].replace(0, np.nan)
     
-    # FIXED: Proper volume-weighted standard deviation
-    df['VWAP_Variance'] = df.groupby('Date').apply(
-        lambda x: ((x['Typical_Price'] - x['VWAP'])**2 * x['Volume']).cumsum() / x['Volume'].cumsum()
-    ).reset_index(level=0, drop=True)
+    # CRITICAL FIX: Use simple standard deviation (NOT volume-weighted)
+    # This matches TradingView's ta.vwap() function
+    df['Deviation_Squared'] = (df['Typical_Price'] - df['VWAP']) ** 2
+    df['Cumul_Dev_Sq'] = df.groupby('Date')['Deviation_Squared'].cumsum()
+    df['Bar_Count'] = df.groupby('Date').cumcount() + 1
+    df['VWAP_Std'] = np.sqrt(df['Cumul_Dev_Sq'] / df['Bar_Count'])
     
-    df['VWAP_Std'] = np.sqrt(df['VWAP_Variance'].fillna(0))
-    
+    # VWAP bands
     df['VWAP_Upper1'] = df['VWAP'] + (df['VWAP_Std'] * 1)
     df['VWAP_Upper2'] = df['VWAP'] + (df['VWAP_Std'] * 2)
     df['VWAP_Lower1'] = df['VWAP'] - (df['VWAP_Std'] * 1)
@@ -596,11 +598,10 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['Lunch_Hours'] = (df['Time'] >= time(12, 0)) & (df['Time'] <= time(13, 30))
     df['Last_30_Min'] = df['Time'] >= time(15, 0)
     df['Closing_Session'] = df['Time'] > time(15, 15)
-    
-    # Clean up
-    df.drop(columns=['Date', 'Typical_Price', 'Time', 'Is_OR', 'VWAP_Variance'], 
+
+    df.drop(columns=['Date', 'Typical_Price', 'Time', 'Is_OR', 'TPV', 'Cumul_TPV', 
+                     'Cumul_Vol', 'Deviation_Squared', 'Cumul_Dev_Sq', 'Bar_Count'], 
             inplace=True, errors='ignore')
-    
     return df
 
 def detect_intraday_regime(df):
