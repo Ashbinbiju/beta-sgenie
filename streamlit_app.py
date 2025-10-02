@@ -1570,7 +1570,7 @@ def main():
                             if '200 EMA' in rec.get('reason', ''):
                                 fig.add_trace(go.Scatter(
                                     x=processed_data.index, 
-                                    y=processed_data['EMA_200']
+                                    y=processed_data['EMA_200'],
                                     mode='lines',
                                     name='200 EMA',
                                     line=dict(color='purple', width=2)
