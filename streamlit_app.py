@@ -16,6 +16,8 @@ import warnings
 import sqlite3
 import gc
 import json
+import pickle
+from pathlib import Path
 from diskcache import Cache
 from SmartApi import SmartConnect
 import pyotp
@@ -70,7 +72,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 OPR/110.0.0.0",
     "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Brave/124.0.0.0"
-
 ]
 
 # Sector definitions
@@ -252,7 +253,6 @@ SECTORS = {
         "ZEEL-EQ", "SUNTV-EQ", "TVTODAY-EQ", "DISHTV-EQ", "HATHWAY-EQ",
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
     ]
-
 }
 
 # Industry mapping
@@ -284,53 +284,51 @@ TOOLTIPS = {
 # AUTO-RESUME CHECKPOINT SYSTEM
 # ============================================================================
 
-CHECKPOINT_FILE = "scan_checkpoint.json"
+CHECKPOINT_FILE = Path("scan_checkpoint.pkl")
 
 def save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe):
-    """Save scan progress to checkpoint file"""
-    checkpoint = {
-        "timestamp": datetime.now().isoformat(),
-        "trading_style": trading_style,
-        "timeframe": timeframe,
-        "completed_stocks": completed_stocks,
-        "all_results": all_results,
-        "failed_stocks": failed_stocks
-    }
+    """Save scan checkpoint to disk"""
     try:
-        with open(CHECKPOINT_FILE, 'w') as f:
-            json.dump(checkpoint, f)
+        checkpoint = {
+            'completed_stocks': completed_stocks,
+            'all_results': all_results,
+            'failed_stocks': failed_stocks,
+            'trading_style': trading_style,
+            'timeframe': timeframe,
+            'timestamp': datetime.now()
+        }
+        with open(CHECKPOINT_FILE, 'wb') as f:
+            pickle.dump(checkpoint, f)
         logging.info(f"Checkpoint saved: {len(completed_stocks)} stocks completed")
     except Exception as e:
-        logging.warning(f"Failed to save checkpoint: {str(e)}")
+        logging.error(f"Failed to save checkpoint: {str(e)}")
 
 def load_checkpoint():
-    """Load previous scan checkpoint"""
+    """Load scan checkpoint from disk"""
     try:
-        if os.path.exists(CHECKPOINT_FILE):
-            with open(CHECKPOINT_FILE, 'r') as f:
-                checkpoint = json.load(f)
-            
-            # Check if checkpoint is less than 1 hour old
-            checkpoint_time = datetime.fromisoformat(checkpoint['timestamp'])
-            if (datetime.now() - checkpoint_time).seconds < 3600:
+        if CHECKPOINT_FILE.exists():
+            with open(CHECKPOINT_FILE, 'rb') as f:
+                checkpoint = pickle.load(f)
+            age = datetime.now() - checkpoint['timestamp']
+            if age.total_seconds() < 3600:  # 1 hour expiry
                 logging.info(f"Checkpoint found: {len(checkpoint['completed_stocks'])} stocks already processed")
                 return checkpoint
             else:
-                logging.info("Checkpoint expired (>1 hour old)")
+                logging.info("Checkpoint expired (>1 hour old), starting fresh")
                 clear_checkpoint()
         return None
     except Exception as e:
-        logging.warning(f"Failed to load checkpoint: {str(e)}")
+        logging.error(f"Failed to load checkpoint: {str(e)}")
         return None
 
 def clear_checkpoint():
-    """Clear checkpoint file after successful completion"""
+    """Remove checkpoint file"""
     try:
-        if os.path.exists(CHECKPOINT_FILE):
-            os.remove(CHECKPOINT_FILE)
+        if CHECKPOINT_FILE.exists():
+            CHECKPOINT_FILE.unlink()
             logging.info("Checkpoint cleared")
     except Exception as e:
-        logging.warning(f"Failed to clear checkpoint: {str(e)}")
+        logging.error(f"Failed to clear checkpoint: {str(e)}")
 
 # ============================================================================
 # MARKET BREADTH & SECTOR PERFORMANCE
@@ -971,7 +969,7 @@ def detect_swing_regime(df):
     else:
         return "Neutral"
 
-def calculate_swing_score(df, symbol=None, timeframe='1d'):
+def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False):
     """Calculate swing trading score with BALANCED market context"""
     score = 0
     
@@ -1032,33 +1030,50 @@ def calculate_swing_score(df, symbol=None, timeframe='1d'):
         else:
             score -= 1
     
-    # Market context adjustments
+    # Market context adjustments (CORRECTLY IMPLEMENTED)
+    confidence_adjustment = 0
+    
     if symbol:
         signal_direction = 'bullish' if score > 0 else 'bearish'
         
-        # 1. Index Alignment (±5)
+        # Calculate BASE adjustments (reduced from original ±13 to ±6)
+        index_adj = 0
         index_trends = get_index_trend_for_timeframe(timeframe)
         if index_trends:
             relevant_index = get_relevant_index(symbol)
             index_data = index_trends.get(relevant_index)
-            index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
-            score += index_adjustment
+            index_adj = calculate_index_alignment_score(index_data, signal_direction) * 0.4  # ±5 → ±2
         
-        # 2. Market Breadth Alignment (±5)
-        breadth_adjustment = calculate_market_breadth_alignment(signal_direction)
-        score += breadth_adjustment
+        breadth_adj = calculate_market_breadth_alignment(signal_direction) * 0.4  # ±5 → ±2
         
-        # 3. Industry Performance (±3)
+        industry_adj = 0
         industry_data = get_industry_performance(symbol)
         if industry_data:
-            industry_adjustment = calculate_industry_alignment_score(industry_data, signal_direction)
-            score += industry_adjustment
+            industry_adj = calculate_industry_alignment_score(industry_data, signal_direction) * 0.67  # ±3 → ±2
+        
+        # Total base adjustment: ±6
+        base_context_adjustment = index_adj + breadth_adj + industry_adj
+        
+        # Apply contrarian mode AFTER base reduction
+        if contrarian_mode:
+            confidence_adjustment = base_context_adjustment * 0.5  # ±6 → ±3
+        else:
+            confidence_adjustment = base_context_adjustment  # ±6
     
-    # Improved normalization
-    if score >= 0:
-        normalized = 50 + (score * 1.8)
+    # Final score
+    final_score = score + confidence_adjustment
+    
+    # Normalization with CORRECT range mapping + Division by Zero Safety
+    # Technical range: ~±13, Context: ±6 (normal) or ±3 (contrarian)
+    # Total expected range: ±19 (normal) or ±16 (contrarian)
+    max_expected = 19 if not contrarian_mode else 16
+    
+    if final_score >= 0:
+        # Map [0, max_expected] → [50, 85] (conservative bullish)
+        normalized = 50 + (final_score / max(max_expected, 1)) * 35
     else:
-        normalized = 50 + (score * 1.8)
+        # Map [-max_expected, 0] → [15, 50] (preserve bearish warnings)
+        normalized = 50 + (final_score / max(max_expected, 1)) * 35
     
     normalized = np.clip(normalized, 0, 100)
     return round(normalized, 1)
@@ -1254,7 +1269,11 @@ def detect_intraday_regime(df):
 # ============================================================================
 
 def calculate_opening_range_score(df):
-    """Opening Range Breakout Strategy"""
+    """Opening Range Breakout Strategy
+    
+    Note: Does not use contrarian_mode as it doesn't apply market context.
+    Market context adjustments are applied at the parent score level.
+    """
     score = 0
     
     if not df['After_OR'].iloc[-1]:
@@ -1317,7 +1336,11 @@ def calculate_opening_range_score(df):
     return score
 
 def calculate_vwap_mean_reversion_score(df):
-    """VWAP Mean Reversion Strategy"""
+    """VWAP Mean Reversion Strategy
+    
+    Note: Does not use contrarian_mode as it doesn't apply market context.
+    Market context adjustments are applied at the parent score level.
+    """
     score = 0
     
     close = df['Close'].iloc[-1]
@@ -1367,7 +1390,11 @@ def calculate_vwap_mean_reversion_score(df):
     return score
 
 def calculate_intraday_trend_score(df):
-    """Intraday Trend Following"""
+    """Intraday Trend Following
+    
+    Note: Does not use contrarian_mode as it doesn't apply market context.
+    Market context adjustments are applied at the parent score level.
+    """
     score = 0
     
     close = df['Close'].iloc[-1]
@@ -1430,7 +1457,7 @@ def calculate_intraday_trend_score(df):
     
     return score
 
-def calculate_intraday_score(df, symbol=None, timeframe='15m'):
+def calculate_intraday_score(df, symbol=None, timeframe='15m', contrarian_mode=False):
     """Unified intraday scoring with BALANCED market context"""
     regime = detect_intraday_regime(df)
     
@@ -1468,39 +1495,60 @@ def calculate_intraday_score(df, symbol=None, timeframe='15m'):
     else:
         raw_score = trend_score
     
-    # Market context adjustments
+    # Market context adjustments (CORRECTLY IMPLEMENTED)
+    confidence_adjustment = 0
+    
     if symbol:
         signal_direction = 'bullish' if raw_score > 0 else 'bearish'
         
-        # 1. Index Alignment (±5)
+        # Calculate BASE adjustments (reduced from original ±13 to ±6)
+        index_adj = 0
         index_trends = get_index_trend_for_timeframe(timeframe)
         if index_trends:
             relevant_index = get_relevant_index(symbol)
             index_data = index_trends.get(relevant_index)
-            index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
-            raw_score += index_adjustment
+            index_adj = calculate_index_alignment_score(index_data, signal_direction) * 0.4  # ±5 → ±2
         
-        # 2. Market Breadth Alignment (±5)
-        breadth_adjustment = calculate_market_breadth_alignment(signal_direction)
-        raw_score += breadth_adjustment
+        breadth_adj = calculate_market_breadth_alignment(signal_direction) * 0.4  # ±5 → ±2
         
-        # 3. Industry Performance (±3)
+        industry_adj = 0
         industry_data = get_industry_performance(symbol)
         if industry_data:
-            industry_adjustment = calculate_industry_alignment_score(industry_data, signal_direction)
-            raw_score += industry_adjustment
+            industry_adj = calculate_industry_alignment_score(industry_data, signal_direction) * 0.67  # ±3 → ±2
+        
+        # Total base adjustment: ±6
+        base_context_adjustment = index_adj + breadth_adj + industry_adj
+        
+        # Apply contrarian mode AFTER base reduction
+        if contrarian_mode:
+            confidence_adjustment = base_context_adjustment * 0.5  # ±6 → ±3
+        else:
+            confidence_adjustment = base_context_adjustment  # ±6
+    
+    # Apply confidence adjustment
+    final_score = raw_score + confidence_adjustment
     
     # Time modifiers
     if prime_hours:
-        raw_score *= 1.2
+        final_score *= 1.2
     elif lunch_hours:
-        raw_score *= 0.7
+        final_score *= 0.7
     
-    # Improved normalization
-    if raw_score >= 0:
-        normalized = 50 + (raw_score * 2.5)
+    # CORRECTED Normalization with proper range mapping
+    # Opening Range: ±13 max
+    # VWAP Mean Reversion: ±11 max  
+    # Trend: ±13 max
+    # Context: ±6 (normal) or ±3 (contrarian)
+    # Prime time multiplier: 1.2x
+    # Actual max: 13 (strategy) + 6 (context) = 19 × 1.2 = 22.8
+    max_expected = 23 if not contrarian_mode else 20
+    
+    if final_score >= 0:
+        # Map [0, max_expected] → [50, 90] (slightly less conservative for intraday)
+        normalized = 50 + (final_score / max(max_expected, 1)) * 40
     else:
-        normalized = 50 + (raw_score * 2.5)
+        # Map [-max_expected, 0] → [10, 50] (aggressive warning)
+        normalized = 50 + (final_score / max(max_expected, 1)) * 40
     
     normalized = np.clip(normalized, 0, 100)
     return round(normalized, 1)
@@ -1648,19 +1696,19 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
 # UNIFIED RECOMMENDATION
 # ============================================================================
 
-def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000):
+def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000, contrarian_mode=False):
     """Generate unified recommendations with COMPLETE MARKET CONTEXT"""
     
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
         regime = detect_swing_regime(df)
-        score = calculate_swing_score(df, symbol, timeframe)
+        score = calculate_swing_score(df, symbol, timeframe, contrarian_mode)
         position = calculate_swing_position(df, account_size)
         
     else:
         df = calculate_intraday_indicators(data, timeframe)
         regime = detect_intraday_regime(df)
-        score = calculate_intraday_score(df, symbol, timeframe)
+        score = calculate_intraday_score(df, symbol, timeframe, contrarian_mode)
         position = calculate_intraday_position(df, account_size)
     
     # Get market context
@@ -1708,7 +1756,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
     else:
         signal = "Hold"
     
-    # Build reason
+    # Build reason (WITHOUT contrarian clutter)
     reasons = []
     close = df['Close'].iloc[-1]
     
@@ -1752,7 +1800,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         elif df['OR_Breakout_Short'].iloc[-1]:
             reasons.append("OR breakdown (bearish)")
     
-    # Add market context
+    # Add market context (CLEAN, no weight mention)
     if index_context:
         reasons.append(f"{index_context['index_name']}: {index_context['trend']}")
     
@@ -1774,6 +1822,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         "market_health": market_health,
         "market_signal": market_signal,
         "market_factors": market_factors,
+        "contrarian_mode": contrarian_mode,
         "processed_data": df, 
         **position
     }
@@ -1782,7 +1831,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
 # BACKTESTING
 # ============================================================================
 
-def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initial_capital=30000):
+def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initial_capital=30000, contrarian_mode=False):
     """Backtest strategy with realistic costs"""
     
     results = {
@@ -1815,7 +1864,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
         sliced = data.iloc[:i+1]
         
         try:
-            rec = generate_recommendation(sliced, symbol, trading_style, timeframe, cash)
+            rec = generate_recommendation(sliced, symbol, trading_style, timeframe, cash, contrarian_mode)
             current_price = data['Close'].iloc[i]
             current_date = data.index[i]
             
@@ -1900,7 +1949,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
 # BATCH ANALYSIS WITH ROBUST ERROR HANDLING
 # ============================================================================
 
-def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', max_retries=3):
+def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', contrarian_mode=False, max_retries=3):
     """Analyze single stock with comprehensive error handling"""
     
     for attempt in range(max_retries):
@@ -1915,7 +1964,7 @@ def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', max_retri
                 logging.warning(f"{symbol}: Insufficient data ({len(data)} bars)")
                 return None
             
-            rec = generate_recommendation(data, symbol, trading_style, timeframe)
+            rec = generate_recommendation(data, symbol, trading_style, timeframe, contrarian_mode=contrarian_mode)
             
             return {
                 "Symbol": rec['symbol'],
@@ -1946,7 +1995,7 @@ def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', max_retri
     
     return None
 
-def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None, resume=False):
+def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None, resume=False, contrarian_mode=False):
     """
     Analyze multiple stocks with:
     - Auto-resume capability
@@ -1973,10 +2022,9 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                 failed_stocks = checkpoint['failed_stocks']
                 completed_stocks = checkpoint['completed_stocks']
                 
-                st.info(f"🔄 Resuming from checkpoint: {len(completed_stocks)} stocks already processed")
                 logging.info(f"Resuming scan from checkpoint with {len(completed_stocks)} completed stocks")
             else:
-                st.warning("⚠️ Checkpoint found but parameters don't match. Starting fresh scan.")
+                logging.warning("Checkpoint parameters don't match. Starting fresh scan.")
                 clear_checkpoint()
     
     batch_size = SCAN_CONFIG["batch_size"]
@@ -2016,7 +2064,7 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                     
                     logging.info(f"Processing {overall_index + 1}/{total_stocks}: {symbol}")
                     
-                    result = analyze_stock_batch(symbol, trading_style, timeframe, max_retries=3)
+                    result = analyze_stock_batch(symbol, trading_style, timeframe, contrarian_mode, max_retries=3)
                     
                     if result:
                         # Add sector information
@@ -2038,7 +2086,6 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                 except KeyboardInterrupt:
                     logging.warning("Scan interrupted by user")
                     save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe)
-                    st.warning(f"⚠️ Scan paused. Progress saved: {len(completed_stocks)}/{total_stocks} stocks")
                     raise
                 
                 except Exception as e:
@@ -2231,8 +2278,8 @@ def main():
     init_database()
     
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.4 - Professional NSE Analysis")
-    st.caption("✨ NEW: Auto-resume scanner + Better readability + Crash recovery")
+    st.title("📊 StockGenie Pro V2.5 - Professional NSE Analysis")
+    st.caption("✨ FIXED: Market context weight reduced + Asymmetric scoring + Contrarian mode + Auto-resume")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # Sidebar
@@ -2250,6 +2297,19 @@ def main():
     else:
         timeframe_display = "Daily"
         timeframe = "1d"
+    
+    # Contrarian Mode Toggle
+    st.sidebar.divider()
+    contrarian_mode = st.sidebar.checkbox(
+        "🎯 Contrarian Mode",
+        value=False,
+        help="Reduce market context penalties. Useful for finding counter-trend opportunities."
+    )
+    
+    if contrarian_mode:
+        st.sidebar.info("⚠️ Market context weight reduced by 50%. Stock technicals prioritized.")
+    
+    st.sidebar.divider()
     
     sector_options = ["All"] + list(SECTORS.keys())
     selected_sectors = st.sidebar.multiselect(
@@ -2333,9 +2393,13 @@ def main():
                         rec = generate_recommendation(
                             data, symbol,
                             'swing' if trading_style == "Swing Trading" else 'intraday',
-                            timeframe, account_size
+                            timeframe, account_size, contrarian_mode
                         )
                         processed_data = rec.get('processed_data', data)
+                        
+                        # Display Contrarian Mode Status
+                        if contrarian_mode:
+                            st.info("🎯 **Contrarian Mode Active**: Market context weight reduced by 50%. Stock technicals prioritized.")
                         
                         col1, col2, col3, col4, col5 = st.columns(5)
                         col1.metric("Score", f"{rec['score']}/100")
@@ -2474,7 +2538,18 @@ def main():
             with col2:
                 st.info(f"**Trading style**: {trading_style}")
                 st.info(f"**Timeframe**: {timeframe_display}")
-                st.info(f"**Batch size**: {SCAN_CONFIG['batch_size']} stocks")
+                # Resume Checkbox
+                resume = st.checkbox(
+                    "Resume from checkpoint", 
+                    value=True,
+                    help="Continue previous scan if interrupted"
+                )
+                if resume and CHECKPOINT_FILE.exists():
+                    st.success("✅ Checkpoint available")
+        
+        # Display Contrarian Mode Status
+        if contrarian_mode:
+            st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
         
         # Resume or Start Fresh
         col1, col2 = st.columns(2)
@@ -2483,7 +2558,7 @@ def main():
             scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
         
         with col2:
-            resume_enabled = checkpoint is not None
+            resume_enabled = checkpoint is not None and resume
             resume_button = st.button(
                 f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
                 disabled=not resume_enabled,
@@ -2491,14 +2566,14 @@ def main():
             )
         
         if scan_button or resume_button:
-            resume = resume_button and checkpoint is not None
+            resume_scan = resume_button and checkpoint is not None
             
             progress = st.progress(0)
             status_text = st.empty()
             results_placeholder = st.empty()
             
             try:
-                if resume:
+                if resume_scan:
                     status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
                 else:
                     status_text.info("🔄 Initializing fresh scan...")
@@ -2514,7 +2589,8 @@ def main():
                     'swing' if trading_style == "Swing Trading" else 'intraday',
                     timeframe,
                     progress_callback=update_progress,
-                    resume=resume
+                    resume=resume_scan,
+                    contrarian_mode=contrarian_mode
                 )
                 
                 progress.empty()
@@ -2578,7 +2654,7 @@ def main():
                         results = backtest_strategy(
                             data, symbol,
                             'swing' if trading_style == "Swing Trading" else 'intraday',
-                            timeframe, account_size
+                            timeframe, account_size, contrarian_mode
                         )
                         
                         st.success("✅ Backtest complete (includes transaction costs)")
