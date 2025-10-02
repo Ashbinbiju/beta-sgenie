@@ -1,6 +1,6 @@
 # ============================================================================
-# STOCKGENIE PRO - COMPLETE REFACTORED VERSION
-# Swing + Intraday Trading System with Streamlined Indicators
+# STOCKGENIE PRO - COMPLETE REFACTORED VERSION V2.0
+# Enhanced Swing + Intraday Trading System
 # ============================================================================
 
 import pandas as pd
@@ -9,7 +9,6 @@ import ta
 import logging
 import streamlit as st
 from datetime import datetime, timedelta, time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache, wraps
 from tqdm import tqdm
 import plotly.graph_objects as go
@@ -25,7 +24,6 @@ from SmartApi import SmartConnect
 import pyotp
 import os
 from dotenv import load_dotenv
-from itertools import cycle
 
 # ============================================================================
 # CONFIGURATION & SETUP
@@ -65,43 +63,49 @@ USER_AGENTS = [
 SECTORS = {
     "Bank": [
         "HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ",
-        "INDUSINDBK-EQ", "PNB-EQ", "BANKBARODA-EQ", "CANBK-EQ", "UNIONBANK-EQ"
+        "INDUSINDBK-EQ", "PNB-EQ", "BANKBARODA-EQ", "CANBK-EQ", "UNIONBANK-EQ",
+        "FEDERALBNK-EQ", "IDFCFIRSTB-EQ", "BANDHANBNK-EQ", "AUBANK-EQ", "RBLBANK-EQ"
     ],
     "IT": [
         "TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ",
-        "MPHASIS-EQ", "COFORGE-EQ", "PERSISTENT-EQ"
+        "MPHASIS-EQ", "COFORGE-EQ", "PERSISTENT-EQ", "TATAELXSI-EQ"
     ],
     "Auto": [
         "MARUTI-EQ", "TATAMOTORS-EQ", "M&M-EQ", "BAJAJ-AUTO-EQ", "HEROMOTOCO-EQ",
-        "EICHERMOT-EQ", "TVSMOTOR-EQ", "ASHOKLEY-EQ"
+        "EICHERMOT-EQ", "TVSMOTOR-EQ", "ASHOKLEY-EQ", "ESCORTS-EQ", "BALKRISIND-EQ"
     ],
     "Pharma": [
         "SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "DIVISLAB-EQ", "AUROPHARMA-EQ",
-        "LUPIN-EQ", "TORNTPHARM-EQ", "ALKEM-EQ"
+        "LUPIN-EQ", "TORNTPHARM-EQ", "ALKEM-EQ", "BIOCON-EQ", "APOLLOHOSP-EQ"
     ],
     "FMCG": [
         "HINDUNILVR-EQ", "ITC-EQ", "NESTLEIND-EQ", "BRITANNIA-EQ", "DABUR-EQ",
-        "MARICO-EQ", "GODREJCP-EQ", "TATACONSUM-EQ"
+        "MARICO-EQ", "GODREJCP-EQ", "TATACONSUM-EQ", "COLPAL-EQ", "PGHH-EQ"
     ],
     "Energy": [
         "RELIANCE-EQ", "ONGC-EQ", "IOC-EQ", "BPCL-EQ", "HPCL-EQ", "GAIL-EQ",
-        "COALINDIA-EQ", "NTPC-EQ", "POWERGRID-EQ"
+        "COALINDIA-EQ", "NTPC-EQ", "POWERGRID-EQ", "ADANIPOWER-EQ"
     ],
     "Metals": [
         "TATASTEEL-EQ", "JSWSTEEL-EQ", "HINDALCO-EQ", "VEDL-EQ", "SAIL-EQ",
-        "NMDC-EQ", "HINDZINC-EQ", "JINDALSTEL-EQ"
+        "NMDC-EQ", "HINDZINC-EQ", "JINDALSTEL-EQ", "NATIONALUM-EQ", "MOIL-EQ"
+    ],
+    "Cement": [
+        "ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ", "JKCEMENT-EQ",
+        "DALBHARAT-EQ", "RAMCOCEM-EQ", "NUVOCO-EQ"
     ]
 }
 
 # Tooltips
 TOOLTIPS = {
-    "Score": "Combined signal strength (0-100). 50=neutral, >65=buy, <35=sell",
-    "RSI": "Relative Strength Index - Momentum indicator (30=oversold, 70=overbought)",
-    "MACD": "Trend following indicator - Crossovers indicate trend changes",
-    "ATR": "Average True Range - Measures volatility for stop-loss placement",
-    "ADX": "Trend strength (>25 = strong trend, <20 = weak/choppy)",
-    "VWAP": "Volume Weighted Average Price - Intraday benchmark",
-    "EMA": "Exponential Moving Average - Trend direction filter"
+    "Score": "Signal strength (0-100). 50=neutral, 65+=buy zone, 35-=sell zone",
+    "RSI": "Momentum indicator (30=oversold, 70=overbought)",
+    "MACD": "Trend indicator - crossovers signal trend changes",
+    "ATR": "Volatility measure for stop-loss placement",
+    "ADX": "Trend strength (>25 = strong, <20 = weak/choppy)",
+    "VWAP": "Volume-weighted price - intraday benchmark",
+    "EMA": "Exponential Moving Average - trend filter",
+    "OR": "Opening Range - first 15-30min high/low levels"
 }
 
 # ============================================================================
@@ -114,11 +118,9 @@ def get_global_smart_api():
     now = time_module.time()
     
     if _global_smart_api is None or (now - _session_timestamp) > SESSION_EXPIRY:
-        st.info("🔄 Refreshing SmartAPI session...")
         _global_smart_api = init_smartapi_client()
         _session_timestamp = now
         if not _global_smart_api:
-            st.error("❌ Failed to initialize session.")
             return None
     
     return _global_smart_api
@@ -133,7 +135,7 @@ def init_smartapi_client():
         if data['status']:
             return smart_api
         else:
-            st.error(f"⚠️ SmartAPI auth failed: {data['message']}")
+            st.error(f"⚠️ SmartAPI auth failed: {data.get('message', 'Unknown error')}")
             return None
     except Exception as e:
         st.error(f"⚠️ Error initializing SmartAPI: {str(e)}")
@@ -149,7 +151,7 @@ def load_symbol_token_map():
         data = response.json()
         return {entry["symbol"]: entry["token"] for entry in data if "symbol" in entry and "token" in entry}
     except Exception as e:
-        st.warning(f"⚠️ Failed to load instrument list: {str(e)}")
+        logging.warning(f"Failed to load instrument list: {str(e)}")
         return {}
 
 def retry(max_retries=3, delay=5, backoff_factor=2):
@@ -165,7 +167,6 @@ def retry(max_retries=3, delay=5, backoff_factor=2):
                         if attempt == max_retries:
                             raise
                         sleep_time = delay * (backoff_factor ** (attempt - 1))
-                        st.warning(f"Rate limit. Retry {attempt}/{max_retries} in {sleep_time}s...")
                         time_module.sleep(sleep_time)
                     else:
                         raise
@@ -196,18 +197,12 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
         
         # Calculate date range
         end_date = datetime.now()
-        if period == "2y":
-            start_date = end_date - timedelta(days=730)
-        elif period == "1y":
-            start_date = end_date - timedelta(days=365)
-        elif period == "6mo":
-            start_date = end_date - timedelta(days=180)
-        elif period == "1mo":
-            start_date = end_date - timedelta(days=30)
-        elif period == "1d":
-            start_date = end_date - timedelta(days=1)
-        else:
-            start_date = end_date - timedelta(days=365)
+        period_map = {
+            "2y": 730, "1y": 365, "6mo": 180, 
+            "1mo": 30, "1d": 1
+        }
+        days = period_map.get(period, 365)
+        start_date = end_date - timedelta(days=days)
         
         # Map interval
         interval_map = {
@@ -224,7 +219,7 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
         symboltoken = symbol_token_map.get(symbol)
         
         if not symboltoken:
-            st.warning(f"⚠️ Token not found for {symbol}")
+            logging.warning(f"Token not found for {symbol}")
             return pd.DataFrame()
         
         # Fetch data
@@ -272,25 +267,20 @@ def validate_data(data, required_columns=None, min_length=50):
         required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
     
     if data is None or data.empty:
-        logging.warning("Empty data")
         return False
     
     if len(data) < min_length:
-        logging.warning(f"Insufficient data: {len(data)} < {min_length}")
         return False
     
     missing = [c for c in required_columns if c not in data.columns]
     if missing:
-        logging.warning(f"Missing columns: {missing}")
         return False
     
     if data[required_columns].isnull().any().any():
-        logging.warning("Null values detected")
         return False
     
     price_cols = [c for c in ['Open', 'High', 'Low', 'Close'] if c in data.columns]
     if (data[price_cols] <= 0).any().any():
-        logging.warning("Invalid prices (<=0)")
         return False
     
     return True
@@ -336,7 +326,7 @@ def calculate_swing_indicators(data):
     ).average_true_range()
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
     
-    # Bollinger Bands (Support/Resistance)
+    # Bollinger Bands
     bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = bb.bollinger_hband()
     df['BB_Middle'] = bb.bollinger_mavg()
@@ -344,11 +334,11 @@ def calculate_swing_indicators(data):
     df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
     df['BB_Position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
     
-    # ADX (Trend strength filter)
+    # ADX (Trend strength)
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
     df['Trending'] = df['ADX'] > 25
     
-    # Volume analysis
+    # Volume
     df['Volume_SMA'] = df['Volume'].rolling(20).mean()
     df['Volume_Spike'] = df['Volume'] > (df['Volume_SMA'] * 1.5)
     df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA']
@@ -405,13 +395,13 @@ def calculate_swing_score(df):
     bb_position = df['BB_Position'].iloc[-1]
     volume_ratio = df['Volume_Ratio'].iloc[-1]
     
-    # Above/below 200 EMA (±3 points)
+    # EMA position (±3)
     if close > ema200:
         score += 3
     else:
         score -= 3
     
-    # MACD crossover (±4 points for fresh, ±1 for sustained)
+    # MACD (±4 fresh, ±1 sustained)
     if macd > macd_signal and macd_prev <= macd_signal_prev:
         score += 4
     elif macd > macd_signal:
@@ -421,7 +411,7 @@ def calculate_swing_score(df):
     elif macd < macd_signal:
         score -= 1
     
-    # RSI (±3 points scaled by strength)
+    # RSI (±3 scaled)
     if rsi < rsi_oversold:
         strength = (rsi_oversold - rsi) / rsi_oversold
         score += 3 * strength
@@ -429,20 +419,20 @@ def calculate_swing_score(df):
         strength = (rsi - rsi_overbought) / (100 - rsi_overbought)
         score -= 3 * strength
     
-    # ADX trend strength (±2 points)
+    # ADX (±2)
     if adx > 25:
         if close > ema200:
             score += 2
         else:
             score -= 2
     
-    # Bollinger Band position (±2 points)
+    # BB position (±2)
     if bb_position < 0.2:
         score += 2
     elif bb_position > 0.8:
         score -= 2
     
-    # Volume confirmation (±1 point)
+    # Volume (±1)
     if volume_ratio > 1.5:
         if score > 0:
             score += 1
@@ -454,20 +444,12 @@ def calculate_swing_score(df):
     return round(normalized, 1)
 
 # ============================================================================
-# INTRADAY INDICATORS (5MIN/15MIN TIMEFRAME)
+# INTRADAY INDICATORS WITH ENHANCED OR & VWAP
 # ============================================================================
 
 def calculate_intraday_indicators(data, timeframe='15m'):
     """
-    Calculate intraday indicators:
-    - EMA crossover (9/21 or 20/50 based on timeframe)
-    - VWAP with bands
-    - Fast RSI (7-9)
-    - Tight ATR (10)
-    - Volume spike
-    - Opening Range
-    - Fast MACD (5/13/5 or 12/26/9)
-    - ADX (>20 filter)
+    Enhanced intraday indicators with proper OR and VWAP band logic
     """
     if len(data) < 200:
         return data
@@ -477,7 +459,7 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
     
-    # EMA crossover
+    # ==================== EMA CROSSOVER ====================
     if timeframe == '5m':
         fast, slow = 9, 21
         rsi_period = 7
@@ -493,7 +475,7 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['EMA_Crossover'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & df['EMA_Bullish']
     df['EMA_Crossunder'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & ~df['EMA_Bullish']
     
-    # VWAP
+    # ==================== VWAP WITH BANDS ====================
     df['Date'] = df.index.date
     df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
     
@@ -501,76 +483,132 @@ def calculate_intraday_indicators(data, timeframe='15m'):
         lambda x: (x['Typical_Price'] * x['Volume']).cumsum() / x['Volume'].cumsum()
     ).reset_index(level=0, drop=True)
     
-    df['VWAP_Std'] = df.groupby('Date')['Typical_Price'].transform(lambda x: x.expanding().std())
-    df['VWAP_Upper1'] = df['VWAP'] + df['VWAP_Std']
-    df['VWAP_Upper2'] = df['VWAP'] + (df['VWAP_Std'] * 2)
-    df['VWAP_Lower1'] = df['VWAP'] - df['VWAP_Std']
-    df['VWAP_Lower2'] = df['VWAP'] - (df['VWAP_Std'] * 2)
-    df['Above_VWAP'] = df['Close'] > df['VWAP']
+    df['VWAP_Std'] = df.groupby('Date')['Typical_Price'].transform(
+        lambda x: x.expanding().std()
+    )
     
-    # Fast RSI
+    df['VWAP_Upper1'] = df['VWAP'] + (df['VWAP_Std'] * 1)
+    df['VWAP_Upper2'] = df['VWAP'] + (df['VWAP_Std'] * 2)
+    df['VWAP_Lower1'] = df['VWAP'] - (df['VWAP_Std'] * 1)
+    df['VWAP_Lower2'] = df['VWAP'] - (df['VWAP_Std'] * 2)
+    
+    # VWAP position indicators
+    df['Above_VWAP'] = df['Close'] > df['VWAP']
+    df['At_VWAP_Upper_Extreme'] = df['Close'] >= df['VWAP_Upper2']
+    df['At_VWAP_Lower_Extreme'] = df['Close'] <= df['VWAP_Lower2']
+    df['In_VWAP_Channel'] = (df['Close'] >= df['VWAP_Lower1']) & (df['Close'] <= df['VWAP_Upper1'])
+    
+    # VWAP band breakouts
+    df['VWAP_Upper_Breakout'] = (df['Close'] > df['VWAP_Upper1']) & (df['Close'].shift(1) <= df['VWAP_Upper1'])
+    df['VWAP_Lower_Breakdown'] = (df['Close'] < df['VWAP_Lower1']) & (df['Close'].shift(1) >= df['VWAP_Lower1'])
+    
+    # ==================== RSI ====================
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=rsi_period).rsi()
     
-    # Tight ATR
-    df['ATR'] = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close'], window=10).average_true_range()
+    # ==================== ATR ====================
+    df['ATR'] = ta.volatility.AverageTrueRange(
+        df['High'], df['Low'], df['Close'], window=10
+    ).average_true_range()
     df['ATR_Percent'] = (df['ATR'] / df['Close']) * 100
     
-    # Volume
+    # ==================== VOLUME ====================
     df['Avg_Volume'] = df['Volume'].rolling(20).mean()
     df['RVOL'] = df['Volume'] / df['Avg_Volume']
     df['Volume_Spike'] = df['RVOL'] > 1.5
+    df['High_Volume'] = df['RVOL'] > 2.0
     
-    # Opening Range (first 30 min)
+    # ==================== OPENING RANGE (ENHANCED) ====================
     df['Time'] = df.index.time
-    df['Is_OR'] = df['Time'] <= time(9, 45)
+    
+    or_window = time(9, 30) if timeframe == '5m' else time(9, 45)
+    df['Is_OR'] = (df['Time'] >= time(9, 15)) & (df['Time'] <= or_window)
+    
     df['OR_High'] = df[df['Is_OR']].groupby('Date')['High'].transform('max')
     df['OR_Low'] = df[df['Is_OR']].groupby('Date')['Low'].transform('min')
     df['OR_High'] = df.groupby('Date')['OR_High'].ffill()
     df['OR_Low'] = df.groupby('Date')['OR_Low'].ffill()
-    df['OR_Breakout_Long'] = (df['Close'] > df['OR_High']) & (df['Close'].shift(1) <= df['OR_High'])
-    df['OR_Breakout_Short'] = (df['Close'] < df['OR_Low']) & (df['Close'].shift(1) >= df['OR_Low'])
+    df['OR_Mid'] = (df['OR_High'] + df['OR_Low']) / 2
+    df['OR_Range'] = df['OR_High'] - df['OR_Low']
     
-    # Fast MACD
-    macd = ta.trend.MACD(df['Close'], window_slow=macd_slow, window_fast=macd_fast, window_sign=macd_sign)
+    # OR states
+    df['After_OR'] = df['Time'] > or_window
+    df['Inside_OR'] = (df['Close'] >= df['OR_Low']) & (df['Close'] <= df['OR_High'])
+    
+    # OR breakouts (after OR period)
+    df['OR_Breakout_Long'] = (
+        df['After_OR'] & 
+        (df['Close'] > df['OR_High']) & 
+        (df['Close'].shift(1) <= df['OR_High'])
+    )
+    
+    df['OR_Breakout_Short'] = (
+        df['After_OR'] & 
+        (df['Close'] < df['OR_Low']) & 
+        (df['Close'].shift(1) >= df['OR_Low'])
+    )
+    
+    # Failed breakouts
+    df['Failed_OR_Breakout'] = (
+        ((df['High'].shift(1) > df['OR_High']) | (df['Low'].shift(1) < df['OR_Low'])) &
+        df['Inside_OR']
+    )
+    
+    # ==================== MACD ====================
+    macd = ta.trend.MACD(
+        df['Close'], 
+        window_slow=macd_slow, 
+        window_fast=macd_fast, 
+        window_sign=macd_sign
+    )
     df['MACD'] = macd.macd()
     df['MACD_Signal'] = macd.macd_signal()
     df['MACD_Hist'] = macd.macd_diff()
     df['MACD_Bullish'] = df['MACD'] > df['MACD_Signal']
+    df['MACD_Hist_Rising'] = df['MACD_Hist'] > df['MACD_Hist'].shift(1)
     
-    # ADX
+    # ==================== ADX ====================
     df['ADX'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14).adx()
     df['Trending_Intraday'] = df['ADX'] > 20
     
-    # Time filters
-    df['Safe_Hours'] = (df['Time'] >= time(9, 30)) & (df['Time'] <= time(15, 15))
+    # ==================== TIME FILTERS ====================
+    df['Pre_Market'] = df['Time'] < time(9, 15)
+    df['Opening_Range_Period'] = df['Is_OR']
+    df['Safe_Hours'] = (df['Time'] >= time(9, 30)) & (df['Time'] <= time(15, 0))
     df['Prime_Hours'] = (
-        ((df['Time'] >= time(9, 30)) & (df['Time'] <= time(11, 30))) |
-        ((df['Time'] >= time(14, 0)) & (df['Time'] <= time(15, 15)))
+        ((df['Time'] >= time(9, 45)) & (df['Time'] <= time(11, 30))) |
+        ((df['Time'] >= time(14, 0)) & (df['Time'] <= time(15, 0)))
     )
+    df['Lunch_Hours'] = (df['Time'] >= time(12, 0)) & (df['Time'] <= time(13, 30))
+    df['Last_30_Min'] = df['Time'] >= time(15, 0)
+    df['Closing_Session'] = df['Time'] > time(15, 15)
     
+    # Clean up
     df.drop(columns=['Date', 'Typical_Price', 'Time', 'Is_OR'], inplace=True, errors='ignore')
     
     return df
 
 def detect_intraday_regime(df):
-    """Classify intraday regime"""
+    """Enhanced regime detection with time awareness"""
     if len(df) < 50:
         return "Unknown"
     
-    current_time = df.index[-1].time()
-    
-    if current_time < time(9, 15):
+    # Time-based regimes
+    if df['Pre_Market'].iloc[-1]:
         return "Pre-Market"
-    elif current_time <= time(9, 45):
-        return "Opening Range"
-    elif current_time > time(15, 15):
+    elif df['Opening_Range_Period'].iloc[-1]:
+        return "Opening Range Formation"
+    elif df['Closing_Session'].iloc[-1]:
         return "Closing Session"
+    elif df['Last_30_Min'].iloc[-1]:
+        return "Last 30 Min (Exit Only)"
     
+    # Market-based regimes
     close = df['Close'].iloc[-1]
     vwap = df['VWAP'].iloc[-1]
     ema_bullish = df['EMA_Bullish'].iloc[-1]
     macd_bullish = df['MACD_Bullish'].iloc[-1]
     adx = df['ADX'].iloc[-1]
+    in_vwap_channel = df['In_VWAP_Channel'].iloc[-1]
     
     if pd.isna(vwap) or pd.isna(adx):
         return "Unknown"
@@ -580,24 +618,144 @@ def detect_intraday_regime(df):
     
     if above_vwap and ema_bullish and macd_bullish and trending:
         return "Strong Uptrend"
-    elif above_vwap and ema_bullish:
-        return "Weak Uptrend"
     elif not above_vwap and not ema_bullish and not macd_bullish and trending:
         return "Strong Downtrend"
+    elif above_vwap and ema_bullish:
+        return "Weak Uptrend"
     elif not above_vwap and not ema_bullish:
         return "Weak Downtrend"
-    elif not trending:
-        return "Choppy"
+    elif in_vwap_channel and not trending:
+        return "Choppy (VWAP Range)"
     else:
         return "Neutral"
 
-def calculate_intraday_score(df):
-    """Calculate intraday score (0-100)"""
-    regime = detect_intraday_regime(df)
+# ============================================================================
+# INTRADAY SCORING STRATEGIES
+# ============================================================================
+
+def calculate_opening_range_score(df):
+    """Opening Range Breakout Strategy"""
+    score = 0
     
-    if regime in ["Pre-Market", "Closing Session", "Unknown"]:
-        return 50  # Neutral
+    if not df['After_OR'].iloc[-1]:
+        return 0
     
+    or_breakout_long = df['OR_Breakout_Long'].iloc[-1]
+    or_breakout_short = df['OR_Breakout_Short'].iloc[-1]
+    failed_breakout = df['Failed_OR_Breakout'].iloc[-1]
+    rvol = df['RVOL'].iloc[-1]
+    adx = df['ADX'].iloc[-1]
+    macd_bullish = df['MACD_Bullish'].iloc[-1]
+    or_range = df['OR_Range'].iloc[-1]
+    atr = df['ATR'].iloc[-1]
+    
+    # Require decent range
+    if or_range < (atr * 0.5):
+        return 0
+    
+    # Bullish OR breakout
+    if or_breakout_long:
+        score += 5
+        
+        if rvol > 2.5:
+            score += 3
+        elif rvol > 1.8:
+            score += 2
+        elif rvol > 1.5:
+            score += 1
+        else:
+            score -= 2
+        
+        if macd_bullish:
+            score += 1
+        
+        if adx > 20:
+            score += 2
+    
+    # Bearish OR breakout
+    elif or_breakout_short:
+        score -= 5
+        
+        if rvol > 2.5:
+            score -= 3
+        elif rvol > 1.8:
+            score -= 2
+        elif rvol > 1.5:
+            score -= 1
+        else:
+            score += 2
+        
+        if not macd_bullish:
+            score -= 1
+        
+        if adx > 20:
+            score -= 2
+    
+    # Failed breakout (reversal)
+    elif failed_breakout:
+        if df['High'].shift(1).iloc[-1] > df['OR_High'].iloc[-1]:
+            score -= 3
+        elif df['Low'].shift(1).iloc[-1] < df['OR_Low'].iloc[-1]:
+            score += 3
+    
+    return score
+
+def calculate_vwap_mean_reversion_score(df):
+    """VWAP Mean Reversion Strategy"""
+    score = 0
+    
+    close = df['Close'].iloc[-1]
+    rsi = df['RSI'].iloc[-1]
+    at_lower_extreme = df['At_VWAP_Lower_Extreme'].iloc[-1]
+    at_upper_extreme = df['At_VWAP_Upper_Extreme'].iloc[-1]
+    vwap_upper_breakout = df['VWAP_Upper_Breakout'].iloc[-1]
+    vwap_lower_breakdown = df['VWAP_Lower_Breakdown'].iloc[-1]
+    rvol = df['RVOL'].iloc[-1]
+    adx = df['ADX'].iloc[-1]
+    vwap_lower1 = df['VWAP_Lower1'].iloc[-1]
+    vwap_upper1 = df['VWAP_Upper1'].iloc[-1]
+    
+    # Extreme oversold
+    if at_lower_extreme and rsi < 30:
+        rsi_strength = (30 - rsi) / 30
+        score += 4 * rsi_strength
+        
+        if adx < 20:
+            score += 2
+        
+        if rvol > 1.5:
+            score += 1
+    
+    # Extreme overbought
+    elif at_upper_extreme and rsi > 70:
+        rsi_strength = (rsi - 70) / 30
+        score -= 4 * rsi_strength
+        
+        if adx < 20:
+            score -= 2
+        
+        if rvol > 1.5:
+            score -= 1
+    
+    # Moderate levels
+    elif close <= vwap_lower1 and rsi < 40:
+        score += 2
+    elif close >= vwap_upper1 and rsi > 60:
+        score -= 2
+    
+    # Trend breakouts
+    if vwap_upper_breakout and rvol > 2.0 and adx > 20:
+        score = max(score, 0)
+        score += 2
+    
+    elif vwap_lower_breakdown and rvol > 2.0 and adx > 20:
+        score = min(score, 0)
+        score -= 2
+    
+    return score
+
+def calculate_intraday_trend_score(df):
+    """Intraday Trend Following"""
     score = 0
     
     close = df['Close'].iloc[-1]
@@ -605,60 +763,110 @@ def calculate_intraday_score(df):
     ema_bullish = df['EMA_Bullish'].iloc[-1]
     ema_crossover = df['EMA_Crossover'].iloc[-1]
     ema_crossunder = df['EMA_Crossunder'].iloc[-1]
-    rsi = df['RSI'].iloc[-1]
     macd_bullish = df['MACD_Bullish'].iloc[-1]
+    macd_hist_rising = df['MACD_Hist_Rising'].iloc[-1]
     rvol = df['RVOL'].iloc[-1]
     adx = df['ADX'].iloc[-1]
-    or_breakout_long = df['OR_Breakout_Long'].iloc[-1]
-    or_breakout_short = df['OR_Breakout_Short'].iloc[-1]
     
-    # VWAP position (±3)
+    # Bullish
     if close > vwap:
-        score += 3
+        score += 2
+        
+        if ema_crossover:
+            score += 3
+        elif ema_bullish:
+            score += 1
+        
+        if macd_bullish:
+            score += 1
+        
+        if macd_hist_rising:
+            score += 1
+        
+        if rvol > 2.0:
+            score += 2
+        elif rvol > 1.5:
+            score += 1
+        
+        if adx > 25:
+            score += 2
+        elif adx > 20:
+            score += 1
+    
+    # Bearish
+    elif close < vwap:
+        score -= 2
+        
+        if ema_crossunder:
+            score -= 3
+        elif not ema_bullish:
+            score -= 1
+        
+        if not macd_bullish:
+            score -= 1
+        
+        if not macd_hist_rising:
+            score -= 1
+        
+        if rvol > 2.0:
+            score -= 2
+        elif rvol > 1.5:
+            score -= 1
+        
+        if adx > 25:
+            score -= 2
+        elif adx > 20:
+            score -= 1
+    
+    return score
+
+def calculate_intraday_score(df):
+    """Unified intraday scoring with time filters"""
+    regime = detect_intraday_regime(df)
+    
+    # Block unsafe times
+    if regime in ["Pre-Market", "Closing Session", "Unknown", "Last 30 Min (Exit Only)", "Opening Range Formation"]:
+        return 50
+    
+    safe_hours = df['Safe_Hours'].iloc[-1]
+    prime_hours = df['Prime_Hours'].iloc[-1]
+    lunch_hours = df['Lunch_Hours'].iloc[-1]
+    
+    if not safe_hours:
+        return 50
+    
+    # Calculate strategy scores
+    or_score = calculate_opening_range_score(df)
+    mean_reversion_score = calculate_vwap_mean_reversion_score(df)
+    trend_score = calculate_intraday_trend_score(df)
+    
+    # Select strategy
+    current_time = df.index[-1].time()
+    
+    # OR Breakout (9:45-11:00)
+    if time(9, 45) <= current_time <= time(11, 0) and or_score != 0:
+        raw_score = or_score
+    
+    # Trend (10:00-14:30, not lunch)
+    elif regime in ["Strong Uptrend", "Strong Downtrend"] and not lunch_hours:
+        raw_score = trend_score
+    
+    # Mean Reversion (choppy, prime hours)
+    elif regime in ["Choppy (VWAP Range)", "Weak Uptrend", "Weak Downtrend"] and prime_hours:
+        raw_score = mean_reversion_score
+    
+    # Default
     else:
-        score -= 3
+        raw_score = trend_score
     
-    # EMA crossover (±4 fresh, ±1 sustained)
-    if ema_crossover:
-        score += 4
-    elif ema_bullish:
-        score += 1
-    elif ema_crossunder:
-        score -= 4
-    elif not ema_bullish:
-        score -= 1
+    # Time modifiers
+    if prime_hours:
+        raw_score *= 1.2
+    elif lunch_hours:
+        raw_score *= 0.7
     
-    # RSI (±3)
-    if rsi < 30:
-        score += 3 * (30 - rsi) / 30
-    elif rsi > 70:
-        score -= 3 * (rsi - 70) / 30
-    
-    # MACD (±1)
-    if macd_bullish:
-        score += 1
-    else:
-        score -= 1
-    
-    # Volume (±2)
-    if rvol > 2.0:
-        score += 2 if score > 0 else -2
-    elif rvol > 1.5:
-        score += 1 if score > 0 else -1
-    
-    # ADX (±2)
-    if adx > 25:
-        score += 2 if score > 0 else -2
-    elif adx > 20:
-        score += 1 if score > 0 else -1
-    
-    # OR breakout (±4)
-    if or_breakout_long:
-        score += 4
-    elif or_breakout_short:
-        score -= 4
-    
-    normalized = np.clip(50 + (score * 3.33), 0, 100)
+    # Normalize
+    normalized = np.clip(50 + (raw_score * 3.33), 0, 100)
     return round(normalized, 1)
 
 # ============================================================================
@@ -686,7 +894,7 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     else:
         stop_loss = close - (1.5 * atr)
     
-    stop_loss = max(stop_loss, close * 0.92)  # Max 8% loss
+    stop_loss = max(stop_loss, close * 0.92)
     stop_loss = round(stop_loss, 2)
     
     # Target
@@ -707,7 +915,6 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     max_position = int((account_size * 0.1) / buy_at)
     position_size = min(position_size, max_position)
     
-    # Trailing stop
     trailing_stop = close - (2.5 * atr) if adx > 30 else close - (1.5 * atr)
     trailing_stop = round(trailing_stop, 2)
     
@@ -724,40 +931,53 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     }
 
 def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
-    """Calculate intraday position parameters"""
+    """Enhanced intraday position with OR-aware stops"""
     close = df['Close'].iloc[-1]
     atr = df['ATR'].iloc[-1]
     vwap = df['VWAP'].iloc[-1]
+    vwap_lower1 = df['VWAP_Lower1'].iloc[-1]
     or_high = df['OR_High'].iloc[-1]
     or_low = df['OR_Low'].iloc[-1]
+    or_mid = df['OR_Mid'].iloc[-1]
     regime = detect_intraday_regime(df)
     
     buy_at = round(close, 2)
     
-    # Tighter stops for intraday
-    if regime in ["Strong Uptrend", "Weak Uptrend"]:
-        stop_loss = max(close - (1.5 * atr), vwap - (0.5 * atr))
-    elif regime == "Opening Range":
-        stop_loss = or_low - (0.5 * atr)
-    else:
-        stop_loss = close - (1.0 * atr)
+    # Stop loss
+    if regime == "Strong Uptrend":
+        vwap_stop = vwap - (0.3 * atr)
+        or_stop = or_low - (0.2 * atr) if pd.notna(or_low) else vwap_stop
+        atr_stop = close - (1.5 * atr)
+        stop_loss = max(vwap_stop, or_stop, atr_stop)
     
-    stop_loss = max(stop_loss, close * 0.97)  # Max 3% loss
+    elif regime in ["Weak Uptrend", "Choppy (VWAP Range)"]:
+        stop_loss = max(close - (1.0 * atr), vwap_lower1 - (0.2 * atr))
+    
+    elif pd.notna(or_low) and df['After_OR'].iloc[-1]:
+        stop_loss = or_low - (0.5 * atr)
+    
+    else:
+        stop_loss = close - (1.5 * atr)
+    
+    stop_loss = max(stop_loss, close * 0.97)
     stop_loss = round(stop_loss, 2)
     
     # Target
     risk = buy_at - stop_loss
-    if regime == "Strong Uptrend":
-        rr_ratio = 2
-    elif regime == "Opening Range":
-        rr_ratio = 1.5
-    else:
-        rr_ratio = 1
     
-    target = buy_at + (risk * rr_ratio)
+    if regime == "Strong Uptrend":
+        rr_ratio = 2.0
+        target = buy_at + (risk * rr_ratio)
+    elif pd.notna(or_high) and df['OR_Breakout_Long'].iloc[-1]:
+        or_range = or_high - or_low
+        target = or_high + or_range
+    else:
+        rr_ratio = 1.0
+        target = buy_at + risk
+    
     target = round(target, 2)
     
-    # Smaller position for intraday
+    # Position sizing
     risk_amount = account_size * risk_pct
     position_size = int(risk_amount / risk) if risk > 0 else 0
     max_position = int((account_size * 0.05) / buy_at)
@@ -766,9 +986,10 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     trailing_stop = close - (1.0 * atr)
     trailing_stop = round(trailing_stop, 2)
     
+    # Time to close
     current_time = df.index[-1].time()
-    hours_to_close = (time(15, 15).hour * 60 + time(15, 15).minute - 
-                     current_time.hour * 60 - current_time.minute) / 60
+    minutes_to_close = (15 * 60 + 15) - (current_time.hour * 60 + current_time.minute)
+    hours_to_close = round(minutes_to_close / 60, 2)
     
     return {
         "current_price": round(close, 2),
@@ -781,17 +1002,19 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
         "risk_amount": round(position_size * risk, 2),
         "potential_profit": round(position_size * (target - buy_at), 2),
         "vwap": round(vwap, 2),
+        "vwap_lower1": round(vwap_lower1, 2) if pd.notna(vwap_lower1) else None,
         "or_high": round(or_high, 2) if pd.notna(or_high) else None,
         "or_low": round(or_low, 2) if pd.notna(or_low) else None,
-        "hours_to_close": round(hours_to_close, 2)
+        "or_mid": round(or_mid, 2) if pd.notna(or_mid) else None,
+        "hours_to_close": hours_to_close
     }
 
 # ============================================================================
-# UNIFIED RECOMMENDATION GENERATION
+# UNIFIED RECOMMENDATION
 # ============================================================================
 
 def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000):
-    """Generate unified recommendations for swing or intraday"""
+    """Generate unified recommendations"""
     
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
@@ -805,7 +1028,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         score = calculate_intraday_score(df)
         position = calculate_intraday_position(df, account_size)
     
-    # Signal generation
+    # Signal
     if score >= 75:
         signal = "Strong Buy"
     elif score >= 60:
@@ -829,11 +1052,14 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         
         reasons.append("Above 200 EMA" if close > ema200 else "Below 200 EMA")
         reasons.append("MACD bullish" if macd_bullish else "MACD bearish")
+        
         if rsi < df['RSI_Oversold'].iloc[-1]:
             reasons.append("RSI oversold")
         elif rsi > df['RSI_Overbought'].iloc[-1]:
             reasons.append("RSI overbought")
+        
         reasons.append(f"ADX {adx:.1f}")
+        
         if df['Volume_Spike'].iloc[-1]:
             reasons.append("Volume spike")
     
@@ -844,14 +1070,19 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         
         reasons.append("Above VWAP" if close > vwap else "Below VWAP")
         reasons.append("EMA bullish" if ema_bullish else "EMA bearish")
+        
         if df['EMA_Crossover'].iloc[-1]:
             reasons.append("Fresh EMA cross")
+        
         if rsi < 30:
             reasons.append("RSI oversold")
         elif rsi > 70:
             reasons.append("RSI overbought")
+        
         if df['OR_Breakout_Long'].iloc[-1]:
-            reasons.append("OR breakout")
+            reasons.append("OR breakout (bullish)")
+        elif df['OR_Breakout_Short'].iloc[-1]:
+            reasons.append("OR breakdown (bearish)")
     
     return {
         "symbol": symbol,
@@ -869,7 +1100,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
 # ============================================================================
 
 def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initial_capital=30000):
-    """Backtest strategy with realistic execution"""
+    """Backtest strategy"""
     
     results = {
         "total_return": 0,
@@ -901,7 +1132,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             current_price = data['Close'].iloc[i]
             current_date = data.index[i]
             
-            # Sell logic
+            # Sell
             if position and rec['signal'] in ['Sell', 'Strong Sell']:
                 pnl = (current_price - entry_price) * qty
                 cash += pnl
@@ -918,7 +1149,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
                 position = None
                 qty = 0
             
-            # Buy logic
+            # Buy
             if not position and rec['signal'] in ['Buy', 'Strong Buy']:
                 entry_price = current_price
                 entry_date = current_date
@@ -929,10 +1160,10 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             equity = cash + (qty * current_price if position else 0)
             results['equity_curve'].append((current_date, equity))
             
-        except Exception as e:
+        except Exception:
             continue
     
-    # Close final position
+    # Close final
     if position:
         current_price = data['Close'].iloc[-1]
         pnl = (current_price - entry_price) * qty
@@ -946,7 +1177,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             "pnl": pnl
         })
     
-    # Calculate metrics
+    # Metrics
     if trades:
         results['trades'] = len(trades)
         results['trades_list'] = trades
@@ -957,7 +1188,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             results['sharpe_ratio'] = (np.mean(returns) / (np.std(returns) + 1e-9)) * np.sqrt(252)
             results['annual_return'] = np.mean(returns) * 252 * 100
     
-    # Max drawdown
+    # Drawdown
     if results['equity_curve']:
         equity_df = pd.DataFrame(results['equity_curve'], columns=['Date', 'Equity'])
         equity_df['Peak'] = equity_df['Equity'].cummax()
@@ -971,7 +1202,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
 # ============================================================================
 
 def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d'):
-    """Analyze single stock for batch processing"""
+    """Analyze single stock"""
     try:
         data = fetch_stock_data_cached(symbol, interval=timeframe)
         
@@ -999,7 +1230,7 @@ def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d'):
         return None
 
 def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None):
-    """Analyze multiple stocks sequentially"""
+    """Analyze multiple stocks"""
     results = []
     
     for i, symbol in enumerate(stock_list):
@@ -1010,13 +1241,12 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
         if progress_callback:
             progress_callback((i + 1) / len(stock_list))
         
-        time_module.sleep(3)  # Rate limiting
+        time_module.sleep(3)
     
     df = pd.DataFrame(results)
     if df.empty:
         return df
     
-    # Filter by signal
     if trading_style == 'intraday':
         df = df[df['Signal'].str.contains('Buy', na=False)]
     
@@ -1048,7 +1278,7 @@ def init_database():
     conn.close()
 
 def save_picks(results_df, trading_style):
-    """Save top picks to database"""
+    """Save picks to database"""
     conn = sqlite3.connect('stock_picks.db')
     today = datetime.now().strftime('%Y-%m-%d')
     
@@ -1076,8 +1306,68 @@ def save_picks(results_df, trading_style):
 # STREAMLIT UI
 # ============================================================================
 
+def display_intraday_chart(rec, data):
+    """Enhanced intraday chart with OR and VWAP"""
+    fig = go.Figure()
+    
+    # Candlesticks
+    fig.add_trace(go.Candlestick(
+        x=data.index,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name='Price'
+    ))
+    
+    # VWAP
+    if 'VWAP' in data.columns:
+        fig.add_trace(go.Scatter(
+            x=data.index, y=data['VWAP'],
+            mode='lines', name='VWAP',
+            line=dict(color='blue', width=2)
+        ))
+    
+    # VWAP Bands
+    if 'VWAP_Upper1' in data.columns:
+        fig.add_trace(go.Scatter(
+            x=data.index, y=data['VWAP_Upper1'],
+            mode='lines', name='VWAP Upper',
+            line=dict(color='orange', width=1, dash='dash')
+        ))
+        fig.add_trace(go.Scatter(
+            x=data.index, y=data['VWAP_Lower1'],
+            mode='lines', name='VWAP Lower',
+            line=dict(color='orange', width=1, dash='dash')
+        ))
+    
+    # OR levels
+    if rec.get('or_high'):
+        fig.add_hline(y=rec['or_high'], line_dash="dot", 
+                     annotation_text="OR High", line_color="green")
+        fig.add_hline(y=rec['or_low'], line_dash="dot", 
+                     annotation_text="OR Low", line_color="red")
+    
+    # Trade levels
+    fig.add_hline(y=rec['buy_at'], line_dash="solid", 
+                 annotation_text="Entry", line_color="white")
+    fig.add_hline(y=rec['stop_loss'], line_dash="dash", 
+                 annotation_text="Stop", line_color="red")
+    fig.add_hline(y=rec['target'], line_dash="dash", 
+                 annotation_text="Target", line_color="green")
+    
+    fig.update_layout(
+        title=f"{rec['symbol']} - {rec['timeframe']} Intraday",
+        xaxis_title="Time",
+        yaxis_title="Price (₹)",
+        height=600,
+        xaxis_rangeslider_visible=False
+    )
+    
+    return fig
+
 def main():
-    """Main Streamlit application"""
+    """Main Streamlit app"""
     
     init_database()
     
@@ -1088,14 +1378,12 @@ def main():
     # Sidebar
     st.sidebar.title("🔍 Configuration")
     
-    # Trading style
     trading_style = st.sidebar.radio(
         "Trading Style",
         ["Swing Trading", "Intraday Trading"],
         help="Swing: Hold days-weeks. Intraday: Close same day"
     )
     
-    # Timeframe
     if trading_style == "Intraday Trading":
         timeframe_display = st.sidebar.selectbox("Timeframe", ["5 min", "15 min", "30 min"], index=1)
         timeframe = timeframe_display.replace(" ", "").lower()[:-2] + "m"
@@ -1103,30 +1391,26 @@ def main():
         timeframe_display = "Daily"
         timeframe = "1d"
     
-    # Sector selection
     sector_options = ["All"] + list(SECTORS.keys())
     selected_sectors = st.sidebar.multiselect(
         "Select Sectors",
         sector_options,
         default=["Bank", "IT"],
-        help="Choose sectors to analyze"
+        help="Choose sectors"
     )
     
-    # Stock selection
     if "All" in selected_sectors:
         stock_list = [s for sector in SECTORS.values() for s in sector]
     else:
         stock_list = [s for sector in selected_sectors for s in SECTORS.get(sector, [])]
     
     symbol = st.sidebar.selectbox("Select Stock", stock_list, index=0)
-    
-    # Account size
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, max_value=10000000, value=30000, step=5000)
     
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History"])
     
-    # TAB 1: Single Stock Analysis
+    # TAB 1: Analysis
     with tab1:
         if st.button("🔍 Analyze Selected Stock"):
             with st.spinner(f"Analyzing {symbol}..."):
@@ -1139,7 +1423,7 @@ def main():
                         timeframe, account_size
                     )
                     
-                    # Display metrics
+                    # Metrics
                     col1, col2, col3, col4, col5 = st.columns(5)
                     col1.metric("Score", f"{rec['score']}/100")
                     col2.metric("Signal", rec['signal'])
@@ -1147,7 +1431,9 @@ def main():
                     col4.metric("Current Price", f"₹{rec['current_price']}")
                     
                     if trading_style == "Intraday Trading":
-                        col5.metric("Hours to Close", f"{rec['hours_to_close']}h")
+                        col5.metric("Hours Left", f"{rec['hours_to_close']}h")
+                        if rec['hours_to_close'] < 0.5:
+                            st.warning("⚠️ Less than 30 min to close - EXIT ONLY!")
                     else:
                         col5.metric("Timeframe", timeframe_display)
                     
@@ -1168,26 +1454,41 @@ def main():
                     st.write(f"**R:R Ratio**: {rec['rr_ratio']}:1")
                     st.write(f"**Trailing Stop**: ₹{rec['trailing_stop']}")
                     
-                    # Reason
+                    # Intraday levels
+                    if trading_style == "Intraday Trading":
+                        st.subheader("🎯 Key Intraday Levels")
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**Opening Range:**")
+                            if rec.get('or_high'):
+                                st.write(f"  - OR High: ₹{rec['or_high']}")
+                                st.write(f"  - OR Mid: ₹{rec['or_mid']}")
+                                st.write(f"  - OR Low: ₹{rec['or_low']}")
+                            else:
+                                st.write("  - Not yet formed")
+                        
+                        with col2:
+                            st.markdown("**VWAP Bands:**")
+                            st.write(f"  - VWAP: ₹{rec['vwap']}")
+                            if rec.get('vwap_lower1'):
+                                st.write(f"  - Lower Band: ₹{rec['vwap_lower1']}")
+                    
                     st.info(f"**Reason**: {rec['reason']}")
                     
                     # Chart
-                    fig = go.Figure()
-                    fig.add_trace(go.Candlestick(
-                        x=data.index,
-                        open=data['Open'],
-                        high=data['High'],
-                        low=data['Low'],
-                        close=data['Close'],
-                        name='Price'
-                    ))
-                    
-                    fig.update_layout(
-                        title=f"{symbol} - {timeframe_display}",
-                        xaxis_title="Date",
-                        yaxis_title="Price (₹)",
-                        height=500
-                    )
+                    if trading_style == "Intraday Trading":
+                        fig = display_intraday_chart(rec, data)
+                    else:
+                        fig = go.Figure()
+                        fig.add_trace(go.Candlestick(
+                            x=data.index,
+                            open=data['Open'],
+                            high=data['High'],
+                            low=data['Low'],
+                            close=data['Close']
+                        ))
+                        fig.update_layout(title=f"{symbol} - Daily", height=500)
                     
                     st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -1195,56 +1496,29 @@ def main():
     
     # TAB 2: Scanner
     with tab2:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🚀 Scan Top Swing Picks"):
-                progress = st.progress(0)
-                status = st.empty()
-                
-                results = analyze_multiple_stocks(
-                    stock_list[:20],  # Limit to 20 for speed
-                    'swing',
-                    '1d',
-                    lambda p: progress.progress(p)
-                )
-                
-                progress.empty()
-                status.empty()
-                
-                if not results.empty:
-                    save_picks(results, 'swing')
-                    st.subheader("🏆 Top Swing Trading Picks")
-                    st.dataframe(results, use_container_width=True)
-                else:
-                    st.warning("No picks found")
-        
-        with col2:
-            if st.button("⚡ Scan Top Intraday Picks"):
-                progress = st.progress(0)
-                status = st.empty()
-                
-                results = analyze_multiple_stocks(
-                    stock_list[:20],
-                    'intraday',
-                    timeframe,
-                    lambda p: progress.progress(p)
-                )
-                
-                progress.empty()
-                status.empty()
-                
-                if not results.empty:
-                    save_picks(results, 'intraday')
-                    st.subheader("🏆 Top Intraday Picks")
-                    st.dataframe(results, use_container_width=True)
-                else:
-                    st.warning("No picks found")
+        if st.button("🚀 Scan Top Picks"):
+            progress = st.progress(0)
+            
+            results = analyze_multiple_stocks(
+                stock_list[:20],
+                'swing' if trading_style == "Swing Trading" else 'intraday',
+                timeframe,
+                lambda p: progress.progress(p)
+            )
+            
+            progress.empty()
+            
+            if not results.empty:
+                save_picks(results, trading_style)
+                st.subheader(f"🏆 Top {trading_style} Picks")
+                st.dataframe(results, use_container_width=True)
+            else:
+                st.warning("No picks found")
     
     # TAB 3: Backtest
     with tab3:
         if st.button("📊 Run Backtest"):
-            with st.spinner("Running backtest..."):
+            with st.spinner("Backtesting..."):
                 data = fetch_stock_data_with_auth(symbol, period="2y", interval=timeframe)
                 
                 if not data.empty:
@@ -1254,31 +1528,26 @@ def main():
                         timeframe, account_size
                     )
                     
-                    # Metrics
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Total Return", f"{results['total_return']:.2f}%")
                     col2.metric("Annual Return", f"{results['annual_return']:.2f}%")
-                    col3.metric("Sharpe Ratio", f"{results['sharpe_ratio']:.2f}")
-                    col4.metric("Max Drawdown", f"{results['max_drawdown']:.2f}%")
+                    col3.metric("Sharpe", f"{results['sharpe_ratio']:.2f}")
+                    col4.metric("Max DD", f"{results['max_drawdown']:.2f}%")
                     
                     col1, col2 = st.columns(2)
-                    col1.metric("Total Trades", results['trades'])
+                    col1.metric("Trades", results['trades'])
                     col2.metric("Win Rate", f"{results['win_rate']:.2f}%")
                     
-                    # Trades table
                     if results['trades_list']:
                         st.subheader("Trade History")
                         trades_df = pd.DataFrame(results['trades_list'])
                         st.dataframe(trades_df, use_container_width=True)
                     
-                    # Equity curve
                     if results['equity_curve']:
                         st.subheader("Equity Curve")
                         equity_df = pd.DataFrame(results['equity_curve'], columns=['Date', 'Equity'])
-                        fig = px.line(equity_df, x='Date', y='Equity', title='Portfolio Value Over Time')
+                        fig = px.line(equity_df, x='Date', y='Equity')
                         st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Insufficient data for backtest")
     
     # TAB 4: History
     with tab4:
@@ -1288,23 +1557,9 @@ def main():
         
         if not history.empty:
             st.subheader("📜 Historical Picks")
-            
-            # Filters
-            col1, col2 = st.columns(2)
-            with col1:
-                date_filter = st.selectbox("Date", ["All"] + list(history['date'].unique()))
-            with col2:
-                style_filter = st.selectbox("Style", ["All", "Swing Trading", "Intraday Trading"])
-            
-            filtered = history.copy()
-            if date_filter != "All":
-                filtered = filtered[filtered['date'] == date_filter]
-            if style_filter != "All":
-                filtered = filtered[filtered['trading_style'] == style_filter]
-            
-            st.dataframe(filtered, use_container_width=True)
+            st.dataframe(history, use_container_width=True)
         else:
-            st.info("No historical data available")
+            st.info("No historical data")
 
 if __name__ == "__main__":
     main()
