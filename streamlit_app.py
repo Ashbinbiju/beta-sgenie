@@ -2147,7 +2147,7 @@ def main():
     selected_sectors = st.sidebar.multiselect(
         "Select Sectors",
         sector_options,
-        default=["Bank", "IT"],
+        default=["Bank", "Automobile & Ancillaries"],
         help="Choose sectors"
     )
     
