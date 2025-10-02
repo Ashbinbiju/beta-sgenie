@@ -54,7 +54,7 @@ SCAN_CONFIG = {
     "delay_within_batch": 2,
     "delay_between_batches": 5,
     "session_refresh_interval": 20,
-    "max_stocks_per_scan": 40
+    "max_stocks_per_scan": 1000
 }
 
 # User agents
