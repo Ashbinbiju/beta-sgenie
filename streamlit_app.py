@@ -1133,6 +1133,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         "signal": signal,
         "regime": regime,
         "reason": ", ".join(reasons),
+        "processed_data": df, 
         **position
     }
 
@@ -1498,7 +1499,7 @@ def main():
                             'swing' if trading_style == "Swing Trading" else 'intraday',
                             timeframe, account_size
                         )
-                        
+                        processed_data = rec.get('processed_data', data)
                         # Metrics
                         col1, col2, col3, col4, col5 = st.columns(5)
                         col1.metric("Score", f"{rec['score']}/100")
@@ -1558,18 +1559,18 @@ def main():
                         else:
                             fig = go.Figure()
                             fig.add_trace(go.Candlestick(
-                                x=data.index,
-                                open=data['Open'],
-                                high=data['High'],
-                                low=data['Low'],
-                                close=data['Close']
+                                x=processed_data.index,
+                                open=processed_data['Open'],
+                                high=processed_data['High'],
+                                low=processed_data['Low'],
+                                close=processed_data['Close']
                             ))
                             
                             # Add 200 EMA for swing
                             if '200 EMA' in rec.get('reason', ''):
                                 fig.add_trace(go.Scatter(
-                                    x=data.index,
-                                    y=data['EMA_200'],
+                                    x=processed_data.index, 
+                                    y=processed_data['EMA_200']
                                     mode='lines',
                                     name='200 EMA',
                                     line=dict(color='purple', width=2)
