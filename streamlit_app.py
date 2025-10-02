@@ -1,7 +1,7 @@
 # ============================================================================
-# STOCKGENIE PRO - PRODUCTION VERSION V2.1 (FULLY CORRECTED)
+# STOCKGENIE PRO - PRODUCTION VERSION V2.2 (WITH INDEX TREND INTEGRATION)
 # Enhanced Swing + Intraday Trading System
-# ALL CRITICAL BUGS FIXED
+# NEW: Index alignment for better accuracy
 # ============================================================================
 
 import pandas as pd
@@ -49,7 +49,7 @@ API_KEYS = {
 # Global session cache
 _global_smart_api = None
 _session_timestamp = None
-SESSION_EXPIRY = 3600  # FIXED: 1 hour instead of 15 mins (SmartAPI tokens last 24h)
+SESSION_EXPIRY = 3600  # 1 hour
 
 cache = Cache("stock_data_cache")
 
@@ -108,6 +108,108 @@ TOOLTIPS = {
     "EMA": "Exponential Moving Average - trend filter",
     "OR": "Opening Range - first 15-30min high/low levels"
 }
+
+# ============================================================================
+# INDEX TREND INTEGRATION
+# ============================================================================
+
+@st.cache_data(ttl=900)  # Cache for 15 minutes
+def fetch_index_trend():
+    """Fetch Nifty & Bank Nifty trend from external API"""
+    try:
+        response = requests.get(
+            "https://brkpoint.in/api/indextrend",
+            timeout=10,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.warning(f"Index trend API failed: {str(e)}")
+        return None
+
+def get_index_trend_for_timeframe(timeframe='15m'):
+    """Get relevant index trend based on trading timeframe"""
+    data = fetch_index_trend()
+    if not data:
+        return None
+    
+    # Map timeframes to API keys
+    if timeframe in ['5m', '15m', '30m']:
+        nifty_key = 'nif_min15trend'
+        bnf_key = 'bnf_min15trend'
+    elif timeframe in ['1h']:
+        nifty_key = 'nif_hr1trend'
+        bnf_key = 'bnf_hr1trend'
+    else:  # Daily
+        nifty_key = 'nif_day1trend'
+        bnf_key = 'bnf_day1trend'
+    
+    return {
+        'nifty': data.get(nifty_key, {}),
+        'banknifty': data.get(bnf_key, {})
+    }
+
+def get_relevant_index(symbol):
+    """Determine which index is relevant for the stock"""
+    bank_stocks = [s for s in SECTORS.get('Bank', [])]
+    
+    if symbol in bank_stocks:
+        return 'banknifty'
+    else:
+        return 'nifty'
+
+def calculate_index_alignment_score(trend_data, signal_direction):
+    """
+    Calculate bonus/penalty based on index alignment
+    
+    Args:
+        trend_data: Index trend data from API
+        signal_direction: 'bullish' or 'bearish'
+    
+    Returns:
+        Score adjustment (-10 to +10)
+    """
+    if not trend_data or 'analysis' not in trend_data:
+        return 0
+    
+    analysis = trend_data['analysis']
+    trend = analysis.get('15m_trend') or analysis.get('1h_trend') or analysis.get('1d_trend', 'Unknown')
+    adx = analysis.get('ADX_analysis', {}).get('value', 0)
+    supertrend = trend_data.get('indicators', {}).get('Supertrend', 0)
+    
+    score_adjustment = 0
+    
+    # Strong alignment bonus
+    if signal_direction == 'bullish':
+        if 'Strong Uptrend' in trend:
+            score_adjustment += 10
+        elif 'Uptrend' in trend or 'Weak Uptrend' in trend:
+            score_adjustment += 5
+        elif 'Downtrend' in trend:
+            score_adjustment -= 8  # Penalty for counter-trend
+        elif 'Consolidation' in trend and adx < 20:
+            score_adjustment += 2  # Slight bonus in choppy markets
+    
+    elif signal_direction == 'bearish':
+        if 'Strong Downtrend' in trend:
+            score_adjustment += 10
+        elif 'Downtrend' in trend or 'Weak Downtrend' in trend:
+            score_adjustment += 5
+        elif 'Uptrend' in trend:
+            score_adjustment -= 8
+    
+    # Supertrend confirmation
+    if signal_direction == 'bullish' and supertrend == 1:
+        score_adjustment += 3
+    elif signal_direction == 'bearish' and supertrend == -1:
+        score_adjustment += 3
+    elif signal_direction == 'bullish' and supertrend == -1:
+        score_adjustment -= 3
+    elif signal_direction == 'bearish' and supertrend == 1:
+        score_adjustment -= 3
+    
+    return score_adjustment
 
 # ============================================================================
 # API & DATA FETCHING
@@ -248,7 +350,7 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
             data['Date'] = pd.to_datetime(data['Date'])
             data.set_index('Date', inplace=True)
             
-            # FIXED: Intelligent cache expiry
+            # Intelligent cache expiry
             if interval == "1d":
                 expire = 86400  # 24 hours for daily data
             else:
@@ -266,7 +368,6 @@ def fetch_stock_data_with_auth(symbol, period="1y", interval="1d"):
         logging.error(f"Error fetching {symbol}: {str(e)}")
         return pd.DataFrame()
 
-# FIXED: Removed redundant LRU cache (doesn't work with DataFrames)
 def fetch_stock_data_cached(symbol, period="1y", interval="1d"):
     """Wrapper for stock data fetching - uses disk cache only"""
     return fetch_stock_data_with_auth(symbol, period, interval)
@@ -393,8 +494,8 @@ def detect_swing_regime(df):
     else:
         return "Neutral"
 
-def calculate_swing_score(df):
-    """Calculate swing trading score (0-100)"""
+def calculate_swing_score(df, symbol=None, timeframe='1d'):
+    """Calculate swing trading score with INDEX ALIGNMENT"""
     score = 0
     
     close = df['Close'].iloc[-1]
@@ -454,12 +555,23 @@ def calculate_swing_score(df):
         else:
             score -= 1
     
+    # ===== INDEX ALIGNMENT (NEW) =====
+    if symbol:
+        index_trends = get_index_trend_for_timeframe(timeframe)
+        if index_trends:
+            relevant_index = get_relevant_index(symbol)
+            index_data = index_trends.get(relevant_index)
+            
+            signal_direction = 'bullish' if score > 0 else 'bearish'
+            index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
+            score += index_adjustment
+    
     # Normalize to 0-100
     normalized = np.clip(50 + (score * 5), 0, 100)
     return round(normalized, 1)
 
 # ============================================================================
-# INTRADAY INDICATORS WITH ENHANCED OR & VWAP (FIXED)
+# INTRADAY INDICATORS WITH ENHANCED OR & VWAP
 # ============================================================================
 
 def calculate_intraday_indicators(data, timeframe='15m'):
@@ -490,17 +602,17 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['EMA_Crossover'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & df['EMA_Bullish']
     df['EMA_Crossunder'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & ~df['EMA_Bullish']
     
-# ==================== VWAP WITH BANDS (CORRECTED TO MATCH TRADINGVIEW) ====================
+    # ==================== VWAP WITH BANDS (CORRECTED TO MATCH TRADINGVIEW) ====================
     df['Date'] = df.index.date
     df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
     
-    # Vectorized VWAP calculation (much faster)
+    # Vectorized VWAP calculation
     df['TPV'] = df['Typical_Price'] * df['Volume']
     df['Cumul_TPV'] = df.groupby('Date')['TPV'].cumsum()
     df['Cumul_Vol'] = df.groupby('Date')['Volume'].cumsum()
     df['VWAP'] = df['Cumul_TPV'] / df['Cumul_Vol'].replace(0, np.nan)
     
-    # CRITICAL FIX: Use simple standard deviation (NOT volume-weighted)
+    # VWAP standard deviation (simple, not volume-weighted)
     df['Deviation_Squared'] = (df['Typical_Price'] - df['VWAP']) ** 2
     df['Cumul_Dev_Sq'] = df.groupby('Date')['Deviation_Squared'].cumsum()
     df['Bar_Count'] = df.groupby('Date').cumcount() + 1
@@ -542,6 +654,7 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['RVOL'] = df['Volume'] / df['Avg_Volume'].clip(lower=0.001)
     df['Volume_Spike'] = df['RVOL'] > 1.5
     df['High_Volume'] = df['RVOL'] > 2.0
+    
     # ==================== OPENING RANGE ====================
     df['Time'] = df.index.time
     
@@ -581,7 +694,7 @@ def calculate_intraday_indicators(data, timeframe='15m'):
         df['Inside_OR']
     )
     
-   # ==================== MACD (EMA-based) ====================
+    # ==================== MACD (EMA-based) ====================
     df['EMA_Fast_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_fast).ema_indicator()
     df['EMA_Slow_MACD'] = ta.trend.EMAIndicator(df['Close'], window=macd_slow).ema_indicator()
     df['MACD'] = df['EMA_Fast_MACD'] - df['EMA_Slow_MACD']
@@ -847,8 +960,8 @@ def calculate_intraday_trend_score(df):
     
     return score
 
-def calculate_intraday_score(df):
-    """Unified intraday scoring with time filters"""
+def calculate_intraday_score(df, symbol=None, timeframe='15m'):
+    """Unified intraday scoring with INDEX ALIGNMENT"""
     regime = detect_intraday_regime(df)
     
     # Block unsafe times
@@ -892,6 +1005,17 @@ def calculate_intraday_score(df):
     else:
         raw_score = trend_score
     
+    # ===== INDEX ALIGNMENT (NEW) =====
+    if symbol:
+        index_trends = get_index_trend_for_timeframe(timeframe)
+        if index_trends:
+            relevant_index = get_relevant_index(symbol)
+            index_data = index_trends.get(relevant_index)
+            
+            signal_direction = 'bullish' if raw_score > 0 else 'bearish'
+            index_adjustment = calculate_index_alignment_score(index_data, signal_direction)
+            raw_score += index_adjustment
+    
     # Time modifiers
     if prime_hours:
         raw_score *= 1.2
@@ -903,7 +1027,7 @@ def calculate_intraday_score(df):
     return round(normalized, 1)
 
 # ============================================================================
-# POSITION SIZING & RISK MANAGEMENT (FIXED)
+# POSITION SIZING & RISK MANAGEMENT
 # ============================================================================
 
 def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
@@ -917,20 +1041,19 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     
     buy_at = round(close * 1.001, 2)
     
-    # FIXED: Stop loss logic (use MIN for tightest stop, not MAX)
+    # Stop loss logic
     max_loss_pct = 0.08  # Never risk more than 8%
     max_acceptable_stop = close * (1 - max_loss_pct)
     
     if regime in ["Strong Uptrend", "Weak Uptrend"]:
         atr_stop = close - (2 * atr)
         ema_stop = ema200 * 0.98
-        stop_loss = max(atr_stop, ema_stop)  # Use the HIGHER (tighter) stop
+        stop_loss = max(atr_stop, ema_stop)
     elif regime in ["Consolidation (Above EMA)", "Consolidation (Below EMA)"]:
         stop_loss = bb_lower * 0.98
     else:
         stop_loss = close - (1.5 * atr)
     
-    # Ensure we don't risk more than max allowed
     stop_loss = max(stop_loss, max_acceptable_stop)
     stop_loss = round(stop_loss, 2)
     
@@ -968,7 +1091,7 @@ def calculate_swing_position(df, account_size=30000, risk_pct=0.02):
     }
 
 def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
-    """Enhanced intraday position with OR-aware stops (FIXED)"""
+    """Enhanced intraday position with OR-aware stops"""
     close = df['Close'].iloc[-1]
     atr = df['ATR'].iloc[-1]
     vwap = df['VWAP'].iloc[-1]
@@ -980,7 +1103,7 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     
     buy_at = round(close, 2)
     
-    # FIXED: Stop loss logic
+    # Stop loss logic
     max_loss_pct = 0.03  # Never risk more than 3% intraday
     max_acceptable_stop = close * (1 - max_loss_pct)
     
@@ -988,7 +1111,7 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
         vwap_stop = vwap - (0.3 * atr)
         or_stop = or_low - (0.2 * atr) if pd.notna(or_low) else vwap_stop
         atr_stop = close - (1.5 * atr)
-        stop_loss = max(vwap_stop, or_stop, atr_stop)  # Tightest stop
+        stop_loss = max(vwap_stop, or_stop, atr_stop)
     
     elif regime in ["Weak Uptrend", "Choppy (VWAP Range)"]:
         stop_loss = max(close - (1.0 * atr), vwap_lower1 - (0.2 * atr))
@@ -999,7 +1122,6 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     else:
         stop_loss = close - (1.5 * atr)
     
-    # Ensure we don't risk more than max allowed
     stop_loss = max(stop_loss, max_acceptable_stop)
     stop_loss = round(stop_loss, 2)
     
@@ -1055,19 +1177,37 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
 # ============================================================================
 
 def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000):
-    """Generate unified recommendations"""
+    """Generate unified recommendations with INDEX CONTEXT"""
     
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
         regime = detect_swing_regime(df)
-        score = calculate_swing_score(df)
+        score = calculate_swing_score(df, symbol, timeframe)
         position = calculate_swing_position(df, account_size)
         
     else:  # intraday
         df = calculate_intraday_indicators(data, timeframe)
         regime = detect_intraday_regime(df)
-        score = calculate_intraday_score(df)
+        score = calculate_intraday_score(df, symbol, timeframe)
         position = calculate_intraday_position(df, account_size)
+    
+    # Get index context
+    index_trends = get_index_trend_for_timeframe(timeframe)
+    index_context = None
+    if index_trends:
+        relevant_index = get_relevant_index(symbol)
+        index_data = index_trends.get(relevant_index)
+        if index_data and 'analysis' in index_data:
+            index_context = {
+                'index_name': 'Nifty' if relevant_index == 'nifty' else 'Bank Nifty',
+                'trend': index_data['analysis'].get(f'{timeframe}_trend') or 
+                        index_data['analysis'].get('15m_trend') or 
+                        index_data['analysis'].get('1h_trend') or 
+                        index_data['analysis'].get('1d_trend', 'Unknown'),
+                'adx': index_data['analysis'].get('ADX_analysis', {}).get('value', 0),
+                'trend_strength': index_data['analysis'].get('trend_strength', 'Unknown'),
+                'supertrend': index_data.get('indicators', {}).get('Supertrend', 0)
+            }
     
     # Signal
     if score >= 75:
@@ -1125,6 +1265,10 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         elif df['OR_Breakout_Short'].iloc[-1]:
             reasons.append("OR breakdown (bearish)")
     
+    # Add index context to reasons
+    if index_context:
+        reasons.append(f"{index_context['index_name']}: {index_context['trend']}")
+    
     return {
         "symbol": symbol,
         "trading_style": trading_style.capitalize(),
@@ -1133,12 +1277,13 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         "signal": signal,
         "regime": regime,
         "reason": ", ".join(reasons),
+        "index_context": index_context,
         "processed_data": df, 
         **position
     }
 
 # ============================================================================
-# BACKTESTING (FIXED WITH TRANSACTION COSTS)
+# BACKTESTING
 # ============================================================================
 
 def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initial_capital=30000):
@@ -1158,7 +1303,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
     if len(data) < 200:
         return results
     
-    # FIXED: Transaction costs
+    # Transaction costs
     BROKERAGE = 0.0003  # 0.03%
     STT = 0.001  # 0.1% on sell side
     SLIPPAGE = 0.0005  # 0.05%
@@ -1181,7 +1326,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             
             # Sell
             if position and rec['signal'] in ['Sell', 'Strong Sell']:
-                # Apply transaction costs
                 exit_price_effective = current_price * (1 - BROKERAGE - STT - SLIPPAGE)
                 pnl = (exit_price_effective - entry_price) * qty
                 cash += (current_price * qty * (1 - BROKERAGE - STT))
@@ -1201,7 +1345,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
             
             # Buy
             if not position and rec['signal'] in ['Buy', 'Strong Buy']:
-                # Apply transaction costs on entry
                 entry_price = current_price * (1 + BROKERAGE + SLIPPAGE)
                 entry_date = current_date
                 qty = rec['position_size']
@@ -1239,7 +1382,6 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
         results['win_rate'] = len([t for t in trades if t['pnl'] > 0]) / len(trades) * 100
         
         if returns:
-            # FIXED: Proper annualization factor
             periods_per_year = {
                 '5m': 252 * 75,
                 '15m': 252 * 25,
@@ -1265,7 +1407,7 @@ def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initi
     return results
 
 # ============================================================================
-# BATCH ANALYSIS (FIXED WITH ERROR HANDLING)
+# BATCH ANALYSIS
 # ============================================================================
 
 def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d'):
@@ -1307,12 +1449,11 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                 results.append(result)
         except Exception as e:
             logging.error(f"Failed to analyze {symbol}: {str(e)}")
-            # Continue with next symbol instead of stopping
             
         if progress_callback:
             progress_callback((i + 1) / len(stock_list))
         
-        time_module.sleep(5)  # FIXED: Increased from 3 to 5 seconds
+        time_module.sleep(5)
     
     df = pd.DataFrame(results)
     if df.empty:
@@ -1324,7 +1465,7 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     return df.sort_values('Score', ascending=False).head(10)
 
 # ============================================================================
-# DATABASE (FIXED WITH BULK INSERT)
+# DATABASE
 # ============================================================================
 
 def init_database():
@@ -1353,7 +1494,6 @@ def save_picks(results_df, trading_style):
     conn = sqlite3.connect('stock_picks.db')
     today = datetime.now().strftime('%Y-%m-%d')
     
-    # FIXED: Use bulk insert instead of row-by-row
     records = []
     for _, row in results_df.head(5).iterrows():
         records.append((
@@ -1447,8 +1587,8 @@ def main():
     init_database()
     
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro - NSE Analysis (CORRECTED)")
-    st.caption("🔧 All critical bugs fixed | VWAP bands corrected | Stop-loss logic fixed | Transaction costs added")
+    st.title("📊 StockGenie Pro V2.2 - NSE Analysis")
+    st.caption("✨ NEW: Index alignment for improved accuracy | VWAP bands corrected | Transaction costs included")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # Sidebar
@@ -1488,6 +1628,40 @@ def main():
     
     # TAB 1: Analysis
     with tab1:
+        # ===== INDEX DASHBOARD =====
+        st.subheader("📊 Market Context")
+        index_trends = get_index_trend_for_timeframe(timeframe)
+        
+        if index_trends:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                nifty = index_trends.get('nifty', {})
+                if nifty and 'analysis' in nifty:
+                    trend = nifty['analysis'].get('15m_trend') or nifty['analysis'].get('1h_trend') or nifty['analysis'].get('1d_trend', 'Unknown')
+                    adx = nifty['analysis'].get('ADX_analysis', {}).get('value', 0)
+                    supertrend = nifty.get('indicators', {}).get('Supertrend', 0)
+                    
+                    trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
+                    st.metric("Nifty 50", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
+                    st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
+            
+            with col2:
+                bnf = index_trends.get('banknifty', {})
+                if bnf and 'analysis' in bnf:
+                    trend = bnf['analysis'].get('15m_trend') or bnf['analysis'].get('1h_trend') or bnf['analysis'].get('1d_trend', 'Unknown')
+                    adx = bnf['analysis'].get('ADX_analysis', {}).get('value', 0)
+                    supertrend = bnf.get('indicators', {}).get('Supertrend', 0)
+                    
+                    trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
+                    st.metric("Bank Nifty", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
+                    st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
+        else:
+            st.info("⚠️ Index trend data unavailable (will work with reduced accuracy)")
+        
+        st.divider()
+        # ===== END INDEX DASHBOARD =====
+        
         if st.button("🔍 Analyze Selected Stock"):
             with st.spinner(f"Analyzing {symbol}..."):
                 try:
@@ -1500,6 +1674,7 @@ def main():
                             timeframe, account_size
                         )
                         processed_data = rec.get('processed_data', data)
+                        
                         # Metrics
                         col1, col2, col3, col4, col5 = st.columns(5)
                         col1.metric("Score", f"{rec['score']}/100")
@@ -1513,6 +1688,19 @@ def main():
                                 st.warning("⚠️ Less than 30 min to close - EXIT ONLY!")
                         else:
                             col5.metric("Timeframe", timeframe_display)
+                        
+                        # ===== COUNTER-TREND WARNING =====
+                        if rec.get('index_context'):
+                            idx = rec['index_context']
+                            signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
+                            index_bullish = 'Uptrend' in idx['trend']
+                            
+                            if signal_bullish and not index_bullish:
+                                st.warning(f"⚠️ **Counter-Trend Trade**: Stock bullish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                            elif not signal_bullish and index_bullish:
+                                st.warning(f"⚠️ **Counter-Trend Trade**: Stock bearish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                            elif signal_bullish and index_bullish:
+                                st.success(f"✅ **Aligned with Market**: {idx['index_name']} also in {idx['trend']}")
                         
                         # Trade setup
                         st.subheader("📋 Trade Setup")
@@ -1566,8 +1754,7 @@ def main():
                                 close=processed_data['Close']
                             ))
                             
-                            # Add 200 EMA for swing
-                            if '200 EMA' in rec.get('reason', ''):
+                            if 'EMA_200' in processed_data.columns:
                                 fig.add_trace(go.Scatter(
                                     x=processed_data.index, 
                                     y=processed_data['EMA_200'],
@@ -1606,7 +1793,6 @@ def main():
                     st.subheader(f"🏆 Top {trading_style} Picks")
                     st.dataframe(results, use_container_width=True)
                     
-                    # Download button
                     csv = results.to_csv(index=False)
                     st.download_button(
                         label="📥 Download as CSV",
