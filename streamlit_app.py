@@ -2385,7 +2385,7 @@ def main():
                         if val >= 75:
                             return 'background-color: #90EE90'
                         elif val >= 60:
-                            return 'background-color: #FFFFE0'
+                            return 'background-color: #4c4c43'
                         else:
                             return ''
                     
