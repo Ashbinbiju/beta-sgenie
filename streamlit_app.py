@@ -2764,10 +2764,10 @@ with tab1:
                     st.rerun()
         
         # Check API health before scan
+        global _global_smart_api  # Declare global FIRST
         health_status, health_msg = check_api_health()
         if not health_status:
             st.warning(f"⚠️ API Issue: {health_msg}. Trying to reconnect...")
-            global _global_smart_api
             _global_smart_api = None
         
         with st.expander("📋 Scan Settings", expanded=True):
