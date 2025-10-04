@@ -2550,6 +2550,7 @@ else:
     st.sidebar.error("❌ No stocks available for selected sectors")
     symbol = "SBIN-EQ"  # Fallback
     st.sidebar.info(f"Using default: {symbol}")
+    
 account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, max_value=10000000, value=30000, step=5000)
     
     # Tabs
@@ -2785,7 +2786,7 @@ account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, ma
         if not stock_list or len(stock_list) == 0:
             st.error("❌ No stocks available to scan. Please select different sectors.")
             st.stop()
-         st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
+        st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
         
         # Resume or Start Fresh
         col1, col2 = st.columns(2)
