@@ -65,13 +65,29 @@ def get_unique_stock_list(sectors_dict):
     for sector_stocks in sectors_dict.values():
         all_stocks.extend(sector_stocks)
     
-    unique_stocks = list(dict.fromkeys(all_stocks))  # Preserves order
+    unique_stocks = list(dict.fromkeys(all_stocks))
     
     if len(all_stocks) != len(unique_stocks):
         duplicates = len(all_stocks) - len(unique_stocks)
-        logging.warning(f"Found {duplicates} duplicate stocks in SECTORS")
+        logging.info(f"Consolidated {duplicates} duplicate entries")
     
     return unique_stocks
+
+def get_stock_list_from_sectors(sectors_dict, selected_sectors):
+    """Get unique stock list with validation"""
+    if not selected_sectors or "All" in selected_sectors:
+        stock_list = get_unique_stock_list(sectors_dict)
+    else:
+        temp_list = []
+        for sector in selected_sectors:
+            temp_list.extend(sectors_dict.get(sector, []))
+        stock_list = list(dict.fromkeys(temp_list))
+    
+    if not stock_list:
+        logging.error("No stocks found for selected sectors")
+        return ["SBIN-EQ"]  # Fallback default
+    
+    return stock_list
 # User agents
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -267,6 +283,60 @@ SECTORS = {
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
     ]
  }
+# ============================================================================
+# SECTOR VALIDATION & CLEANUP
+# ============================================================================
+
+def validate_and_clean_sectors(sectors_dict):
+    """Remove duplicates and validate sector definitions"""
+    seen_stocks = {}
+    cleaned_sectors = {}
+    duplicates = []
+    
+    for sector, stocks in sectors_dict.items():
+        cleaned_stocks = []
+        for stock in stocks:
+            if stock in seen_stocks:
+                duplicates.append(f"{stock} (in {seen_stocks[stock]} and {sector})")
+            else:
+                seen_stocks[stock] = sector
+                cleaned_stocks.append(stock)
+        
+        cleaned_sectors[sector] = cleaned_stocks
+    
+    if duplicates:
+        logging.warning(f"Removed {len(duplicates)} duplicate stocks:")
+        for dup in duplicates[:10]:
+            logging.warning(f"  - {dup}")
+    
+    return cleaned_sectors
+
+def assign_primary_sector(symbol, sectors_dict):
+    """Assign primary sector based on priority logic"""
+    priority_sectors = [
+        "Bank", "IT", "Pharma", "Auto", "FMCG", 
+        "Metals", "Power", "Oil & Gas", "Telecom",
+        "Finance", "Capital Goods", "Chemicals", 
+        "Infrastructure", "Cement", "Realty", "Insurance",
+        "Diversified", "Aviation", "Retail", "Media"
+    ]
+    
+    matching_sectors = [
+        sector for sector in priority_sectors 
+        if symbol in sectors_dict.get(sector, [])
+    ]
+    
+    if matching_sectors:
+        return matching_sectors[0]
+    
+    for sector, stocks in sectors_dict.items():
+        if symbol in stocks:
+            return sector
+    
+    return "Unknown"
+
+# Apply cleaning at startup
+SECTORS = validate_and_clean_sectors(SECTORS)
 INDUSTRY_MAP = {
     "Bank": [
         "HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ",
@@ -2219,10 +2289,7 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
                     
                     if result:
                         # Add sector information
-                        for sector_name, sector_stocks in SECTORS.items():
-                            if symbol in sector_stocks:
-                                result['Sector'] = sector_name
-                                break
+                        result['Sector'] = assign_primary_sector(symbol, SECTORS)
                         all_results.append(result)
                     else:
                         failed_stocks.append(symbol)
@@ -2469,21 +2536,33 @@ def main():
         help="Choose sectors"
     )
     
-    if "All" in selected_sectors:
-        stock_list = get_unique_stock_list(SECTORS)
-    else:
-        temp_list = [s for sector in selected_sectors for s in SECTORS.get(sector, [])]
-        stock_list = list(dict.fromkeys(temp_list))  # Remove duplicates
-    
-    symbol = st.sidebar.selectbox("Select Stock", stock_list, index=0)
+# Safe stock list generation
+stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
+
+if stock_list and len(stock_list) > 0:
+    symbol = st.sidebar.selectbox(
+        "Select Stock", 
+        stock_list, 
+        index=0,
+        help="Choose a stock to analyze"
+    )
+else:
+    st.sidebar.error("❌ No stocks available for selected sectors")
+    symbol = "SBIN-EQ"  # Fallback
+    st.sidebar.info(f"Using default: {symbol}")
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, max_value=10000000, value=30000, step=5000)
     
     # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
     
     # TAB 1: Analysis
-    with tab1:
-        st.subheader("🌍 Market Health")
+    with tab1:with tab1:
+    # Validate symbol selection
+    if symbol is None or symbol == "":
+        st.warning("⚠️ Please select a valid stock from the sidebar")
+        st.stop()
+    
+    st.subheader("🌍 Market Health")
         
         market_health, market_signal, market_factors = calculate_market_health_score()
         
@@ -2701,6 +2780,13 @@ def main():
         # Display Contrarian Mode Status
         if contrarian_mode:
             st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
+
+        # Add after "Display Contrarian Mode Status" section
+        if not stock_list or len(stock_list) == 0:
+            st.error("❌ No stocks available to scan. Please select different sectors.")
+            st.stop()
+
+         st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
         
         # Resume or Start Fresh
         col1, col2 = st.columns(2)
