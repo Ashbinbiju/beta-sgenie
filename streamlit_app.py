@@ -2556,13 +2556,13 @@ else:
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
     
     # TAB 1: Analysis
-    with tab1:with tab1:
+    with tab1:
     # Validate symbol selection
-    if symbol is None or symbol == "":
-        st.warning("⚠️ Please select a valid stock from the sidebar")
-        st.stop()
+        if symbol is None or symbol == "":
+            st.warning("⚠️ Please select a valid stock from the sidebar")
+            st.stop()
     
-    st.subheader("🌍 Market Health")
+        st.subheader("🌍 Market Health")
         
         market_health, market_signal, market_factors = calculate_market_health_score()
         
