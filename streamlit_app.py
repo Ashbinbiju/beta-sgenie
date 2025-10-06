@@ -2535,7 +2535,6 @@ def main():
         help="Choose sectors"
     )
     
-    # MOVE THIS BLOCK HERE - AFTER selected_sectors IS DEFINED
     stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
 
     if stock_list and len(stock_list) > 0:
@@ -2565,330 +2564,312 @@ def main():
 
     # TAB 1: Analysis
     with tab1:
-        # Validate symbol selection
         if symbol is None or symbol == "":
             st.warning("⚠️ Please select a valid stock from the sidebar")
             st.stop()
         
-    
-    st.subheader("🌍 Market Health")
-    
-    market_health, market_signal, market_factors = calculate_market_health_score()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    health_color = "🟢" if market_health >= 60 else "🟡" if market_health >= 40 else "🔴"
-    col1.metric("Market Health", f"{health_color} {market_health}/100", market_signal)
-    
-    if 'advance_ratio' in market_factors:
-        col2.metric("Breadth", f"{market_factors['advance_ratio']:.1f}%", market_factors.get('breadth_signal', ''))
-    
-    if 'avg_momentum' in market_factors:
-        col3.metric("Momentum", f"{market_factors['avg_momentum']:.1f}", market_factors.get('momentum_signal', ''))
-    
-    if 'volatility' in market_factors:
-        col4.metric("Volatility", f"{market_factors['volatility']:.1f}", market_factors.get('volatility_signal', ''))
-    
-    st.divider()
-    
-    st.subheader("📊 Index Trends")
-    index_trends = get_index_trend_for_timeframe(timeframe)
-    
-    if index_trends:
-        col1, col2 = st.columns(2)
+        st.subheader("🌍 Market Health")
         
-        with col1:
-            nifty = index_trends.get('nifty', {})
-            if nifty and 'analysis' in nifty:
-                trend = nifty['analysis'].get('15m_trend') or nifty['analysis'].get('1h_trend') or nifty['analysis'].get('1d_trend', 'Unknown')
-                adx = nifty['analysis'].get('ADX_analysis', {}).get('value', 0)
-                supertrend = nifty.get('indicators', {}).get('Supertrend', 0)
-                
-                trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
-                st.metric("Nifty 50", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
-                st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
+        market_health, market_signal, market_factors = calculate_market_health_score()
         
-        with col2:
-            bnf = index_trends.get('banknifty', {})
-            if bnf and 'analysis' in bnf:
-                trend = bnf['analysis'].get('15m_trend') or bnf['analysis'].get('1h_trend') or bnf['analysis'].get('1d_trend', 'Unknown')
-                adx = bnf['analysis'].get('ADX_analysis', {}).get('value', 0)
-                supertrend = bnf.get('indicators', {}).get('Supertrend', 0)
-                
-                trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
-                st.metric("Bank Nifty", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
-                st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
-    else:
-        st.info("⚠️ Index trend data unavailable")
-    
-    st.divider()
-    
-    if st.button("🔍 Analyze Selected Stock"):
-        with st.spinner(f"Analyzing {symbol}..."):
-            try:
-                data = fetch_stock_data_with_auth(symbol, interval=timeframe)
-                
-                if not data.empty:
-                    rec = generate_recommendation(
-                        data, symbol,
-                        'swing' if trading_style == "Swing Trading" else 'intraday',
-                        timeframe, account_size, contrarian_mode
-                    )
-                    processed_data = rec.get('processed_data', data)
+        col1, col2, col3, col4 = st.columns(4)
+        
+        health_color = "🟢" if market_health >= 60 else "🟡" if market_health >= 40 else "🔴"
+        col1.metric("Market Health", f"{health_color} {market_health}/100", market_signal)
+        
+        if 'advance_ratio' in market_factors:
+            col2.metric("Breadth", f"{market_factors['advance_ratio']:.1f}%", market_factors.get('breadth_signal', ''))
+        
+        if 'avg_momentum' in market_factors:
+            col3.metric("Momentum", f"{market_factors['avg_momentum']:.1f}", market_factors.get('momentum_signal', ''))
+        
+        if 'volatility' in market_factors:
+            col4.metric("Volatility", f"{market_factors['volatility']:.1f}", market_factors.get('volatility_signal', ''))
+        
+        st.divider()
+        
+        st.subheader("📊 Index Trends")
+        index_trends = get_index_trend_for_timeframe(timeframe)
+        
+        if index_trends:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                nifty = index_trends.get('nifty', {})
+                if nifty and 'analysis' in nifty:
+                    trend = nifty['analysis'].get('15m_trend') or nifty['analysis'].get('1h_trend') or nifty['analysis'].get('1d_trend', 'Unknown')
+                    adx = nifty['analysis'].get('ADX_analysis', {}).get('value', 0)
+                    supertrend = nifty.get('indicators', {}).get('Supertrend', 0)
                     
-                    # Display Contrarian Mode Status
-                    if contrarian_mode:
-                        st.info("🎯 **Contrarian Mode Active**: Market context weight reduced by 50%. Stock technicals prioritized.")
+                    trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
+                    st.metric("Nifty 50", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
+                    st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
+            
+            with col2:
+                bnf = index_trends.get('banknifty', {})
+                if bnf and 'analysis' in bnf:
+                    trend = bnf['analysis'].get('15m_trend') or bnf['analysis'].get('1h_trend') or bnf['analysis'].get('1d_trend', 'Unknown')
+                    adx = bnf['analysis'].get('ADX_analysis', {}).get('value', 0)
+                    supertrend = bnf.get('indicators', {}).get('Supertrend', 0)
                     
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    col1.metric("Score", f"{rec['score']}/100")
-                    col2.metric("Signal", rec['signal'])
-                    col3.metric("Regime", rec['regime'])
-                    col4.metric("Current Price", f"₹{rec['current_price']}")
+                    trend_emoji = "🟢" if "Uptrend" in trend else "🔴" if "Downtrend" in trend else "⚪"
+                    st.metric("Bank Nifty", f"{trend_emoji} {trend}", f"ADX: {adx:.1f}")
+                    st.caption(f"Supertrend: {'Bullish ✅' if supertrend == 1 else 'Bearish ⚠️'}")
+        else:
+            st.info("⚠️ Index trend data unavailable")
+        
+        st.divider()
+        
+        if st.button("🔍 Analyze Selected Stock"):
+            with st.spinner(f"Analyzing {symbol}..."):
+                try:
+                    data = fetch_stock_data_with_auth(symbol, interval=timeframe)
                     
-                    if trading_style == "Intraday Trading":
-                        col5.metric("Hours Left", f"{rec['hours_to_close']}h")
-                        if rec['hours_to_close'] < 0.5:
-                            st.warning("⚠️ Less than 30 min to close - EXIT ONLY!")
-                    else:
-                        col5.metric("Timeframe", timeframe_display)
-                    
-                    signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
-                    
-                    if rec.get('index_context'):
-                        idx = rec['index_context']
-                        index_bullish = 'Uptrend' in idx['trend']
+                    if not data.empty:
+                        rec = generate_recommendation(
+                            data, symbol,
+                            'swing' if trading_style == "Swing Trading" else 'intraday',
+                            timeframe, account_size, contrarian_mode
+                        )
+                        processed_data = rec.get('processed_data', data)
                         
-                        if signal_bullish and not index_bullish:
-                            st.warning(f"⚠️ **Counter-Index Trade**: Stock bullish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
-                        elif not signal_bullish and index_bullish:
-                            st.warning(f"⚠️ **Counter-Index Trade**: Stock bearish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
-                        elif signal_bullish and index_bullish:
-                            st.success(f"✅ **Index Aligned**: {idx['index_name']} also in {idx['trend']}")
-                    
-                    market_bullish = rec['market_signal'] in ['Very Bullish', 'Bullish']
-                    if signal_bullish and not market_bullish:
-                        st.warning(f"⚠️ **Weak Market Breadth**: Stock bullish but overall market is {rec['market_signal']}. Reduce position size!")
-                    elif signal_bullish and market_bullish:
-                        st.success(f"✅ **Strong Market Support**: Breadth is {rec['market_signal']}")
-                    
-                    if rec.get('industry_context'):
-                        ind = rec['industry_context']
-                        industry_bullish = ind['avg_change'] > 0.5
+                        if contrarian_mode:
+                            st.info("🎯 **Contrarian Mode Active**: Market context weight reduced by 50%. Stock technicals prioritized.")
                         
-                        if signal_bullish and not industry_bullish:
-                            st.warning(f"⚠️ **Weak Industry**: {ind['industry_name']} avg {ind['avg_change']:.2f}%")
-                        elif signal_bullish and industry_bullish:
-                            st.success(f"✅ **Strong Industry**: {ind['industry_name']} avg +{ind['avg_change']:.2f}%")
-                    
-                    st.subheader("📋 Trade Setup")
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.write(f"**Buy At**: ₹{rec['buy_at']}")
-                        st.write(f"**Position Size**: {rec['position_size']} shares")
-                    with col2:
-                        st.write(f"**Stop Loss**: ₹{rec['stop_loss']}")
-                        st.write(f"**Risk Amount**: ₹{rec['risk_amount']}")
-                    with col3:
-                        st.write(f"**Target**: ₹{rec['target']}")
-                        st.write(f"**Potential Profit**: ₹{rec['potential_profit']}")
-                    
-                    st.write(f"**R:R Ratio**: {rec['rr_ratio']}:1")
-                    st.write(f"**Trailing Stop**: ₹{rec['trailing_stop']}")
-                    
-                    if trading_style == "Intraday Trading":
-                        st.subheader("🎯 Key Intraday Levels")
-                        col1, col2 = st.columns(2)
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        col1.metric("Score", f"{rec['score']}/100")
+                        col2.metric("Signal", rec['signal'])
+                        col3.metric("Regime", rec['regime'])
+                        col4.metric("Current Price", f"₹{rec['current_price']}")
+                        
+                        if trading_style == "Intraday Trading":
+                            col5.metric("Hours Left", f"{rec['hours_to_close']}h")
+                            if rec['hours_to_close'] < 0.5:
+                                st.warning("⚠️ Less than 30 min to close - EXIT ONLY!")
+                        else:
+                            col5.metric("Timeframe", timeframe_display)
+                        
+                        signal_bullish = rec['signal'] in ['Buy', 'Strong Buy']
+                        
+                        if rec.get('index_context'):
+                            idx = rec['index_context']
+                            index_bullish = 'Uptrend' in idx['trend']
+                            
+                            if signal_bullish and not index_bullish:
+                                st.warning(f"⚠️ **Counter-Index Trade**: Stock bullish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                            elif not signal_bullish and index_bullish:
+                                st.warning(f"⚠️ **Counter-Index Trade**: Stock bearish but {idx['index_name']} is in {idx['trend']}. Higher risk!")
+                            elif signal_bullish and index_bullish:
+                                st.success(f"✅ **Index Aligned**: {idx['index_name']} also in {idx['trend']}")
+                        
+                        market_bullish = rec['market_signal'] in ['Very Bullish', 'Bullish']
+                        if signal_bullish and not market_bullish:
+                            st.warning(f"⚠️ **Weak Market Breadth**: Stock bullish but overall market is {rec['market_signal']}. Reduce position size!")
+                        elif signal_bullish and market_bullish:
+                            st.success(f"✅ **Strong Market Support**: Breadth is {rec['market_signal']}")
+                        
+                        if rec.get('industry_context'):
+                            ind = rec['industry_context']
+                            industry_bullish = ind['avg_change'] > 0.5
+                            
+                            if signal_bullish and not industry_bullish:
+                                st.warning(f"⚠️ **Weak Industry**: {ind['industry_name']} avg {ind['avg_change']:.2f}%")
+                            elif signal_bullish and industry_bullish:
+                                st.success(f"✅ **Strong Industry**: {ind['industry_name']} avg +{ind['avg_change']:.2f}%")
+                        
+                        st.subheader("📋 Trade Setup")
+                        col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            st.markdown("**Opening Range:**")
-                            if rec.get('or_high'):
-                                st.write(f"  - OR High: ₹{rec['or_high']}")
-                                st.write(f"  - OR Mid: ₹{rec['or_mid']}")
-                                st.write(f"  - OR Low: ₹{rec['or_low']}")
-                            else:
-                                st.write("  - Not yet formed")
-                        
+                            st.write(f"**Buy At**: ₹{rec['buy_at']}")
+                            st.write(f"**Position Size**: {rec['position_size']} shares")
                         with col2:
-                            st.markdown("**VWAP Bands:**")
-                            st.write(f"  - VWAP: ₹{rec['vwap']}")
-                            if rec.get('vwap_lower1'):
-                                st.write(f"  - Lower Band: ₹{rec['vwap_lower1']}")
-                    
-                    st.info(f"**Reason**: {rec['reason']}")
-                    
-                    if trading_style == "Intraday Trading":
-                        fig = display_intraday_chart(rec, data)
-                    else:
-                        fig = go.Figure()
-                        fig.add_trace(go.Candlestick(
-                            x=processed_data.index,
-                            open=processed_data['Open'],
-                            high=processed_data['High'],
-                            low=processed_data['Low'],
-                            close=processed_data['Close']
-                        ))
+                            st.write(f"**Stop Loss**: ₹{rec['stop_loss']}")
+                            st.write(f"**Risk Amount**: ₹{rec['risk_amount']}")
+                        with col3:
+                            st.write(f"**Target**: ₹{rec['target']}")
+                            st.write(f"**Potential Profit**: ₹{rec['potential_profit']}")
                         
-                        if 'EMA_200' in processed_data.columns:
-                            fig.add_trace(go.Scatter(
-                                x=processed_data.index, 
-                                y=processed_data['EMA_200'],
-                                mode='lines',
-                                name='200 EMA',
-                                line=dict(color='purple', width=2)
+                        st.write(f"**R:R Ratio**: {rec['rr_ratio']}:1")
+                        st.write(f"**Trailing Stop**: ₹{rec['trailing_stop']}")
+                        
+                        if trading_style == "Intraday Trading":
+                            st.subheader("🎯 Key Intraday Levels")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.markdown("**Opening Range:**")
+                                if rec.get('or_high'):
+                                    st.write(f"  - OR High: ₹{rec['or_high']}")
+                                    st.write(f"  - OR Mid: ₹{rec['or_mid']}")
+                                    st.write(f"  - OR Low: ₹{rec['or_low']}")
+                                else:
+                                    st.write("  - Not yet formed")
+                            
+                            with col2:
+                                st.markdown("**VWAP Bands:**")
+                                st.write(f"  - VWAP: ₹{rec['vwap']}")
+                                if rec.get('vwap_lower1'):
+                                    st.write(f"  - Lower Band: ₹{rec['vwap_lower1']}")
+                        
+                        st.info(f"**Reason**: {rec['reason']}")
+                        
+                        if trading_style == "Intraday Trading":
+                            fig = display_intraday_chart(rec, data)
+                        else:
+                            fig = go.Figure()
+                            fig.add_trace(go.Candlestick(
+                                x=processed_data.index,
+                                open=processed_data['Open'],
+                                high=processed_data['High'],
+                                low=processed_data['Low'],
+                                close=processed_data['Close']
                             ))
+                            
+                            if 'EMA_200' in processed_data.columns:
+                                fig.add_trace(go.Scatter(
+                                    x=processed_data.index, 
+                                    y=processed_data['EMA_200'],
+                                    mode='lines',
+                                    name='200 EMA',
+                                    line=dict(color='purple', width=2)
+                                ))
+                            
+                            fig.update_layout(title=f"{symbol} - Daily", height=500, xaxis_rangeslider_visible=False)
                         
-                        fig.update_layout(title=f"{symbol} - Daily", height=500, xaxis_rangeslider_visible=False)
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("No data available")
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("No data available")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
 
     # TAB 2: Scanner
-with tab2:
-    st.markdown("### 📡 Stock Scanner")
+    with tab2:
+        st.markdown("### 📡 Stock Scanner")
 
-    # Check for existing checkpoint
-    checkpoint = load_checkpoint()
-    if checkpoint:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.info(f"🔄 Found incomplete scan: {len(checkpoint['completed_stocks'])} stocks already processed")
-        with col2:
-            if st.button("🗑️ Clear & Start Fresh"):
-                clear_checkpoint()
-                st.rerun()
+        checkpoint = load_checkpoint()
+        if checkpoint:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"🔄 Found incomplete scan: {len(checkpoint['completed_stocks'])} stocks already processed")
+            with col2:
+                if st.button("🗑️ Clear & Start Fresh"):
+                    clear_checkpoint()
+                    st.rerun()
 
-    # Check API health before scan
-    health_status, health_msg = check_api_health()
-    if not health_status:
-        st.warning(f"⚠️ API Issue: {health_msg}. Will auto-reconnect on next request...")
+        health_status, health_msg = check_api_health()
+        if not health_status:
+            st.warning(f"⚠️ API Issue: {health_msg}. Will auto-reconnect on next request...")
 
-    with st.expander("📋 Scan Settings", expanded=True):
+        with st.expander("📋 Scan Settings", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"**Stocks to scan**: {min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])}")
+                st.info(f"**Estimated time**: ~{min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan']) * 3} seconds")
+            with col2:
+                st.info(f"**Trading style**: {trading_style}")
+                st.info(f"**Timeframe**: {timeframe_display}")
+                resume = st.checkbox(
+                    "Resume from checkpoint", 
+                    value=True,
+                    help="Continue previous scan if interrupted"
+                )
+                if resume and CHECKPOINT_FILE.exists():
+                    st.success("✅ Checkpoint available")
+
+        if contrarian_mode:
+            st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
+
+        if not stock_list or len(stock_list) == 0:
+            st.error("❌ No stocks available to scan. Please select different sectors.")
+            st.stop()
+        st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
+
         col1, col2 = st.columns(2)
         with col1:
-            st.info(f"**Stocks to scan**: {min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])}")
-            st.info(f"**Estimated time**: ~{min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan']) * 3} seconds")
+            scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
         with col2:
-            st.info(f"**Trading style**: {trading_style}")
-            st.info(f"**Timeframe**: {timeframe_display}")
-            # Resume Checkbox
-            resume = st.checkbox(
-                "Resume from checkpoint", 
-                value=True,
-                help="Continue previous scan if interrupted"
-            )
-            if resume and CHECKPOINT_FILE.exists():
-                st.success("✅ Checkpoint available")
-
-    # Display Contrarian Mode Status
-    if contrarian_mode:
-        st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
-
-    # Validate stock list
-    if not stock_list or len(stock_list) == 0:
-        st.error("❌ No stocks available to scan. Please select different sectors.")
-        st.stop()
-    st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
-
-    # Resume or Start Fresh
-    col1, col2 = st.columns(2)
-
-    with col1:
-        scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
-
-    with col2:
-        resume_enabled = checkpoint is not None and resume
-        resume_button = st.button(
-            f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
-            disabled=not resume_enabled,
-            use_container_width=True
-        )
-
-    if scan_button or resume_button:
-        resume_scan = resume_button and checkpoint is not None
-
-        progress = st.progress(0)
-        status_text = st.empty()
-        results_placeholder = st.empty()
-
-        try:
-            if resume_scan:
-                status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
-            else:
-                status_text.info("🔄 Initializing fresh scan...")
-                clear_checkpoint()  # Clear old checkpoint for fresh scan
-
-            def update_progress(pct):
-                progress.progress(pct)
-                scan_count = min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])
-                status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count} stocks)")
-
-            results = analyze_multiple_stocks(
-                stock_list,
-                'swing' if trading_style == "Swing Trading" else 'intraday',
-                timeframe,
-                progress_callback=update_progress,
-                resume=resume_scan,
-                contrarian_mode=contrarian_mode
+            resume_enabled = checkpoint is not None and resume
+            resume_button = st.button(
+                f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
+                disabled=not resume_enabled,
+                use_container_width=True
             )
 
-            progress.empty()
-            status_text.empty()
+        if scan_button or resume_button:
+            resume_scan = resume_button and checkpoint is not None
+            progress = st.progress(0)
+            status_text = st.empty()
+            results_placeholder = st.empty()
 
-            if not results.empty:
-                save_picks(results, trading_style)
-                results_placeholder.success(f"✅ Found {len(results)} opportunities!")
+            try:
+                if resume_scan:
+                    status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
+                else:
+                    status_text.info("🔄 Initializing fresh scan...")
+                    clear_checkpoint()
 
-                st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
+                def update_progress(pct):
+                    progress.progress(pct)
+                    scan_count = min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])
+                    status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count} stocks)")
 
-                # Highlight styling for scores
-                def highlight_score(val):
-                    if val >= 75:
-                        return 'background-color: #90EE90; color: #000000; font-weight: bold'
-                    elif val >= 60:
-                        return 'background-color: #FFFACD; color: #000000; font-weight: bold'
-                    elif val <= 40:
-                        return 'background-color: #FFB6C1; color: #000000; font-weight: bold'
-                    else:
-                        return 'color: #000000'
+                results = analyze_multiple_stocks(
+                    stock_list,
+                    'swing' if trading_style == "Swing Trading" else 'intraday',
+                    timeframe,
+                    progress_callback=update_progress,
+                    resume=resume_scan,
+                    contrarian_mode=contrarian_mode
+                )
 
-                styled_df = results.style.applymap(highlight_score, subset=['Score'])
-                st.dataframe(styled_df, use_container_width=True)
+                progress.empty()
+                status_text.empty()
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    csv = results.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download CSV",
-                        data=csv,
-                        file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv"
-                    )
+                if not results.empty:
+                    save_picks(results, trading_style)
+                    results_placeholder.success(f"✅ Found {len(results)} opportunities!")
+                    st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
 
-                with col2:
-                    avg_score = results['Score'].mean()
-                    st.metric("Average Score", f"{avg_score:.1f}")
+                    def highlight_score(val):
+                        if val >= 75:
+                            return 'background-color: #90EE90; color: #000000; font-weight: bold'
+                        elif val >= 60:
+                            return 'background-color: #FFFACD; color: #000000; font-weight: bold'
+                        elif val <= 40:
+                            return 'background-color: #FFB6C1; color: #000000; font-weight: bold'
+                        else:
+                            return 'color: #000000'
 
-            else:
-                results_placeholder.warning("⚠️ No stocks met the criteria. Try adjusting filters or sectors.")
+                    styled_df = results.style.applymap(highlight_score, subset=['Score'])
+                    st.dataframe(styled_df, use_container_width=True)
 
-        except KeyboardInterrupt:
-            progress.empty()
-            status_text.warning("⚠️ Scan paused. Click 'Resume Scan' to continue from where you left off.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        csv = results.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv,
+                            file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                            mime="text/csv"
+                        )
+                    with col2:
+                        avg_score = results['Score'].mean()
+                        st.metric("Average Score", f"{avg_score:.1f}")
+                else:
+                    results_placeholder.warning("⚠️ No stocks met the criteria. Try adjusting filters or sectors.")
 
-        except Exception as e:
-            progress.empty()
-            status_text.error(f"❌ Scan failed: {str(e)}")
-            st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
-            logging.error(f"Scanner error: {str(e)}", exc_info=True)
+            except KeyboardInterrupt:
+                progress.empty()
+                status_text.warning("⚠️ Scan paused. Click 'Resume Scan' to continue from where you left off.")
+            except Exception as e:
+                progress.empty()
+                status_text.error(f"❌ Scan failed: {str(e)}")
+                st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
+                logging.error(f"Scanner error: {str(e)}", exc_info=True)
 
     # TAB 3: Backtest
     with tab3:
-        with tab3:
         if st.button("📊 Run Backtest"):
             with st.spinner("Backtesting..."):
                 try:
@@ -2981,8 +2962,5 @@ with tab2:
                 sector_df.columns = ['Index', 'Avg Change %', 'Advance Ratio %', 'Momentum', 'Signal', 'Volatility']
                 st.dataframe(sector_df, use_container_width=True)
 
-
 if __name__ == "__main__":
     main()
-    
-
