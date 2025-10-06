@@ -2748,146 +2748,144 @@ with tab1:
                 st.error(f"❌ Error: {str(e)}")
 
     
-    # TAB 2: Scanner (IMPROVED WITH AUTO-RESUME)
-    with tab2:
-        st.markdown("### 📡 Stock Scanner")
-        
-        # Check for existing checkpoint
-        checkpoint = load_checkpoint()
-        if checkpoint:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.info(f"🔄 Found incomplete scan: {len(checkpoint['completed_stocks'])} stocks already processed")
-            with col2:
-                if st.button("🗑️ Clear & Start Fresh"):
-                    clear_checkpoint()
-                    st.rerun()
-        
-        # Check API health before scan
-        health_status, health_msg = check_api_health()
-        if not health_status:
-            st.warning(f"⚠️ API Issue: {health_msg}. Trying to reconnect...")
-            global _global_smart_api
-            _global_smart_api = None
-        
-        with st.expander("📋 Scan Settings", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.info(f"**Stocks to scan**: {min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])}")
-                st.info(f"**Estimated time**: ~{min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan']) * 3} seconds")
-            with col2:
-                st.info(f"**Trading style**: {trading_style}")
-                st.info(f"**Timeframe**: {timeframe_display}")
-                # Resume Checkbox
-                resume = st.checkbox(
-                    "Resume from checkpoint", 
-                    value=True,
-                    help="Continue previous scan if interrupted"
-                )
-                if resume and CHECKPOINT_FILE.exists():
-                    st.success("✅ Checkpoint available")
-        
-        # Display Contrarian Mode Status
-        if contrarian_mode:
-            st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
-
-        # Add after "Display Contrarian Mode Status" section
-        if not stock_list or len(stock_list) == 0:
-            st.error("❌ No stocks available to scan. Please select different sectors.")
-            st.stop()
-        st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
-        
-        # Resume or Start Fresh
-        col1, col2 = st.columns(2)
-        
+# TAB 2: Scanner (IMPROVED WITH AUTO-RESUME)
+with tab2:
+    st.markdown("### 📡 Stock Scanner")
+    
+    # Check for existing checkpoint
+    checkpoint = load_checkpoint()
+    if checkpoint:
+        col1, col2 = st.columns([3, 1])
         with col1:
-            scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
-        
+            st.info(f"🔄 Found incomplete scan: {len(checkpoint['completed_stocks'])} stocks already processed")
         with col2:
-            resume_enabled = checkpoint is not None and resume
-            resume_button = st.button(
-                f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
-                disabled=not resume_enabled,
-                use_container_width=True
+            if st.button("🗑️ Clear & Start Fresh"):
+                clear_checkpoint()
+                st.rerun()
+    
+    # Check API health before scan
+    health_status, health_msg = check_api_health()
+    if not health_status:
+        st.warning(f"⚠️ API Issue: {health_msg}. Will auto-reconnect on next request...")
+    
+    with st.expander("📋 Scan Settings", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"**Stocks to scan**: {min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])}")
+            st.info(f"**Estimated time**: ~{min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan']) * 3} seconds")
+        with col2:
+            st.info(f"**Trading style**: {trading_style}")
+            st.info(f"**Timeframe**: {timeframe_display}")
+            # Resume Checkbox
+            resume = st.checkbox(
+                "Resume from checkpoint", 
+                value=True,
+                help="Continue previous scan if interrupted"
             )
+            if resume and CHECKPOINT_FILE.exists():
+                st.success("✅ Checkpoint available")
+    
+    # Display Contrarian Mode Status
+    if contrarian_mode:
+        st.info("🎯 **Contrarian Mode Active**: Scanning with reduced market context weight")
+
+    # Validate stock list
+    if not stock_list or len(stock_list) == 0:
+        st.error("❌ No stocks available to scan. Please select different sectors.")
+        st.stop()
+    st.info(f"✅ Ready to scan {len(stock_list)} unique stocks")
+    
+    # Resume or Start Fresh
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        scan_button = st.button("🚀 Start Scan", type="primary", use_container_width=True)
+    
+    with col2:
+        resume_enabled = checkpoint is not None and resume
+        resume_button = st.button(
+            f"▶️ Resume Scan ({len(checkpoint['completed_stocks'])} done)" if checkpoint else "▶️ Resume Scan (No checkpoint)",
+            disabled=not resume_enabled,
+            use_container_width=True
+        )
+    
+    if scan_button or resume_button:
+        resume_scan = resume_button and checkpoint is not None
         
-        if scan_button or resume_button:
-            resume_scan = resume_button and checkpoint is not None
+        progress = st.progress(0)
+        status_text = st.empty()
+        results_placeholder = st.empty()
+        
+        try:
+            if resume_scan:
+                status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
+            else:
+                status_text.info("🔄 Initializing fresh scan...")
+                clear_checkpoint()  # Clear old checkpoint for fresh scan
             
-            progress = st.progress(0)
-            status_text = st.empty()
-            results_placeholder = st.empty()
+            def update_progress(pct):
+                progress.progress(pct)
+                scan_count = min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])
+                status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count} stocks)")
             
-            try:
-                if resume_scan:
-                    status_text.info(f"🔄 Resuming scan from {len(checkpoint['completed_stocks'])} stocks...")
-                else:
-                    status_text.info("🔄 Initializing fresh scan...")
-                    clear_checkpoint()  # Clear old checkpoint for fresh scan
-                
-                def update_progress(pct):
-                    progress.progress(pct)
-                    scan_count = min(len(stock_list), SCAN_CONFIG['max_stocks_per_scan'])
-                    status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count} stocks)")
-                
-                results = analyze_multiple_stocks(
-                    stock_list,
-                    'swing' if trading_style == "Swing Trading" else 'intraday',
-                    timeframe,
-                    progress_callback=update_progress,
-                    resume=resume_scan,
-                    contrarian_mode=contrarian_mode
-                )
-                
-                progress.empty()
-                status_text.empty()
-                
-                if not results.empty:
-                    save_picks(results, trading_style)
-                    results_placeholder.success(f"✅ Found {len(results)} opportunities!")
-                    
-                    st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
-                    
-                    # IMPROVED STYLING WITH BETTER CONTRAST
-                    def highlight_score(val):
-                        if val >= 75:
-                            return 'background-color: #90EE90; color: #000000; font-weight: bold'  # Light green with black text
-                        elif val >= 60:
-                            return 'background-color: #FFFACD; color: #000000; font-weight: bold'  # Light yellow with black text
-                        elif val <= 40:
-                            return 'background-color: #FFB6C1; color: #000000; font-weight: bold'  # Light red with black text
-                        else:
-                            return 'color: #000000'
-                    
-                    styled_df = results.style.applymap(highlight_score, subset=['Score'])
-                    st.dataframe(styled_df, use_container_width=True)
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        csv = results.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download CSV",
-                            data=csv,
-                            file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                            mime="text/csv"
-                        )
-                    
-                    with col2:
-                        avg_score = results['Score'].mean()
-                        st.metric("Average Score", f"{avg_score:.1f}")
-                
-                else:
-                    results_placeholder.warning("⚠️ No stocks met the criteria. Try adjusting filters or sectors.")
+            results = analyze_multiple_stocks(
+                stock_list,
+                'swing' if trading_style == "Swing Trading" else 'intraday',
+                timeframe,
+                progress_callback=update_progress,
+                resume=resume_scan,
+                contrarian_mode=contrarian_mode
+            )
             
-            except KeyboardInterrupt:
-                progress.empty()
-                status_text.warning("⚠️ Scan paused. Click 'Resume Scan' to continue from where you left off.")
+            progress.empty()
+            status_text.empty()
             
-            except Exception as e:
-                progress.empty()
-                status_text.error(f"❌ Scan failed: {str(e)}")
-                st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
-                logging.error(f"Scanner error: {str(e)}", exc_info=True)
+            if not results.empty:
+                save_picks(results, trading_style)
+                results_placeholder.success(f"✅ Found {len(results)} opportunities!")
+                
+                st.subheader(f"🏆 Top {trading_style} Picks (Sector Diversified)")
+                
+                # IMPROVED STYLING WITH BETTER CONTRAST
+                def highlight_score(val):
+                    if val >= 75:
+                        return 'background-color: #90EE90; color: #000000; font-weight: bold'
+                    elif val >= 60:
+                        return 'background-color: #FFFACD; color: #000000; font-weight: bold'
+                    elif val <= 40:
+                        return 'background-color: #FFB6C1; color: #000000; font-weight: bold'
+                    else:
+                        return 'color: #000000'
+                
+                styled_df = results.style.applymap(highlight_score, subset=['Score'])
+                st.dataframe(styled_df, use_container_width=True)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    csv = results.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download CSV",
+                        data=csv,
+                        file_name=f"stock_picks_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv"
+                    )
+                
+                with col2:
+                    avg_score = results['Score'].mean()
+                    st.metric("Average Score", f"{avg_score:.1f}")
+            
+            else:
+                results_placeholder.warning("⚠️ No stocks met the criteria. Try adjusting filters or sectors.")
+        
+        except KeyboardInterrupt:
+            progress.empty()
+            status_text.warning("⚠️ Scan paused. Click 'Resume Scan' to continue from where you left off.")
+        
+        except Exception as e:
+            progress.empty()
+            status_text.error(f"❌ Scan failed: {str(e)}")
+            st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
+            logging.error(f"Scanner error: {str(e)}", exc_info=True)
     
     # TAB 3: Backtest
     with tab3:
