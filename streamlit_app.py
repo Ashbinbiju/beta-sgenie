@@ -2536,29 +2536,29 @@ def main():
         help="Choose sectors"
     )
     
-# Safe stock list generation
-stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
+    # MOVE THIS BLOCK HERE - AFTER selected_sectors IS DEFINED
+    stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
 
-if stock_list and len(stock_list) > 0:
-    symbol = st.sidebar.selectbox(
-        "Select Stock", 
-        stock_list, 
-        index=0,
-        help="Choose a stock to analyze"
+    if stock_list and len(stock_list) > 0:
+        symbol = st.sidebar.selectbox(
+            "Select Stock", 
+            stock_list, 
+            index=0,
+            help="Choose a stock to analyze"
+        )
+    else:
+        st.sidebar.error("❌ No stocks available for selected sectors")
+        symbol = "SBIN-EQ"  # Fallback
+        st.sidebar.info(f"Using default: {symbol}")
+
+    account_size = st.sidebar.number_input(
+        "Account Size (₹)", 
+        min_value=10000, 
+        max_value=10000000, 
+        value=30000, 
+        step=5000
     )
-else:
-    st.sidebar.error("❌ No stocks available for selected sectors")
-    symbol = "SBIN-EQ"  # Fallback
-    st.sidebar.info(f"Using default: {symbol}")
-
-account_size = st.sidebar.number_input(
-    "Account Size (₹)", 
-    min_value=10000, 
-    max_value=10000000, 
-    value=30000, 
-    step=5000
-)
-
+    
 # Tabs
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     ["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"]
