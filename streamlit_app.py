@@ -2488,7 +2488,6 @@ def display_intraday_chart(rec, data):
     )
     
     return fig
-
 def main():
     """Main Streamlit app"""
     
@@ -2559,17 +2558,18 @@ def main():
         step=5000
     )
     
-# Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"]
-)
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"]
+    )
 
-# TAB 1: Analysis
-with tab1:
-    # Validate symbol selection
-    if symbol is None or symbol == "":
-        st.warning("⚠️ Please select a valid stock from the sidebar")
-        st.stop()
+    # TAB 1: Analysis
+    with tab1:
+        # Validate symbol selection
+        if symbol is None or symbol == "":
+            st.warning("⚠️ Please select a valid stock from the sidebar")
+            st.stop()
+        
     
     st.subheader("🌍 Market Health")
     
@@ -2747,8 +2747,8 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
-    
-# TAB 2: Scanner (IMPROVED WITH AUTO-RESUME)
+    # TAB 2: Scanner
+    with tab2:
 with tab2:
     st.markdown("### 📡 Stock Scanner")
     
@@ -2886,9 +2886,10 @@ with tab2:
             status_text.error(f"❌ Scan failed: {str(e)}")
             st.info("💡 Click 'Resume Scan' to retry from the last checkpoint")
             logging.error(f"Scanner error: {str(e)}", exc_info=True)
-    
+
     # TAB 3: Backtest
     with tab3:
+        with tab3:
         if st.button("📊 Run Backtest"):
             with st.spinner("Backtesting..."):
                 try:
@@ -2927,7 +2928,7 @@ with tab2:
                         st.warning("Insufficient data for backtest")
                 except Exception as e:
                     st.error(f"❌ Backtest error: {str(e)}")
-    
+
     # TAB 4: History
     with tab4:
         try:
@@ -2942,7 +2943,7 @@ with tab2:
                 st.info("No historical data available")
         except Exception as e:
             st.error(f"❌ Database error: {str(e)}")
-    
+
     # TAB 5: Market Dashboard
     with tab5:
         st.subheader("🌍 Complete Market Overview")
@@ -2981,5 +2982,8 @@ with tab2:
                 sector_df.columns = ['Index', 'Avg Change %', 'Advance Ratio %', 'Momentum', 'Signal', 'Volatility']
                 st.dataframe(sector_df, use_container_width=True)
 
+
 if __name__ == "__main__":
     main()
+    
+
