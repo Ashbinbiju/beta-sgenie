@@ -2839,5 +2839,5 @@ def main():
                 sector_df.columns = ['Index', 'Avg Change %', 'Advance Ratio %', 'Momentum', 'Signal', 'Volatility']
                 st.dataframe(sector_df, use_container_width=True)
 
-  if __name__ == "__main__":
-      main()
+if __name__ == "__main__":
+    main()
