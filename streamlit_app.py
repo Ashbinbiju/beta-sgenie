@@ -2350,7 +2350,7 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-   with tab5:
+    with tab5:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
