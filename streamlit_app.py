@@ -879,72 +879,35 @@ def load_dhan_security_id_map():
         df = pd.read_csv(url, low_memory=False)
         df.columns = df.columns.str.strip()
         
-        logging.info(f"Dhan CSV columns found: {df.columns.tolist()[:10]}...")  # Debug: show first 10 columns
-        logging.info(f"Total rows in CSV: {len(df)}")
-
-        # Try multiple possible column name variations
-        exch_col = None
-        instrument_col = None
-        symbol_col = None
-        security_id_col = None
+        logging.info(f"Total rows in Dhan CSV: {len(df)}")
         
-        # Find exchange column
-        for col in ['SEM_SEGMENT', 'SEM_EXM_EXCH_ID', 'EXCH_SEG', 'EXCHANGE_SEGMENT']:
-            if col in df.columns:
-                exch_col = col
-                break
+        # Use the CORRECT Dhan filtering logic
+        # SEM_EXM_EXCH_ID = 'NSE' (exchange)
+        # SEM_SEGMENT = 'E' (equity segment)
+        nse_eq_df = df[(df['SEM_EXM_EXCH_ID'] == 'NSE') & (df['SEM_SEGMENT'] == 'E')]
         
-        # Find instrument type column
-        for col in ['SEM_INSTRUMENT_NAME', 'SEM_INSTRUMENT_TYPE', 'INSTRUMENT_TYPE', 'SERIES']:
-            if col in df.columns:
-                instrument_col = col
-                break
-        
-        # Find trading symbol column
-        for col in ['SEM_TRADING_SYMBOL', 'SEM_CUSTOM_SYMBOL', 'TRADING_SYMBOL', 'SYMBOL']:
-            if col in df.columns:
-                symbol_col = col
-                break
-        
-        # Find security ID column
-        for col in ['SEM_SMST_SECURITY_ID', 'SEM_SECURITY_ID', 'SECURITY_ID', 'TOKEN']:
-            if col in df.columns:
-                security_id_col = col
-                break
-        
-        if not all([exch_col, instrument_col, symbol_col, security_id_col]):
-            logging.error(f"Could not find required columns. Found: exch={exch_col}, instrument={instrument_col}, symbol={symbol_col}, security_id={security_id_col}")
-            logging.error(f"Available columns: {df.columns.tolist()}")
-            return {}
-        
-        logging.info(f"Using columns: exch={exch_col}, instrument={instrument_col}, symbol={symbol_col}, security_id={security_id_col}")
-        
-        # Show unique values for debugging
-        logging.info(f"Unique exchange values: {df[exch_col].unique()[:5]}")
-        logging.info(f"Unique instrument values: {df[instrument_col].unique()[:5]}")
-        
-        # Filter for NSE Equity - try multiple filter combinations
-        nse_eq_df = df[
-            (df[exch_col].str.contains('NSE', case=False, na=False)) & 
-            (df[instrument_col].str.contains('EQ|EQUITY', case=False, na=False))
-        ]
-        
-        logging.info(f"Rows after NSE_EQ filter: {len(nse_eq_df)}")
+        logging.info(f"NSE Equity stocks found: {len(nse_eq_df)}")
         
         if nse_eq_df.empty:
-            # Try alternative filtering
-            nse_eq_df = df[df[exch_col].str.contains('NSE', case=False, na=False)]
-            logging.warning(f"Relaxed filter to NSE only: {len(nse_eq_df)} rows")
+            logging.error("No NSE Equity instruments found in Dhan master file!")
+            return {}
         
-        # Create mapping
+        # Create mapping using trading symbol
         security_map = {}
         for index, row in nse_eq_df.iterrows():
-            symbol = str(row[symbol_col]).strip()
-            sec_id = str(row[security_id_col]).strip()
+            # Try multiple symbol columns
+            symbol = None
+            for col in ['SEM_TRADING_SYMBOL', 'SEM_CUSTOM_SYMBOL', 'SM_SYMBOL_NAME']:
+                if col in row and pd.notna(row[col]):
+                    symbol = str(row[col]).strip()
+                    break
+            
+            sec_id = str(row['SEM_SMST_SECURITY_ID']).strip()
+            
             if symbol and sec_id and sec_id != 'nan':
                 security_map[symbol] = sec_id
         
-        logging.info(f"Loaded {len(security_map)} Dhan NSE instruments.")
+        logging.info(f"Loaded {len(security_map)} Dhan NSE Equity instruments.")
         if security_map:
             # Show sample mappings
             sample = list(security_map.items())[:5]
@@ -954,7 +917,6 @@ def load_dhan_security_id_map():
     except Exception as e:
         logging.error(f"Error loading Dhan master CSV: {e}", exc_info=True)
         return {}
-
 # --- SmartAPI Specific Setup ---
 def get_global_smart_api():
     """Manage global SmartAPI session with auto-refresh"""
