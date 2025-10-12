@@ -391,7 +391,7 @@ INDUSTRY_MAP = {
 
     "Pharma": [
         "SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "APOLLOHOSP-EQ", "LUPIN-EQ",
-        "DIVISLAB-EQ", "AUROPHARMA-EQ", "ALKEM-EQ", "TORNTPHARM-EQ",
+        "DIVISLAB-EQ", "AUROPHarma-EQ", "ALKEM-EQ", "TORNTPHARM-EQ",
         "ZYDUSLIFE-EQ", "IPCALAB-EQ", "GLENMARK-EQ", "BIOCON-EQ",
         "ABBOTINDIA-EQ", "SANOFI-EQ", "PFIZER-EQ", "GLAXO-EQ", "NATCOPHARM-EQ",
         "AJANTPHARM-EQ", "GRANULES-EQ", "LAURUSLABS-EQ", "STAR-EQ",
@@ -2041,7 +2041,7 @@ def main():
     trading_style = st.sidebar.radio("Trading Style", ["Swing Trading", "Intraday Trading"])
     timeframe = "1d"
     if trading_style == "Intraday Trading":
-        timeframe_display = st.sidebar.selectbox("Timeframe", ["5 min", "15 min", "30 min"], index=1)
+        timeframe_display = st.sidebar.selectbox("Timeframe", ["5m", "15m", "30m"], index=1)
         timeframe = timeframe_display.replace(" min", "m")
     else:
         timeframe_display = "Daily"
@@ -2059,7 +2059,12 @@ def main():
     st.sidebar.divider()
     st.sidebar.subheader("API Status")
     is_healthy, msg = check_api_health(api_provider)
-    st.sidebar.success(f"✅ {api_provider}: {msg}") if is_healthy else st.sidebar.error(f"❌ {api_provider}: {msg}")
+    
+    # FIXED: Replaced ternary operator with a standard if/else block
+    if is_healthy:
+        st.sidebar.success(f"✅ {api_provider}: {msg}")
+    else:
+        st.sidebar.error(f"❌ {api_provider}: {msg}")
 
     # --- SESSION STATE & TABS ---
     if 'scan_running' not in st.session_state: st.session_state.scan_running = False
