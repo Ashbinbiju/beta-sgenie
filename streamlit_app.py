@@ -110,7 +110,6 @@ USER_AGENTS = [
 ]
 
 # Sector definitions
-# FIXED SECTORS (NO DUPLICATES)
 SECTORS = {
     "Bank": [
         "HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "AXISBANK-EQ",
@@ -120,7 +119,6 @@ SECTORS = {
         "AUBANK-EQ", "YESBANK-EQ", "IDBI-EQ", "SOUTHBANK-EQ", "CSBBANK-EQ",
         "TMB-EQ", "KTKBANK-EQ", "EQUITASBNK-EQ", "UJJIVANSFB-EQ"
     ],
-
     "IT": [
         "TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ",
         "MPHASIS-EQ", "FSL-EQ", "BSOFT-EQ", "NEWGEN-EQ", "ZENSARTECH-EQ",
@@ -130,7 +128,6 @@ SECTORS = {
         "RSYSTEMS-EQ", "OFSS-EQ", "AURIONPRO-EQ", "DATAMATICS-EQ",
         "QUICKHEAL-EQ", "CIGNITITEC-EQ", "SAGILITY-EQ", "ALLDIGI-EQ"
     ],
-
     "Finance": [
         "HDFCBANK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "KOTAKBANK-EQ", "BAJFINANCE-EQ",
         "AXISBANK-EQ", "BAJAJFINSV-EQ", "INDUSINDBK-EQ", "SHRIRAMFIN-EQ", "CHOLAFIN-EQ",
@@ -150,7 +147,6 @@ SECTORS = {
         "UGROCAP-EQ", "FUSION-EQ", "PAISALO-EQ", "CAPITALSFB-EQ", "NSIL-EQ",
         "SATIN-EQ"
     ],
-
     "Auto": [
         "MARUTI-EQ","BELRISE-EQ", "TATAMOTORS-EQ", "M&M-EQ", "BAJAJ-AUTO-EQ", "HEROMOTOCO-EQ",
         "EICHERMOT-EQ", "TVSMOTOR-EQ", "ASHOKLEY-EQ", "MRF-EQ", "BALKRISIND-EQ",
@@ -161,7 +157,6 @@ SECTORS = {
         "ATULAUTO-EQ", "OLECTRA-EQ", "GREAVESCOT-EQ", "SMLISUZU-EQ", "VSTTILLERS-EQ",
         "HINDMOTORS-EQ", "MAHSCOOTER-EQ"
     ],
-
     "Pharma": [
         "SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "APOLLOHOSP-EQ", "LUPIN-EQ",
         "DIVISLAB-EQ", "AUROPHARMA-EQ", "ALKEM-EQ", "TORNTPHARM-EQ", "ZYDUSLIFE-EQ",
@@ -175,7 +170,6 @@ SECTORS = {
         "HCG-EQ", "RAINBOW-EQ", "ASTERDM-EQ", "KRSNAA-EQ", "VIJAYA-EQ", "MEDANTA-EQ",
         "BLISSGVS-EQ", "MOREPENLAB-EQ", "RPGLIFE-EQ"
     ],
-
     "Metals": [
         "TATASTEEL-EQ", "JSWSTEEL-EQ", "HINDALCO-EQ", "VEDL-EQ", "SAIL-EQ",
         "NMDC-EQ", "HINDZINC-EQ", "NATIONALUM-EQ", "JINDALSTEL-EQ", "MOIL-EQ",
@@ -184,7 +178,6 @@ SECTORS = {
         "JTLIND-EQ", "RAMASTEEL-EQ", "MAITHANALL-EQ", "KIOCL-EQ", "IMFA-EQ",
         "GMDCLTD-EQ", "VISHNU-EQ", "SANDUMA-EQ", "VRAJ-EQ", "COALINDIA-EQ"
     ],
-
     "FMCG": [
         "HINDUNILVR-EQ", "ITC-EQ", "NESTLEIND-EQ", "BRITANNIA-EQ",
         "GODREJCP-EQ", "DABUR-EQ", "COLPAL-EQ", "MARICO-EQ", "PGHH-EQ",
@@ -193,7 +186,6 @@ SECTORS = {
         "BIKAJI-EQ", "VBL-EQ", "ETERNAL-EQ", "DOMS-EQ",
         "GODREJAGRO-EQ", "SAPPHIRE-EQ", "VENKEYS-EQ", "BECTORFOOD-EQ", "KRBL-EQ"
     ],
-
     "Power": [
         "NTPC-EQ", "POWERGRID-EQ", "ADANIPOWER-EQ", "TATAPOWER-EQ", "JSWENERGY-EQ",
         "NHPC-EQ", "SJVN-EQ", "TORNTPOWER-EQ", "CESC-EQ", "ADANIENSOL-EQ",
@@ -201,7 +193,6 @@ SECTORS = {
         "SUZLON-EQ", "BHEL-EQ", "THERMAX-EQ", "GVPIL-EQ", "VOLTAMP-EQ",
         "TARIL-EQ", "TDPOWERSYS-EQ", "JYOTISTRUC-EQ", "IWEL-EQ", "ACMESOLAR-EQ"
     ],
-
     "Capital Goods": [
         "LT-EQ", "SIEMENS-EQ", "ABB-EQ", "BEL-EQ", "BHEL-EQ", "HAL-EQ",
         "CUMMINSIND-EQ", "THERMAX-EQ", "AIAENG-EQ", "SKFINDIA-EQ", "GRINDWELL-EQ",
@@ -215,14 +206,12 @@ SECTORS = {
         "GMMPFAUDLR-EQ", "ESABINDIA-EQ", "CENTEXT-EQ", "SALASAR-EQ", "TITAGARH-EQ",
         "VGUARD-EQ", "WABAG-EQ", "AZAD-EQ"
     ],
-
     "Oil & Gas": [
         "RELIANCE-EQ", "ONGC-EQ", "IOC-EQ", "BPCL-EQ", "HINDPETRO-EQ", "GAIL-EQ",
         "PETRONET-EQ", "OIL-EQ", "IGL-EQ", "MGL-EQ", "GUJGASLTD-EQ", "GSPL-EQ",
         "AEGISLOG-EQ", "CHENNPETRO-EQ", "MRPL-EQ", "FLUOROCHEM-EQ", "CASTROLIND-EQ",
         "SOTL-EQ", "PANAMAPET-EQ", "GOCLCORP-EQ"
     ],
-
     "Chemicals": [
         "PIDILITIND-EQ", "SRF-EQ", "DEEPAKNTR-EQ", "ATUL-EQ", "AARTIIND-EQ",
         "NAVINFLUOR-EQ", "VINATIORGA-EQ", "FINEORG-EQ", "ALKYLAMINE-EQ", "BALAMINES-EQ",
@@ -233,12 +222,10 @@ SECTORS = {
         "SUMICHEM-EQ", "PIIND-EQ", "EIDPARRY-EQ", "CHEMPLASTS-EQ",
         "IGPL-EQ", "TIRUMALCHM-EQ", "RALLIS-EQ"
     ],
-
     "Telecom": [
         "BHARTIARTL-EQ", "IDEA-EQ", "INDUSTOWER-EQ", "TATACOMM-EQ",
         "HFCL-EQ", "TEJASNET-EQ", "STLTECH-EQ", "ITI-EQ", "ASTEC-EQ"
     ],
-
     "Infrastructure": [
         "LT-EQ", "GMRAIRPORT-EQ", "IRB-EQ", "NBCC-EQ", "RVNL-EQ", "KEC-EQ",
         "PNCINFRA-EQ", "KNRCON-EQ", "GRINFRA-EQ", "NCC-EQ", "HGINFRA-EQ",
@@ -247,18 +234,15 @@ SECTORS = {
         "WELSPUNIND-EQ", "HCC-EQ", "MANINFRA-EQ", "RIIL-EQ",
         "JAYBARMARU-EQ"
     ],
-
     "Insurance": [
         "SBILIFE-EQ", "HDFCLIFE-EQ", "ICICIGI-EQ", "ICICIPRULI-EQ", "LICI-EQ",
         "GICRE-EQ", "NIACL-EQ", "STARHEALTH-EQ", "MAXFIN-EQ"
     ],
-
     "Diversified": [
         "ADANIENT-EQ", "GRASIM-EQ",
         "DCMSHRIRAM-EQ", "3MINDIA-EQ", "CENTURYPLY-EQ", "KFINTECH-EQ", "BALMERLAWRI-EQ",
         "GODREJIND-EQ", "BIRLACORPN-EQ"
     ],
-
     "Cement": [
         "ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ", "JKCEMENT-EQ",
         "DALBHARAT-EQ", "RAMCOCEM-EQ", "NUVOCO-EQ", "JKLAKSHMI-EQ",
@@ -266,30 +250,26 @@ SECTORS = {
         "DECCANCE-EQ", "KCP-EQ", "ORIENTCEM-EQ", "HIL-EQ", "EVERESTIND-EQ",
         "VISAKAIND-EQ", "BIGBLOC-EQ"
     ],
-
     "Realty": [
         "DLF-EQ", "GODREJPROP-EQ", "OBEROIRLTY-EQ", "PHOENIXLTD-EQ", "PRESTIGE-EQ",
         "BRIGADE-EQ", "SOBHA-EQ", "SUNTECK-EQ", "MAHLIFE-EQ", "ANANTRAJ-EQ",
         "KOLTEPATIL-EQ", "PURVA-EQ", "ARVSMART-EQ", "RUSTOMJEE-EQ", "DBREALTY-EQ",
         "IBREALEST-EQ", "OMAXE-EQ", "ASHIANA-EQ", "ELDEHSG-EQ", "TARC-EQ"
     ],
-
     "Aviation": [
         "INDIGO-EQ", "SPICEJET-EQ", "GMRINFRA-EQ"
     ],
-
     "Retail": [
         "DMART-EQ", "TRENT-EQ", "ABFRL-EQ", "VMART-EQ", "SHOPERSTOP-EQ",
         "BATAINDIA-EQ", "METROBRAND-EQ", "ARVINDFASN-EQ", "CANTABIL-EQ", "ZOMATO-EQ",
         "NYKAA-EQ", "MANYAVAR-EQ", "LANDMARK-EQ", "V2RETAIL-EQ",
         "THANGAMAYL-EQ", "KALYANKJIL-EQ", "TITAN-EQ"
     ],
-
     "Media": [
         "ZEEL-EQ", "SUNTV-EQ", "TVTODAY-EQ", "DISHTV-EQ", "HATHWAY-EQ",
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
     ]
- }
+}
 # ============================================================================
 # SECTOR VALIDATION & CLEANUP
 # ============================================================================
@@ -353,7 +333,6 @@ INDUSTRY_MAP = {
         "AUBANK-EQ", "YESBANK-EQ", "IDBI-EQ", "SOUTHBANK-EQ", "CSBBANK-EQ",
         "TMB-EQ", "KTKBANK-EQ", "EQUITASBNK-EQ", "UJJIVANSFB-EQ"
     ],
-
     "IT": [
         "TCS-EQ", "INFY-EQ", "HCLTECH-EQ", "WIPRO-EQ", "TECHM-EQ", "LTIM-EQ",
         "MPHASIS-EQ", "FSL-EQ", "BSOFT-EQ", "NEWGEN-EQ", "ZENSARTECH-EQ",
@@ -363,7 +342,6 @@ INDUSTRY_MAP = {
         "OFSS-EQ", "AURIONPRO-EQ", "DATAMATICS-EQ", "QUICKHEAL-EQ",
         "CIGNITITEC-EQ", "SAGILITY-EQ", "ALLDIGI-EQ"
     ],
-
     "Finance": [
         "BAJFINANCE-EQ", "BAJAJFINSV-EQ", "SHRIRAMFIN-EQ", "CHOLAFIN-EQ",
         "SBICARD-EQ", "M&MFIN-EQ", "MUTHOOTFIN-EQ", "LICHSGFIN-EQ",
@@ -377,7 +355,6 @@ INDUSTRY_MAP = {
         "NSIL-EQ", "SATIN-EQ", "HDFCAMC-EQ", "UTIAMC-EQ", "ABSLAMC-EQ",
         "360ONE-EQ", "ANANDRATHI-EQ"
     ],
-
     "Auto": [
         "MARUTI-EQ", "BELRISE-EQ","TATAMOTORS-EQ", "M&M-EQ", "BAJAJ-AUTO-EQ", "HEROMOTOCO-EQ",
         "EICHERMOT-EQ", "TVSMOTOR-EQ", "ASHOKLEY-EQ", "MRF-EQ", "BALKRISIND-EQ",
@@ -388,7 +365,6 @@ INDUSTRY_MAP = {
         "ESCORTS-EQ", "ATULAUTO-EQ", "OLECTRA-EQ", "GREAVESCOT-EQ",
         "SMLISUZU-EQ", "VSTTILLERS-EQ", "MAHSCOOTER-EQ"
     ],
-
     "Pharma": [
         "SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "APOLLOHOSP-EQ", "LUPIN-EQ",
         "DIVISLAB-EQ", "AUROPHARMA-EQ", "ALKEM-EQ", "TORNTPHARM-EQ",
@@ -403,7 +379,6 @@ INDUSTRY_MAP = {
         "JBCHEPHARM-EQ", "HCG-EQ", "RAINBOW-EQ", "ASTERDM-EQ", "VIJAYA-EQ",
         "MEDANTA-EQ", "BLISSGVS-EQ", "MOREPENLAB-EQ", "RPGLIFE-EQ"
     ],
-
     "Metals": [
         "TATASTEEL-EQ", "JSWSTEEL-EQ", "HINDALCO-EQ", "VEDL-EQ", "SAIL-EQ",
         "NMDC-EQ", "HINDZINC-EQ", "NATIONALUM-EQ", "JINDALSTEL-EQ", "MOIL-EQ",
@@ -411,7 +386,6 @@ INDUSTRY_MAP = {
         "SHYAMMETL-EQ", "MIDHANI-EQ", "GRAVITA-EQ", "SARDAEN-EQ",
         "ASHAPURMIN-EQ", "COALINDIA-EQ"
     ],
-
     "FMCG": [
         "HINDUNILVR-EQ", "ITC-EQ", "NESTLEIND-EQ", "BRITANNIA-EQ", "DABUR-EQ",
         "GODREJCP-EQ", "COLPAL-EQ", "MARICO-EQ", "PGHH-EQ", "EMAMILTD-EQ",
@@ -420,26 +394,22 @@ INDUSTRY_MAP = {
         "VBL-EQ", "DOMS-EQ", "GODREJAGRO-EQ", "VENKEYS-EQ", "BECTORFOOD-EQ",
         "KRBL-EQ"
     ],
-
     "Power": [
         "NTPC-EQ", "POWERGRID-EQ", "ADANIPOWER-EQ", "TATAPOWER-EQ",
         "JSWENERGY-EQ", "NHPC-EQ", "SJVN-EQ", "TORNTPOWER-EQ", "CESC-EQ",
         "ADANIENSOL-EQ", "INDIGRID-EQ", "SUZLON-EQ", "BHEL-EQ", "THERMAX-EQ"
     ],
-
     "Capital Goods": [
         "LT-EQ", "SIEMENS-EQ", "ABB-EQ", "BEL-EQ", "HAL-EQ", "CUMMINSIND-EQ",
         "AIAENG-EQ", "SKFINDIA-EQ", "GRINDWELL-EQ", "TIMKEN-EQ",
         "KSB-EQ", "ELGIEQUIP-EQ", "VOLTAS-EQ", "BLUESTARCO-EQ",
         "HAVELLS-EQ", "DIXON-EQ", "POLYCAB-EQ", "RRKABEL-EQ", "CGPOWER-EQ"
     ],
-
     "Oil & Gas": [
         "RELIANCE-EQ", "ONGC-EQ", "IOC-EQ", "BPCL-EQ", "HINDPETRO-EQ",
         "GAIL-EQ", "PETRONET-EQ", "OIL-EQ", "IGL-EQ", "MGL-EQ",
         "GUJGASLTD-EQ", "GSPL-EQ"
     ],
-
     "Chemicals": [
         "PIDILITIND-EQ", "SRF-EQ", "DEEPAKNTR-EQ", "ATUL-EQ", "AARTIIND-EQ",
         "NAVINFLUOR-EQ", "FINEORG-EQ", "ALKYLAMINE-EQ", "BALAMINES-EQ",
@@ -447,43 +417,35 @@ INDUSTRY_MAP = {
         "NOCIL-EQ", "BASF-EQ", "SUDARSCHEM-EQ", "TATACHEM-EQ",
         "COROMANDEL-EQ", "UPL-EQ", "PIIND-EQ", "RALLIS-EQ"
     ],
-
     "Telecom": [
         "BHARTIARTL-EQ", "IDEA-EQ", "INDUSTOWER-EQ", "TATACOMM-EQ",
         "HFCL-EQ", "TEJASNET-EQ", "STLTECH-EQ", "ITI-EQ"
     ],
-
     "Infrastructure": [
         "LT-EQ", "IRB-EQ", "NBCC-EQ", "RVNL-EQ", "KEC-EQ",
         "PNCINFRA-EQ", "KNRCON-EQ", "GRINFRA-EQ", "NCC-EQ",
         "HGINFRA-EQ", "ASHOKA-EQ", "IRCON-EQ"
     ],
-
     "Insurance": [
         "SBILIFE-EQ", "HDFCLIFE-EQ", "ICICIGI-EQ", "ICICIPRULI-EQ",
         "LICI-EQ", "GICRE-EQ", "NIACL-EQ", "STARHEALTH-EQ"
     ],
-
     "Cement": [
         "ULTRACEMCO-EQ", "SHREECEM-EQ", "AMBUJACEM-EQ", "ACC-EQ",
         "JKCEMENT-EQ", "DALBHARAT-EQ", "RAMCOCEM-EQ", "NUVOCO-EQ",
         "JKLAKSHMI-EQ", "INDIACEM-EQ"
     ],
-
     "Realty": [
         "DLF-EQ", "GODREJPROP-EQ", "OBEROIRLTY-EQ", "PHOENIXLTD-EQ",
         "PRESTIGE-EQ", "BRIGADE-EQ", "SOBHA-EQ", "SUNTECK-EQ"
     ],
-
     "Aviation": [
         "INDIGO-EQ", "SPICEJET-EQ"
     ],
-
     "Retail": [
         "DMART-EQ", "TRENT-EQ", "ABFRL-EQ", "VMART-EQ", "SHOPERSTOP-EQ",
         "BATAINDIA-EQ", "METROBRAND-EQ", "ZOMATO-EQ", "NYKAA-EQ", "TITAN-EQ"
     ],
-
     "Media": [
         "ZEEL-EQ", "SUNTV-EQ", "TVTODAY-EQ", "DISHTV-EQ",
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
@@ -898,11 +860,11 @@ def load_dhan_security_id_map():
         # Clean up column names by stripping whitespace
         df.columns = df.columns.str.strip()
 
-        # Define expected columns
-        exch_col = 'SEM_EXCH_SEGMENT'
-        instrument_col = 'SEM_INSTRUMENT'
+        # Define expected columns based on the error log
+        exch_col = 'SEM_SEGMENT'
+        instrument_col = 'SEM_INSTRUMENT_NAME'
         symbol_col = 'SEM_TRADING_SYMBOL'
-        security_id_col = 'SEM_SM_SECURITY_ID'
+        security_id_col = 'SEM_SMST_SECURITY_ID'
         
         # Check if expected columns exist
         required_cols = [exch_col, instrument_col, symbol_col, security_id_col]
@@ -1059,7 +1021,7 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
             interval=api_interval
         )
     
-    if response and response['status'] == 'success' and 'data' in response:
+    if response and response.get('status') == 'success' and 'data' in response:
         df = pd.DataFrame(response['data'])
         if df.empty: return pd.DataFrame()
             
@@ -1163,7 +1125,7 @@ def check_api_health(api_provider="SmartAPI"):
         try:
             smart_api = get_global_smart_api()
             if not smart_api: return False, "Session not initialized"
-            # Use getMargin, as getProfile now requires refreshToken
+            # Use getMargin, as getProfile now requires refreshToken and can fail
             margin_data = smart_api.getMargin()
             if margin_data and margin_data.get('status'):
                 return True, "API healthy"
@@ -2049,8 +2011,8 @@ def display_intraday_chart(rec, data):
 def main():
     init_database()
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.8 - Multi-API Analysis")
-    st.caption("✨ FIX: Robust API health checks and Dhan instrument list parsing.")
+    st.title("📊 StockGenie Pro V2.9 - Multi-API Analysis")
+    st.caption("✨ FIX: Adapted to new Dhan master file column names & improved API health checks.")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # --- SIDEBAR CONFIGURATION ---
