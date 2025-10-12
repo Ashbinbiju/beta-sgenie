@@ -1038,48 +1038,103 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
     days = period_map.get(period, 365)
     start_date = end_date - timedelta(days=days)
 
-    if interval == "1d":
-        response = dhan.historical_daily_data(
-            security_id=security_id,
-            exchange_segment='NSE_EQ',
-            instrument_type='EQUITY',
-            from_date=start_date.strftime('%Y-%m-%d'),
-            to_date=end_date.strftime('%Y-%m-%d')
-        )
-    else:
-        logging.info(f"Fetching Dhan intraday data for {base_symbol}")
-        response = dhan.intraday_data(
-            security_id=security_id,
-            exchange_segment='NSE_EQ',
-            instrument_type='EQUITY',
-            interval=api_interval
-        )
-    
-    if response and response.get('status') == 'success' and 'data' in response:
-        df = pd.DataFrame(response['data'])
-        if df.empty:
-            return pd.DataFrame()
-            
-        df.rename(columns={
-            'start_time': 'Date',
-            'open': 'Open',
-            'high': 'High',
-            'low': 'Low',
-            'close': 'Close',
-            'volume': 'Volume'
-        }, inplace=True)
+    try:
+        if interval == "1d":
+            response = dhan.historical_daily_data(
+                security_id=security_id,
+                exchange_segment='NSE_EQ',
+                instrument_type='EQUITY',
+                from_date=start_date.strftime('%Y-%m-%d'),
+                to_date=end_date.strftime('%Y-%m-%d')
+            )
+        else:
+            logging.info(f"Fetching Dhan intraday data for {base_symbol}")
+            response = dhan.intraday_data(
+                security_id=security_id,
+                exchange_segment='NSE_EQ',
+                instrument_type='EQUITY',
+                interval=api_interval
+            )
         
+        if not response or response.get('status') != 'success' or 'data' not in response:
+            error_msg = response.get('remarks', 'Unknown error') if response else 'No response'
+            logging.warning(f"[Dhan] API error for {base_symbol}: {error_msg}")
+            return pd.DataFrame()
+        
+        data_list = response['data']
+        if not data_list:
+            logging.warning(f"[Dhan] No data returned for {base_symbol}")
+            return pd.DataFrame()
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data_list)
+        
+        # Log the actual columns we received
+        logging.info(f"[Dhan] Columns received for {base_symbol}: {df.columns.tolist()}")
+        
+        # Flexible column mapping - try multiple possible column names
+        column_mapping = {}
+        
+        # Date/Time column
+        for date_col in ['start_time', 'timestamp', 'date', 'time', 'datetime']:
+            if date_col in df.columns:
+                column_mapping[date_col] = 'Date'
+                break
+        
+        # OHLCV columns
+        for open_col in ['open', 'Open', 'OPEN']:
+            if open_col in df.columns:
+                column_mapping[open_col] = 'Open'
+                break
+        
+        for high_col in ['high', 'High', 'HIGH']:
+            if high_col in df.columns:
+                column_mapping[high_col] = 'High'
+                break
+        
+        for low_col in ['low', 'Low', 'LOW']:
+            if low_col in df.columns:
+                column_mapping[low_col] = 'Low'
+                break
+        
+        for close_col in ['close', 'Close', 'CLOSE']:
+            if close_col in df.columns:
+                column_mapping[close_col] = 'Close'
+                break
+        
+        for vol_col in ['volume', 'Volume', 'VOLUME', 'vol']:
+            if vol_col in df.columns:
+                column_mapping[vol_col] = 'Volume'
+                break
+        
+        if 'Date' not in column_mapping.values():
+            logging.error(f"[Dhan] No date/time column found for {base_symbol}. Columns: {df.columns.tolist()}")
+            return pd.DataFrame()
+        
+        # Rename columns
+        df.rename(columns=column_mapping, inplace=True)
+        
+        # Ensure we have Date column
+        if 'Date' not in df.columns:
+            logging.error(f"[Dhan] Date column missing after rename for {base_symbol}")
+            return pd.DataFrame()
+        
+        # Convert Date and set as index
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
         
+        # Convert numeric columns
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         
+        logging.info(f"[Dhan] Successfully fetched {len(df)} rows for {base_symbol}")
         return df
-    else:
-        error_msg = response.get('remarks', 'Unknown error') if response else 'No response'
-        logging.warning(f"[Dhan] API error for {base_symbol}: {error_msg}")
+        
+    except Exception as e:
+        logging.error(f"[Dhan] Error fetching {base_symbol}: {str(e)}", exc_info=True)
         return pd.DataFrame()
+        
 @retry_with_exponential_backoff(max_retries=5, base_delay=3)
 def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     """Fetches stock data from SmartAPI."""
