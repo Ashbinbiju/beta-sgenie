@@ -738,7 +738,82 @@ def calculate_market_breadth_alignment(signal_direction):
 # ============================================================================
 # INDEX TREND INTEGRATION
 # ============================================================================
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_technical_screener():
+    """Fetch stocks with strong bullish technical indicators"""
+    try:
+        import time
+        nocache = int(time.time() * 1000)
+        response = requests.get(
+            f"https://brkpoint.in/api/technical-indicators?nocache={nocache}",
+            timeout=15,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.warning(f"Technical screener API failed: {str(e)}")
+        return None
 
+def filter_bullish_stocks(tech_data, strong_only=True):
+    """Filter stocks showing strong bullish signals"""
+    if not tech_data or not tech_data.get('success'):
+        return []
+    
+    stocks = tech_data.get('data', [])
+    filtered = []
+    
+    for stock in stocks:
+        adx_trend = stock.get('adx_trend', '')
+        volume_trend = stock.get('volume_trend', '')
+        macd_trend = stock.get('macd_trend', '')
+        
+        if strong_only:
+            # All three must show strong bullish signals
+            if ('Strong Bullish' in adx_trend and 
+                'Strong Bullish' in volume_trend and 
+                macd_trend == 'Bullish'):
+                filtered.append({
+                    'Symbol': stock.get('tradingsymbol'),
+                    'Price': stock.get('live_price'),
+                    'RSI': stock.get('rsi'),
+                    'ADX': stock.get('adx'),
+                    'ADX Trend': adx_trend,
+                    'Volume Trend': volume_trend,
+                    'MACD Trend': macd_trend,
+                    'Stage': stock.get('stage'),
+                    'Above EMA200': stock.get('above_ema200'),
+                    'Volume Ratio': stock.get('volume_ratio'),
+                    'Target': stock.get('next_target'),
+                    'Stop Loss': stock.get('stop_loss')
+                })
+        else:
+            # At least 2 out of 3 bullish
+            bullish_count = 0
+            if 'Bullish' in adx_trend: bullish_count += 1
+            if 'Bullish' in volume_trend: bullish_count += 1
+            if macd_trend == 'Bullish': bullish_count += 1
+            
+            if bullish_count >= 2:
+                filtered.append({
+                    'Symbol': stock.get('tradingsymbol'),
+                    'Price': stock.get('live_price'),
+                    'RSI': stock.get('rsi'),
+                    'ADX': stock.get('adx'),
+                    'ADX Trend': adx_trend,
+                    'Volume Trend': volume_trend,
+                    'MACD Trend': macd_trend,
+                    'Stage': stock.get('stage'),
+                    'Above EMA200': stock.get('above_ema200'),
+                    'Volume Ratio': stock.get('volume_ratio'),
+                    'Target': stock.get('next_target'),
+                    'Stop Loss': stock.get('stop_loss')
+                })
+    
+    return filtered
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_index_scan():
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_index_scan():
     """Fetch real-time index prices and changes"""
@@ -2253,7 +2328,8 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Analysis", "🔍 Scanner", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
+
 
     # --- ANALYSIS TAB ---
     with tab1:
@@ -2323,9 +2399,78 @@ def main():
                 st.dataframe(results.style.applymap(lambda v: 'background-color: #90EE90' if v >= 75 else 'background-color: #FFFACD' if v >= 60 else '', subset=['Score']), use_container_width=True)
             else:
                 st.warning("⚠️ No stocks met the criteria.")
-    
-    # --- BACKTEST TAB ---
+
+    # --- TECHNICAL SCREENER TAB ---
     with tab3:
+        st.markdown("### 🎯 Technical Screener - Strong Bullish Signals")
+        st.caption("Stocks showing Strong Bullish trends in ADX, Volume, and MACD")
+        
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            filter_mode = st.radio(
+                "Filter Mode:",
+                ["Strong Only (All 3 Bullish)", "Moderate (2 out of 3 Bullish)"],
+                index=0
+            )
+        
+        if st.button("🔍 Scan Technical Indicators", type="primary", use_container_width=True):
+            with st.spinner("Fetching technical data..."):
+                tech_data = fetch_technical_screener()
+                
+                if tech_data:
+                    strong_only = "Strong Only" in filter_mode
+                    bullish_stocks = filter_bullish_stocks(tech_data, strong_only)
+                    
+                    if bullish_stocks:
+                        df = pd.DataFrame(bullish_stocks)
+                        
+                        st.success(f"✅ Found {len(bullish_stocks)} stocks matching criteria (out of {tech_data.get('totalCount', 0)} total)")
+                        
+                        # Summary metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("Avg RSI", f"{df['RSI'].mean():.1f}")
+                        col2.metric("Avg ADX", f"{df['ADX'].mean():.1f}")
+                        col3.metric("Avg Vol Ratio", f"{df['Volume Ratio'].mean():.2f}")
+                        col4.metric("Above EMA200", f"{df['Above EMA200'].sum()}/{len(df)}")
+                        
+                        # Style the dataframe
+                        def highlight_trends(val):
+                            if 'Strong Bullish' in str(val):
+                                return 'background-color: #90EE90; font-weight: bold'
+                            elif 'Bullish' in str(val):
+                                return 'background-color: #FFFACD'
+                            elif 'Bearish' in str(val):
+                                return 'background-color: #FFB6C6'
+                            return ''
+                        
+                        styled_df = df.style.applymap(
+                            highlight_trends, 
+                            subset=['ADX Trend', 'Volume Trend', 'MACD Trend']
+                        ).format({
+                            'Price': '₹{:.2f}',
+                            'RSI': '{:.1f}',
+                            'ADX': '{:.1f}',
+                            'Volume Ratio': '{:.2f}',
+                            'Target': '₹{:.2f}',
+                            'Stop Loss': '₹{:.2f}'
+                        })
+                        
+                        st.dataframe(styled_df, use_container_width=True, height=500)
+                        
+                        # Download button
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Results as CSV",
+                            data=csv,
+                            file_name=f"technical_screener_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.warning(f"⚠️ No stocks found matching the criteria. Try 'Moderate' filter mode.")
+                else:
+                    st.error("❌ Failed to fetch technical data. Please try again.")
+    # --- BACKTEST TAB ---
+    with tab4:
         if st.button("📊 Run Backtest"):
             with st.spinner("Backtesting..."):
                 try:
@@ -2342,7 +2487,7 @@ def main():
                 except Exception as e: st.error(f"❌ Backtest error: {e}")
 
     # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
-    with tab4:
+    with tab5:
         try:
             conn = sqlite3.connect('stock_picks.db')
             history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
@@ -2350,7 +2495,7 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-    with tab5:
+    with tab6:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
