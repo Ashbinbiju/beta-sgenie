@@ -814,8 +814,6 @@ def filter_bullish_stocks(tech_data, strong_only=True):
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_index_scan():
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def fetch_index_scan():
     """Fetch real-time index prices and changes"""
     try:
         response = requests.get(
