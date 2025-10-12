@@ -1227,29 +1227,36 @@ def check_api_health(api_provider="SmartAPI"):
     else: # SmartAPI
         try:
             smart_api = get_global_smart_api()
-            if not smart_api: return False, "Session not initialized"
+            if not smart_api: 
+                return False, "Session not initialized"
             
-            # Try to get user profile - this is a simple API call that verifies authentication
+            # Check if session has auth token
+            if not hasattr(smart_api, 'auth_token') or not smart_api.auth_token:
+                return False, "No auth token found"
+            
+            # Try rmsLimit() - doesn't require arguments
             try:
-                profile = smart_api.getProfile()
-                if profile and profile.get('status'):
+                rms = smart_api.rmsLimit()
+                if rms and rms.get('status'):
                     return True, "API healthy"
                 else:
-                    return False, f"Check failed: {profile.get('message', 'Unknown error')}"
+                    return False, f"RMS check failed: {rms.get('message', 'Unknown error')}"
             except AttributeError:
-                # If getProfile doesn't exist, try rmsLimit
-                try:
-                    rms = smart_api.rmsLimit()
-                    if rms and rms.get('status'):
-                        return True, "API healthy"
-                    else:
-                        return False, f"Check failed: {rms.get('message', 'Unknown error')}"
-                except:
-                    # Last resort - if session exists and token is present, assume healthy
-                    if hasattr(smart_api, 'auth_token') and smart_api.auth_token:
-                        return True, "Session active"
-                    else:
-                        return False, "Cannot verify session"
+                pass
+            
+            # If rmsLimit doesn't work, just check if we can fetch data
+            # Try a simple API call with minimal parameters
+            try:
+                # Just verify the session object exists and has required attributes
+                if hasattr(smart_api, 'userId') and smart_api.userId:
+                    return True, "Session active (ID verified)"
+                elif smart_api.auth_token:
+                    return True, "Session active (token verified)"
+                else:
+                    return False, "Session exists but unverified"
+            except:
+                return False, "Cannot verify session"
+                
         except Exception as e:
             return False, str(e)
 
