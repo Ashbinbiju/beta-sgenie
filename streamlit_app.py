@@ -2055,59 +2055,114 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
     all_results, failed_stocks, completed_stocks = [], [], []
     stock_list = list(dict.fromkeys(stock_list))
     
+    # Load checkpoint if resuming
     if resume and (checkpoint := load_checkpoint()):
-        if checkpoint.get('trading_style') == trading_style and checkpoint.get('timeframe') == timeframe and checkpoint.get('api_provider') == api_provider:
-            all_results, failed_stocks, completed_stocks = checkpoint['all_results'], checkpoint['failed_stocks'], checkpoint['completed_stocks']
-            logging.info(f"Resuming scan with {len(completed_stocks)} completed.")
+        if (checkpoint.get('trading_style') == trading_style and 
+            checkpoint.get('timeframe') == timeframe and 
+            checkpoint.get('api_provider') == api_provider):
+            all_results = checkpoint['all_results']
+            failed_stocks = checkpoint['failed_stocks']
+            completed_stocks = checkpoint['completed_stocks']
+            logging.info(f"✅ Resuming scan: {len(completed_stocks)} completed, {len(all_results)} successful")
         else:
+            logging.warning("Checkpoint parameters don't match current scan. Starting fresh.")
             clear_checkpoint()
-
+    
+    # Calculate remaining work
     total_stocks = min(len(stock_list), SCAN_CONFIG["max_stocks_per_scan"])
-    remaining_stocks = [s for s in stock_list if s not in completed_stocks][:total_stocks - len(completed_stocks)]
+    
+    # CRITICAL FIX: Filter out already completed stocks
+    remaining_stocks = [s for s in stock_list if s not in completed_stocks]
+    remaining_stocks = remaining_stocks[:total_stocks - len(completed_stocks)]
+    
     if not remaining_stocks:
+        logging.info(f"All {len(completed_stocks)} stocks already processed!")
         return pd.DataFrame(all_results) if all_results else pd.DataFrame()
+    
+    logging.info(f"Processing {len(remaining_stocks)} remaining stocks (out of {total_stocks} total)")
 
     try:
         for batch_idx in range(0, len(remaining_stocks), SCAN_CONFIG["batch_size"]):
             batch = remaining_stocks[batch_idx:batch_idx + SCAN_CONFIG["batch_size"]]
+            
+            # Session refresh for SmartAPI
             if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0 and api_provider == "SmartAPI":
-                logging.info("Refreshing API session...")
-                global _global_smart_api; _global_smart_api = None
+                logging.info("Refreshing SmartAPI session...")
+                global _global_smart_api
+                _global_smart_api = None
                 time_module.sleep(3)
 
             for i, symbol in enumerate(batch):
+                # Calculate progress based on total stocks
                 current_count = len(completed_stocks) + 1
-                if progress_callback: progress_callback(min(current_count / total_stocks, 1.0))
+                progress_pct = min(current_count / total_stocks, 1.0)
                 
-                logging.info(f"Processing {current_count}/{total_stocks}: {symbol}")
+                if progress_callback:
+                    progress_callback(progress_pct)
+                
+                logging.info(f"📊 Processing {current_count}/{total_stocks}: {symbol}")
+                
+                # Analyze stock
                 result = analyze_stock_batch(symbol, trading_style, timeframe, contrarian_mode, api_provider=api_provider)
                 
                 if result:
                     result['Sector'] = assign_primary_sector(symbol, SECTORS)
                     all_results.append(result)
+                    logging.info(f"✅ {symbol}: Score {result['Score']}")
                 else:
                     failed_stocks.append(symbol)
+                    logging.warning(f"❌ {symbol}: Failed to analyze")
                 
                 completed_stocks.append(symbol)
+                
+                # Save checkpoint every 5 stocks
                 if len(completed_stocks) % 5 == 0:
                     save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
+                    logging.info(f"💾 Checkpoint saved: {len(completed_stocks)}/{total_stocks} completed")
                 
-                time_module.sleep(SCAN_CONFIG["delay_within_batch"] if i < len(batch) - 1 else SCAN_CONFIG["delay_between_batches"])
+                # Delay between stocks
+                if i < len(batch) - 1:
+                    time_module.sleep(SCAN_CONFIG["delay_within_batch"])
+                else:
+                    time_module.sleep(SCAN_CONFIG["delay_between_batches"])
+        
+        # Clear checkpoint on successful completion
         clear_checkpoint()
+        logging.info(f"🎉 Scan complete! Processed {len(completed_stocks)} stocks, {len(all_results)} successful")
+        
     except Exception as e:
-        logging.error(f"Fatal scan error: {e}")
+        logging.error(f"💥 Fatal scan error: {e}", exc_info=True)
         save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
         raise
 
-    if not all_results: return pd.DataFrame()
+    if not all_results:
+        logging.warning("No results found matching criteria")
+        return pd.DataFrame()
+    
     df = pd.DataFrame(all_results)
     
-    # Filter and diversify results
-    df = df[df['Score'] >= 60] if trading_style == 'swing' else df[df['Signal'].str.contains('Buy', na=False)]
-    if df.empty: return df
+    # Filter based on trading style
+    if trading_style == 'swing':
+        df = df[df['Score'] >= 60]
+    else:
+        df = df[df['Signal'].str.contains('Buy', na=False)]
     
-    diverse_results = [df[df['Sector'] == sector].nlargest(2, 'Score') for sector in df['Sector'].unique()]
-    return pd.concat(diverse_results).sort_values('Score', ascending=False).head(10) if diverse_results else df.sort_values('Score', ascending=False).head(10)
+    if df.empty:
+        logging.warning("No stocks passed the filter criteria")
+        return df
+    
+    # Diversify results across sectors (max 2 per sector)
+    diverse_results = []
+    for sector in df['Sector'].unique():
+        sector_df = df[df['Sector'] == sector].nlargest(2, 'Score')
+        diverse_results.append(sector_df)
+    
+    if diverse_results:
+        final_df = pd.concat(diverse_results).sort_values('Score', ascending=False).head(10)
+    else:
+        final_df = df.sort_values('Score', ascending=False).head(10)
+    
+    return final_df
 
 # ============================================================================
 # DATABASE & UI (UNCHANGED)
