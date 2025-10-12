@@ -833,6 +833,28 @@ def cleanup_memory():
     """Force garbage collection to free memory"""
     gc.collect()
 
+# ============================================================================
+# SYMBOL FORMAT UTILITIES
+# ============================================================================
+
+def normalize_symbol(symbol, api_provider="SmartAPI"):
+    """
+    Normalize symbol format based on API provider.
+    SmartAPI uses: SYMBOL-EQ
+    Dhan uses: SYMBOL (plain)
+    """
+    # Remove -EQ suffix if present
+    base_symbol = symbol.replace("-EQ", "")
+    
+    if api_provider == "SmartAPI":
+        return f"{base_symbol}-EQ"
+    else:  # Dhan
+        return base_symbol
+
+def get_base_symbol(symbol):
+    """Extract base symbol without exchange suffix"""
+    return symbol.replace("-EQ", "")
+
 # --- Dhan Specific Setup ---
 def get_dhan_client():
     """Initializes and returns the Dhan API client."""
@@ -849,43 +871,36 @@ def get_dhan_client():
             return None
     return _global_dhan_client
 
-@st.cache_data(ttl=86400) # Cache for a day
+@st.cache_data(ttl=86400)
 def load_dhan_security_id_map():
-    """Fetches and caches a mapping from symbol-EQ to Dhan's security_id from the master CSV."""
+    """Fetches and caches a mapping from base symbol to Dhan's security_id."""
     url = "https://images.dhan.co/api-data/api-scrip-master.csv"
     try:
-        # Use low_memory=False to prevent DtypeWarning with mixed types
         df = pd.read_csv(url, low_memory=False)
-        
-        # Clean up column names by stripping whitespace
         df.columns = df.columns.str.strip()
 
-        # Define expected columns based on the error log
         exch_col = 'SEM_SEGMENT'
         instrument_col = 'SEM_INSTRUMENT_NAME'
         symbol_col = 'SEM_TRADING_SYMBOL'
         security_id_col = 'SEM_SMST_SECURITY_ID'
         
-        # Check if expected columns exist
         required_cols = [exch_col, instrument_col, symbol_col, security_id_col]
         if not all(col in df.columns for col in required_cols):
-            logging.error(f"Dhan master CSV is missing required columns. Expected: {required_cols}, Found: {df.columns.tolist()}")
+            logging.error(f"Dhan master CSV missing columns. Expected: {required_cols}, Found: {df.columns.tolist()}")
             return {}
 
-        # Filter for NSE Equity stocks
         nse_eq_df = df[(df[exch_col] == 'NSE_EQ') & (df[instrument_col] == 'EQUITY')]
         
-        # Create the mapping
+        # KEY CHANGE: Map base symbol (without -EQ) to security_id
         security_map = {
-            f"{row[symbol_col]}-EQ": str(row[security_id_col])
+            row[symbol_col]: str(row[security_id_col])  # Plain symbol: SBIN instead of SBIN-EQ
             for index, row in nse_eq_df.iterrows()
         }
-        logging.info(f"Successfully loaded and mapped {len(security_map)} Dhan NSE Equity instruments.")
+        logging.info(f"Loaded {len(security_map)} Dhan NSE Equity instruments.")
         return security_map
     except Exception as e:
-        logging.error(f"Error fetching or parsing Dhan instrument master CSV: {e}")
+        logging.error(f"Error loading Dhan master CSV: {e}")
         return {}
-
 
 # --- SmartAPI Specific Setup ---
 def get_global_smart_api():
@@ -983,15 +998,19 @@ def calculate_rma(series, period):
 
 @retry_with_exponential_backoff(max_retries=5, base_delay=3)
 def _fetch_data_dhan(symbol, period="1y", interval="1d"):
-    """Fetches stock data from Dhan API."""
+    """Fetches stock data from Dhan API with correct symbol format."""
     dhan = get_dhan_client()
     if not dhan:
         raise ValueError("Dhan client not available.")
 
     security_map = load_dhan_security_id_map()
-    security_id = security_map.get(symbol)
+    
+    # KEY CHANGE: Remove -EQ suffix for Dhan lookup
+    base_symbol = get_base_symbol(symbol)
+    security_id = security_map.get(base_symbol)
+    
     if not security_id:
-        logging.warning(f"[Dhan] Security ID not found for {symbol}")
+        logging.warning(f"[Dhan] Security ID not found for {base_symbol} (original: {symbol})")
         return pd.DataFrame()
 
     interval_map_dhan = {"1d": "D", "1h": "60", "30m": "30", "15m": "15", "5m": "5"}
@@ -1000,7 +1019,7 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
         raise ValueError(f"Unsupported interval for Dhan: {interval}")
         
     end_date = datetime.now()
-    period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 2} # 1d needs 2 days for ATR calc
+    period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 2}
     days = period_map.get(period, 365)
     start_date = end_date - timedelta(days=days)
 
@@ -1013,7 +1032,7 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
             to_date=end_date.strftime('%Y-%m-%d')
         )
     else:
-        logging.info(f"Dhan intraday data is typically for the current day only. Fetching for {symbol}.")
+        logging.info(f"Fetching Dhan intraday data for {base_symbol}")
         response = dhan.intraday_data(
             security_id=security_id,
             exchange_segment='NSE_EQ',
@@ -1023,19 +1042,29 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
     
     if response and response.get('status') == 'success' and 'data' in response:
         df = pd.DataFrame(response['data'])
-        if df.empty: return pd.DataFrame()
+        if df.empty:
+            return pd.DataFrame()
             
-        df.rename(columns={'start_time': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
+        df.rename(columns={
+            'start_time': 'Date',
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume'
+        }, inplace=True)
+        
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
+        
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            df[col] = pd.to_numeric(df[col])
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
         return df
     else:
         error_msg = response.get('remarks', 'Unknown error') if response else 'No response'
-        logging.warning(f"[Dhan] API error for {symbol}: {error_msg}")
+        logging.warning(f"[Dhan] API error for {base_symbol}: {error_msg}")
         return pd.DataFrame()
-
 @retry_with_exponential_backoff(max_retries=5, base_delay=3)
 def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     """Fetches stock data from SmartAPI."""
@@ -1076,23 +1105,26 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     return data
 
 def fetch_stock_data_cached(symbol, period="1y", interval="1d", api_provider="SmartAPI"):
-    """Wrapper for stock data fetching with caching and provider selection."""
-    cache_key = f"{api_provider}_{symbol}_{period}_{interval}"
+    """Wrapper for stock data fetching with provider-aware symbol handling."""
+    # Normalize symbol for the selected provider
+    normalized_symbol = normalize_symbol(symbol, api_provider)
+    cache_key = f"{api_provider}_{normalized_symbol}_{period}_{interval}"
     
     try:
         cached_data = cache.get(cache_key)
         if cached_data is not None:
             return pd.read_pickle(io.BytesIO(cached_data))
     except Exception as e:
-        logging.warning(f"Cache read error for {symbol}: {str(e)}")
+        logging.warning(f"Cache read error for {normalized_symbol}: {str(e)}")
     
     try:
         if api_provider == "Dhan":
-            data = _fetch_data_dhan(symbol, period, interval)
+            data = _fetch_data_dhan(normalized_symbol, period, interval)
         else:
-            data = _fetch_data_smartapi(symbol, period, interval)
+            data = _fetch_data_smartapi(normalized_symbol, period, interval)
             
-        if data.empty: return data
+        if data.empty:
+            return data
 
         try:
             expire = 86400 if interval == "1d" else 300
@@ -1100,11 +1132,12 @@ def fetch_stock_data_cached(symbol, period="1y", interval="1d", api_provider="Sm
             data.to_pickle(buffer)
             cache.set(cache_key, buffer.getvalue(), expire=expire)
         except Exception as e:
-            logging.warning(f"Cache write error for {symbol}: {str(e)}")
+            logging.warning(f"Cache write error for {normalized_symbol}: {str(e)}")
+        
         return data
         
     except Exception as e:
-        logging.error(f"Error fetching {symbol} using {api_provider}: {str(e)}")
+        logging.error(f"Error fetching {normalized_symbol} using {api_provider}: {str(e)}")
         return pd.DataFrame()
 
 def check_api_health(api_provider="SmartAPI"):
