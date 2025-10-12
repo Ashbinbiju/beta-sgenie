@@ -739,6 +739,21 @@ def calculate_market_breadth_alignment(signal_direction):
 # INDEX TREND INTEGRATION
 # ============================================================================
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_index_scan():
+    """Fetch real-time index prices and changes"""
+    try:
+        response = requests.get(
+            "https://brkpoint.in/api/indexscan",
+            timeout=10,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.warning(f"Index scan API failed: {str(e)}")
+        return None
+
 @st.cache_data(ttl=900)
 def fetch_index_trend():
     """Fetch Nifty & Bank Nifty trend from external API"""
@@ -2335,18 +2350,128 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-    with tab5:
+   with tab5:
         st.subheader("🌍 Market Overview")
+        
+        # Real-time Index Scanner
+        if (index_scan := fetch_index_scan()):
+            st.markdown("### 📊 Live Index Prices")
+            
+            # Separate Indian and Global indices
+            indian_indices = [idx for idx in index_scan if idx['index'] in ['NIFTY 50', 'Bank NIFTY', 'Sensex', 'Small Cap', 'Finnifty']]
+            global_indices = [idx for idx in index_scan if idx['index'] not in ['NIFTY 50', 'Bank NIFTY', 'Sensex', 'Small Cap', 'Finnifty']]
+            
+            # Display Indian Indices
+            if indian_indices:
+                cols = st.columns(len(indian_indices))
+                for idx, col in zip(indian_indices, cols):
+                    change_color = "🟢" if idx['percentage_change'] > 0 else "🔴" if idx['percentage_change'] < 0 else "⚪"
+                    col.metric(
+                        label=f"{change_color} {idx['index']}",
+                        value=f"{idx['price']:,.2f}",
+                        delta=f"{idx['percentage_change']:+.2f}% ({idx['points_change']:+.2f})"
+                    )
+            
+            # Display Global Indices
+            if global_indices:
+                st.markdown("#### 🌐 Global Markets")
+                cols = st.columns(len(global_indices))
+                for idx, col in zip(global_indices, cols):
+                    change_color = "🟢" if idx['percentage_change'] > 0 else "🔴" if idx['percentage_change'] < 0 else "⚪"
+                    col.metric(
+                        label=f"{change_color} {idx['index']}",
+                        value=f"{idx['price']:,.2f}",
+                        delta=f"{idx['percentage_change']:+.2f}% ({idx['points_change']:+.2f})"
+                    )
+        
+        st.divider()
+        
+        # Index Trend Analysis
+        if (index_trends := fetch_index_trend()):
+            st.markdown("### 📈 Index Trend Analysis")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if 'nif_min15trend' in index_trends:
+                    nifty_data = index_trends['nif_min15trend']
+                    st.markdown("#### 📊 NIFTY 50 (15min)")
+                    
+                    trend = nifty_data['analysis']['15m_trend']
+                    adx = nifty_data['analysis']['ADX_analysis']
+                    supertrend = "Bullish 🟢" if nifty_data['indicators']['Supertrend'] == 1 else "Bearish 🔴"
+                    
+                    st.info(f"""
+                    **Trend:** {trend}  
+                    **ADX:** {adx['value']:.1f} ({adx['strength']}, {adx['direction']})  
+                    **Supertrend:** {supertrend}  
+                    **RSI:** {nifty_data['indicators']['RSI']:.1f}
+                    """)
+            
+            with col2:
+                if 'bnf_min15trend' in index_trends:
+                    bnf_data = index_trends['bnf_min15trend']
+                    st.markdown("#### 🏦 Bank NIFTY (15min)")
+                    
+                    trend = bnf_data['analysis']['15m_trend']
+                    adx = bnf_data['analysis']['ADX_analysis']
+                    supertrend = "Bullish 🟢" if bnf_data['indicators']['Supertrend'] == 1 else "Bearish 🔴"
+                    
+                    st.info(f"""
+                    **Trend:** {trend}  
+                    **ADX:** {adx['value']:.1f} ({adx['strength']}, {adx['direction']})  
+                    **Supertrend:** {supertrend}  
+                    **RSI:** {bnf_data['indicators']['RSI']:.1f}
+                    """)
+        
+        st.divider()
+        
+        # Market Breadth
         if (breadth_data := fetch_market_breadth()):
             st.markdown("### 📊 Market Breadth")
             breadth = breadth_data.get('breadth', {})
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Advancing", breadth.get('advancing', 0))
-            col2.metric("Declining", breadth.get('declining', 0))
-            col3.metric("Unchanged", breadth.get('unchanged', 0))
+            
+            total = breadth.get('total', 1)
+            advancing = breadth.get('advancing', 0)
+            declining = breadth.get('declining', 0)
+            unchanged = breadth.get('unchanged', 0)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Advancing", advancing, f"{(advancing/total*100):.1f}%")
+            col2.metric("Declining", declining, f"{(declining/total*100):.1f}%")
+            col3.metric("Unchanged", unchanged, f"{(unchanged/total*100):.1f}%")
+            
+            # AD Ratio
+            ad_ratio = advancing / declining if declining > 0 else 0
+            ad_signal = "🟢 Bullish" if ad_ratio > 1.5 else "🔴 Bearish" if ad_ratio < 0.7 else "⚪ Neutral"
+            col4.metric("A/D Ratio", f"{ad_ratio:.2f}", ad_signal)
+        
+        st.divider()
+        
+        # Sector Performance
         if (sector_data := fetch_sector_performance()):
             st.markdown("### 📈 Sector Performance")
-            st.dataframe(pd.DataFrame(sector_data.get('data', []))[['sector_index', 'avg_change', 'momentum', 'signal']], use_container_width=True)
+            sectors_df = pd.DataFrame(sector_data.get('data', []))
+            
+            if not sectors_df.empty and 'sector_index' in sectors_df.columns:
+                # Select relevant columns
+                display_cols = ['sector_index', 'avg_change', 'momentum', 'signal']
+                if all(col in sectors_df.columns for col in display_cols):
+                    display_df = sectors_df[display_cols].copy()
+                    display_df.columns = ['Sector', 'Change %', 'Momentum', 'Signal']
+                    
+                    # Sort by change
+                    display_df = display_df.sort_values('Change %', ascending=False)
+                    
+                    # Style the dataframe
+                    def color_change(val):
+                        if isinstance(val, (int, float)):
+                            color = 'background-color: #90EE90' if val > 0 else 'background-color: #FFB6C6' if val < 0 else ''
+                            return color
+                        return ''
+                    
+                    styled_df = display_df.style.applymap(color_change, subset=['Change %'])
+                    st.dataframe(styled_df, use_container_width=True, height=400)
 
 if __name__ == "__main__":
     main()
