@@ -2436,7 +2436,7 @@ def main():
                             if 'Strong Bullish' in str(val):
                                 return 'background-color: #90EE90; font-weight: bold'
                             elif 'Bullish' in str(val):
-                                return 'background-color: #FFFACD'
+                                return 'background-color: #9ADAD8'
                             elif 'Bearish' in str(val):
                                 return 'background-color: #FFB6C6'
                             return ''
