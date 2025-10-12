@@ -878,28 +878,81 @@ def load_dhan_security_id_map():
     try:
         df = pd.read_csv(url, low_memory=False)
         df.columns = df.columns.str.strip()
-
-        exch_col = 'SEM_SEGMENT'
-        instrument_col = 'SEM_INSTRUMENT_NAME'
-        symbol_col = 'SEM_TRADING_SYMBOL'
-        security_id_col = 'SEM_SMST_SECURITY_ID'
         
-        required_cols = [exch_col, instrument_col, symbol_col, security_id_col]
-        if not all(col in df.columns for col in required_cols):
-            logging.error(f"Dhan master CSV missing columns. Expected: {required_cols}, Found: {df.columns.tolist()}")
+        logging.info(f"Dhan CSV columns found: {df.columns.tolist()[:10]}...")  # Debug: show first 10 columns
+        logging.info(f"Total rows in CSV: {len(df)}")
+
+        # Try multiple possible column name variations
+        exch_col = None
+        instrument_col = None
+        symbol_col = None
+        security_id_col = None
+        
+        # Find exchange column
+        for col in ['SEM_SEGMENT', 'SEM_EXM_EXCH_ID', 'EXCH_SEG', 'EXCHANGE_SEGMENT']:
+            if col in df.columns:
+                exch_col = col
+                break
+        
+        # Find instrument type column
+        for col in ['SEM_INSTRUMENT_NAME', 'SEM_INSTRUMENT_TYPE', 'INSTRUMENT_TYPE', 'SERIES']:
+            if col in df.columns:
+                instrument_col = col
+                break
+        
+        # Find trading symbol column
+        for col in ['SEM_TRADING_SYMBOL', 'SEM_CUSTOM_SYMBOL', 'TRADING_SYMBOL', 'SYMBOL']:
+            if col in df.columns:
+                symbol_col = col
+                break
+        
+        # Find security ID column
+        for col in ['SEM_SMST_SECURITY_ID', 'SEM_SECURITY_ID', 'SECURITY_ID', 'TOKEN']:
+            if col in df.columns:
+                security_id_col = col
+                break
+        
+        if not all([exch_col, instrument_col, symbol_col, security_id_col]):
+            logging.error(f"Could not find required columns. Found: exch={exch_col}, instrument={instrument_col}, symbol={symbol_col}, security_id={security_id_col}")
+            logging.error(f"Available columns: {df.columns.tolist()}")
             return {}
-
-        nse_eq_df = df[(df[exch_col] == 'NSE_EQ') & (df[instrument_col] == 'EQUITY')]
         
-        # KEY CHANGE: Map base symbol (without -EQ) to security_id
-        security_map = {
-            row[symbol_col]: str(row[security_id_col])  # Plain symbol: SBIN instead of SBIN-EQ
-            for index, row in nse_eq_df.iterrows()
-        }
-        logging.info(f"Loaded {len(security_map)} Dhan NSE Equity instruments.")
+        logging.info(f"Using columns: exch={exch_col}, instrument={instrument_col}, symbol={symbol_col}, security_id={security_id_col}")
+        
+        # Show unique values for debugging
+        logging.info(f"Unique exchange values: {df[exch_col].unique()[:5]}")
+        logging.info(f"Unique instrument values: {df[instrument_col].unique()[:5]}")
+        
+        # Filter for NSE Equity - try multiple filter combinations
+        nse_eq_df = df[
+            (df[exch_col].str.contains('NSE', case=False, na=False)) & 
+            (df[instrument_col].str.contains('EQ|EQUITY', case=False, na=False))
+        ]
+        
+        logging.info(f"Rows after NSE_EQ filter: {len(nse_eq_df)}")
+        
+        if nse_eq_df.empty:
+            # Try alternative filtering
+            nse_eq_df = df[df[exch_col].str.contains('NSE', case=False, na=False)]
+            logging.warning(f"Relaxed filter to NSE only: {len(nse_eq_df)} rows")
+        
+        # Create mapping
+        security_map = {}
+        for index, row in nse_eq_df.iterrows():
+            symbol = str(row[symbol_col]).strip()
+            sec_id = str(row[security_id_col]).strip()
+            if symbol and sec_id and sec_id != 'nan':
+                security_map[symbol] = sec_id
+        
+        logging.info(f"Loaded {len(security_map)} Dhan NSE instruments.")
+        if security_map:
+            # Show sample mappings
+            sample = list(security_map.items())[:5]
+            logging.info(f"Sample mappings: {sample}")
+        
         return security_map
     except Exception as e:
-        logging.error(f"Error loading Dhan master CSV: {e}")
+        logging.error(f"Error loading Dhan master CSV: {e}", exc_info=True)
         return {}
 
 # --- SmartAPI Specific Setup ---
