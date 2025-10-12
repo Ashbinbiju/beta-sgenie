@@ -892,14 +892,30 @@ def load_dhan_security_id_map():
     """Fetches and caches a mapping from symbol-EQ to Dhan's security_id from the master CSV."""
     url = "https://images.dhan.co/api-data/api-scrip-master.csv"
     try:
-        df = pd.read_csv(url)
+        # Use low_memory=False to prevent DtypeWarning with mixed types
+        df = pd.read_csv(url, low_memory=False)
+        
+        # Clean up column names by stripping whitespace
+        df.columns = df.columns.str.strip()
+
+        # Define expected columns
+        exch_col = 'SEM_EXCH_SEGMENT'
+        instrument_col = 'SEM_INSTRUMENT'
+        symbol_col = 'SEM_TRADING_SYMBOL'
+        security_id_col = 'SEM_SM_SECURITY_ID'
+        
+        # Check if expected columns exist
+        required_cols = [exch_col, instrument_col, symbol_col, security_id_col]
+        if not all(col in df.columns for col in required_cols):
+            logging.error(f"Dhan master CSV is missing required columns. Expected: {required_cols}, Found: {df.columns.tolist()}")
+            return {}
+
         # Filter for NSE Equity stocks
-        nse_eq_df = df[(df['SEM_EXCH_SEGMENT'] == 'NSE_EQ') & (df['SEM_INSTRUMENT'] == 'EQUITY')]
+        nse_eq_df = df[(df[exch_col] == 'NSE_EQ') & (df[instrument_col] == 'EQUITY')]
         
         # Create the mapping
-        # SEM_SM_SECURITY_ID is the security ID, SEM_TRADING_SYMBOL is the symbol
         security_map = {
-            f"{row['SEM_TRADING_SYMBOL']}-EQ": str(row['SEM_SM_SECURITY_ID'])
+            f"{row[symbol_col]}-EQ": str(row[security_id_col])
             for index, row in nse_eq_df.iterrows()
         }
         logging.info(f"Successfully loaded and mapped {len(security_map)} Dhan NSE Equity instruments.")
@@ -1147,13 +1163,15 @@ def check_api_health(api_provider="SmartAPI"):
         try:
             smart_api = get_global_smart_api()
             if not smart_api: return False, "Session not initialized"
-            profile = smart_api.getProfile()
-            if profile and profile['status']:
+            # Use getMargin, as getProfile now requires refreshToken
+            margin_data = smart_api.getMargin()
+            if margin_data and margin_data.get('status'):
                 return True, "API healthy"
             else:
-                return False, f"Check failed: {profile.get('message', 'Unknown')}"
+                return False, f"Check failed: {margin_data.get('message', 'Unknown error')}"
         except Exception as e:
             return False, str(e)
+
 
 # ============================================================================
 # DATA VALIDATION & INDICATOR CALCULATION (UNCHANGED)
@@ -2031,8 +2049,8 @@ def display_intraday_chart(rec, data):
 def main():
     init_database()
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.7 - Multi-API Analysis")
-    st.caption("✨ FIX: Correctly loading Dhan instrument master file. API health check updated.")
+    st.title("📊 StockGenie Pro V2.8 - Multi-API Analysis")
+    st.caption("✨ FIX: Robust API health checks and Dhan instrument list parsing.")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # --- SIDEBAR CONFIGURATION ---
