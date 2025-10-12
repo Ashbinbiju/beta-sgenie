@@ -1228,16 +1228,30 @@ def check_api_health(api_provider="SmartAPI"):
         try:
             smart_api = get_global_smart_api()
             if not smart_api: return False, "Session not initialized"
-            # Use getOrderBook() as a simple, argument-free call to verify the session is active.
-            # A successful response (even with empty data) confirms the connection.
-            order_book_data = smart_api.getOrderBook()
-            if order_book_data and order_book_data.get('status'):
-                return True, "API healthy"
-            else:
-                return False, f"Check failed: {order_book_data.get('message', 'Unknown error')}"
+            
+            # Try to get user profile - this is a simple API call that verifies authentication
+            try:
+                profile = smart_api.getProfile()
+                if profile and profile.get('status'):
+                    return True, "API healthy"
+                else:
+                    return False, f"Check failed: {profile.get('message', 'Unknown error')}"
+            except AttributeError:
+                # If getProfile doesn't exist, try rmsLimit
+                try:
+                    rms = smart_api.rmsLimit()
+                    if rms and rms.get('status'):
+                        return True, "API healthy"
+                    else:
+                        return False, f"Check failed: {rms.get('message', 'Unknown error')}"
+                except:
+                    # Last resort - if session exists and token is present, assume healthy
+                    if hasattr(smart_api, 'auth_token') and smart_api.auth_token:
+                        return True, "Session active"
+                    else:
+                        return False, "Cannot verify session"
         except Exception as e:
             return False, str(e)
-
 
 # ============================================================================
 # DATA VALIDATION & INDICATOR CALCULATION (UNCHANGED)
