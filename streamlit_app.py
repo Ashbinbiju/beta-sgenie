@@ -391,7 +391,7 @@ INDUSTRY_MAP = {
 
     "Pharma": [
         "SUNPHARMA-EQ", "CIPLA-EQ", "DRREDDY-EQ", "APOLLOHOSP-EQ", "LUPIN-EQ",
-        "DIVISLAB-EQ", "AUROPHarma-EQ", "ALKEM-EQ", "TORNTPHARM-EQ",
+        "DIVISLAB-EQ", "AUROPHARMA-EQ", "ALKEM-EQ", "TORNTPHARM-EQ",
         "ZYDUSLIFE-EQ", "IPCALAB-EQ", "GLENMARK-EQ", "BIOCON-EQ",
         "ABBOTINDIA-EQ", "SANOFI-EQ", "PFIZER-EQ", "GLAXO-EQ", "NATCOPHARM-EQ",
         "AJANTPHARM-EQ", "GRANULES-EQ", "LAURUSLABS-EQ", "STAR-EQ",
@@ -889,24 +889,25 @@ def get_dhan_client():
 
 @st.cache_data(ttl=86400) # Cache for a day
 def load_dhan_security_id_map():
-    """Fetches and caches a mapping from symbol-EQ to Dhan's security_id."""
-    dhan = get_dhan_client()
-    if not dhan:
-        return {}
+    """Fetches and caches a mapping from symbol-EQ to Dhan's security_id from the master CSV."""
+    url = "https://images.dhan.co/api-data/api-scrip-master.csv"
     try:
-        instruments = dhan.get_scrip_info()
-        if instruments and instruments['status'] == 'success' and 'data' in instruments:
-            return {
-                f"{entry['trading_symbol']}-EQ": entry['security_id']
-                for entry in instruments['data']
-                if entry.get('exchange') == 'NSE' and entry.get('instrument') == 'EQUITY'
-            }
-        else:
-            logging.error(f"Failed to fetch Dhan instrument list: {instruments.get('remarks')}")
-            return {}
+        df = pd.read_csv(url)
+        # Filter for NSE Equity stocks
+        nse_eq_df = df[(df['SEM_EXCH_SEGMENT'] == 'NSE_EQ') & (df['SEM_INSTRUMENT'] == 'EQUITY')]
+        
+        # Create the mapping
+        # SEM_SM_SECURITY_ID is the security ID, SEM_TRADING_SYMBOL is the symbol
+        security_map = {
+            f"{row['SEM_TRADING_SYMBOL']}-EQ": str(row['SEM_SM_SECURITY_ID'])
+            for index, row in nse_eq_df.iterrows()
+        }
+        logging.info(f"Successfully loaded and mapped {len(security_map)} Dhan NSE Equity instruments.")
+        return security_map
     except Exception as e:
-        logging.error(f"Error fetching Dhan instrument list: {e}")
+        logging.error(f"Error fetching or parsing Dhan instrument master CSV: {e}")
         return {}
+
 
 # --- SmartAPI Specific Setup ---
 def get_global_smart_api():
@@ -1134,11 +1135,12 @@ def check_api_health(api_provider="SmartAPI"):
         try:
             dhan = get_dhan_client()
             if not dhan: return False, "Dhan client not initialized"
-            test_call = dhan.get_scrip_info()
-            if test_call and test_call['status'] == 'success':
+            # Use a simple, valid API call like get_fund_limits as a health check
+            fund_limits = dhan.get_fund_limits()
+            if fund_limits and fund_limits.get('status') == 'success':
                 return True, "API healthy"
             else:
-                return False, f"API check failed: {test_call.get('remarks', 'Unknown')}"
+                return False, f"API check failed: {fund_limits.get('remarks', 'Unknown error')}"
         except Exception as e:
             return False, str(e)
     else: # SmartAPI
@@ -2029,8 +2031,8 @@ def display_intraday_chart(rec, data):
 def main():
     init_database()
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.6 - Multi-API Analysis")
-    st.caption("✨ NEW: Select between SmartAPI & Dhan. Checkpoint system is now API-aware.")
+    st.title("📊 StockGenie Pro V2.7 - Multi-API Analysis")
+    st.caption("✨ FIX: Correctly loading Dhan instrument master file. API health check updated.")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # --- SIDEBAR CONFIGURATION ---
@@ -2060,7 +2062,6 @@ def main():
     st.sidebar.subheader("API Status")
     is_healthy, msg = check_api_health(api_provider)
     
-    # FIXED: Replaced ternary operator with a standard if/else block
     if is_healthy:
         st.sidebar.success(f"✅ {api_provider}: {msg}")
     else:
