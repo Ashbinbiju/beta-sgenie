@@ -1125,13 +1125,13 @@ def check_api_health(api_provider="SmartAPI"):
         try:
             smart_api = get_global_smart_api()
             if not smart_api: return False, "Session not initialized"
-            # Use getRMS (Risk Management System) to check account limits, which verifies the session.
-            # The previous method 'getMargin' does not exist in the library.
-            rms_data = smart_api.getRMS()
-            if rms_data and rms_data.get('status'):
+            # Use getOrderBook() as a simple, argument-free call to verify the session is active.
+            # A successful response (even with empty data) confirms the connection.
+            order_book_data = smart_api.getOrderBook()
+            if order_book_data and order_book_data.get('status'):
                 return True, "API healthy"
             else:
-                return False, f"Check failed: {rms_data.get('message', 'Unknown error')}"
+                return False, f"Check failed: {order_book_data.get('message', 'Unknown error')}"
         except Exception as e:
             return False, str(e)
 
