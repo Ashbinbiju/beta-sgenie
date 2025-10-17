@@ -1238,7 +1238,13 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     days = period_map.get(period, 365)
     start_date = end_date - timedelta(days=days)
     
-    interval_map = {"1d": "ONE_DAY", "1h": "ONE_HOUR", "30m": "THIRTY_MINUTE", "15m": "FIFTEEN_MINUTE", "5m": "FIVE_MINUTE"}
+    interval_map = {
+        "1d": "ONE_DAY", 
+        "1h": "ONE_HOUR", 
+        "30m": "THIRTY_MINUTE", 
+        "15m": "FIFTEEN_MINUTE", 
+        "5m": "FIVE_MINUTE"
+    }
     api_interval = interval_map.get(interval, "ONE_DAY")
     
     symbol_token_map = load_symbol_token_map()
@@ -1248,8 +1254,11 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
         return pd.DataFrame()
     
     historical_data = smart_api.getCandleData({
-        "exchange": "NSE", "symboltoken": symboltoken, "interval": api_interval,
-        "fromdate": start_date.strftime("%Y-%m-%d %H:%M"), "todate": end_date.strftime("%Y-%m-%d %H:%M")
+        "exchange": "NSE", 
+        "symboltoken": symboltoken, 
+        "interval": api_interval,
+        "fromdate": start_date.strftime("%Y-%m-%d %H:%M"), 
+        "todate": end_date.strftime("%Y-%m-%d %H:%M")
     })
     
     if not historical_data or not historical_data.get('status') or not historical_data.get('data'):
@@ -1257,11 +1266,25 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
         logging.warning(f"[SmartAPI] API error for {symbol}: {error_msg}")
         return pd.DataFrame()
     
-    data = pd.DataFrame(historical_data['data'], columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    # Create DataFrame
+    data = pd.DataFrame(
+        historical_data['data'], 
+        columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+    )
+    
+    # CRITICAL FIX: Convert Date BEFORE setting as index
     data['Date'] = pd.to_datetime(data['Date'])
+    
+    # Set index (this removes 'Date' as a column)
     data.set_index('Date', inplace=True)
+    
+    # VERIFY: Date should now only be an index, not a column
+    if 'Date' in data.columns:
+        logging.warning(f"[SmartAPI] Duplicate 'Date' column detected, dropping...")
+        data = data.drop(columns=['Date'])
+    
     return data
-
+    
 def fetch_stock_data_cached(symbol, period="1y", interval="1d", api_provider="SmartAPI"):
     """Wrapper for stock data fetching with provider-aware symbol handling."""
     # Normalize symbol for the selected provider
@@ -1604,12 +1627,13 @@ def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False
     return round(normalized, 1)
 
 def calculate_intraday_indicators(data, timeframe='15m'):
-    """Enhanced intraday indicators with CORRECTED VWAP bands"""
+    """Enhanced intraday indicators with FIXED date handling"""
     if len(data) < 200:
         return data
     
     df = data.copy()
     
+    # Ensure datetime index
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
     
@@ -1630,17 +1654,18 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['EMA_Crossunder'] = (df['EMA_Bullish'] != df['EMA_Bullish'].shift(1)) & ~df['EMA_Bullish']
     
     # VWAP WITH BANDS
-    df['Date'] = df.index.date
+    # CRITICAL FIX: Create DateOnly column without conflicting with index
+    df['DateOnly'] = df.index.date  # Use different name to avoid conflict
     df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
     
     df['TPV'] = df['Typical_Price'] * df['Volume']
-    df['Cumul_TPV'] = df.groupby('Date')['TPV'].cumsum()
-    df['Cumul_Vol'] = df.groupby('Date')['Volume'].cumsum()
+    df['Cumul_TPV'] = df.groupby('DateOnly')['TPV'].cumsum()
+    df['Cumul_Vol'] = df.groupby('DateOnly')['Volume'].cumsum()
     df['VWAP'] = df['Cumul_TPV'] / df['Cumul_Vol'].replace(0, np.nan)
     
     df['Deviation_Squared'] = (df['Typical_Price'] - df['VWAP']) ** 2
-    df['Cumul_Dev_Sq'] = df.groupby('Date')['Deviation_Squared'].cumsum()
-    df['Bar_Count'] = df.groupby('Date').cumcount() + 1
+    df['Cumul_Dev_Sq'] = df.groupby('DateOnly')['Deviation_Squared'].cumsum()
+    df['Bar_Count'] = df.groupby('DateOnly').cumcount() + 1
     df['VWAP_Std'] = np.sqrt(df['Cumul_Dev_Sq'] / df['Bar_Count'])
     
     df['VWAP_Upper1'] = df['VWAP'] + (df['VWAP_Std'] * 1)
@@ -1683,11 +1708,11 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     or_window = time(9, 30) if timeframe == '5m' else time(9, 45)
     df['Is_OR'] = (df['Time'] >= time(9, 15)) & (df['Time'] <= or_window)
     
-    df['OR_High'] = df[df['Is_OR']].groupby('Date')['High'].transform('max')
-    df['OR_Low'] = df[df['Is_OR']].groupby('Date')['Low'].transform('min')
+    df['OR_High'] = df[df['Is_OR']].groupby('DateOnly')['High'].transform('max')
+    df['OR_Low'] = df[df['Is_OR']].groupby('DateOnly')['Low'].transform('min')
     
-    df['OR_High'] = df.groupby('Date')['OR_High'].transform(lambda x: x.ffill())
-    df['OR_Low'] = df.groupby('Date')['OR_Low'].transform(lambda x: x.ffill())
+    df['OR_High'] = df.groupby('DateOnly')['OR_High'].transform(lambda x: x.ffill())
+    df['OR_Low'] = df.groupby('DateOnly')['OR_Low'].transform(lambda x: x.ffill())
     
     df['OR_Mid'] = (df['OR_High'] + df['OR_Low']) / 2
     df['OR_Range'] = df['OR_High'] - df['OR_Low']
@@ -1740,11 +1765,13 @@ def calculate_intraday_indicators(data, timeframe='15m'):
     df['Last_30_Min'] = df['Time'] >= time(15, 0)
     df['Closing_Session'] = df['Time'] > time(15, 15)
 
-    df.drop(columns=['Date', 'Typical_Price', 'Time', 'Is_OR', 'TPV', 'Cumul_TPV', 
+    # CLEANUP: Drop temporary columns (use DateOnly instead of Date)
+    df.drop(columns=['DateOnly', 'Typical_Price', 'Time', 'Is_OR', 'TPV', 'Cumul_TPV', 
                      'Cumul_Vol', 'Deviation_Squared', 'Cumul_Dev_Sq', 'Bar_Count'], 
             inplace=True, errors='ignore')
+    
     return df
-
+    
 def detect_intraday_regime(df):
     """Enhanced regime detection with time awareness"""
     if len(df) < 50:
