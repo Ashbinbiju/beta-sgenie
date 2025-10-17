@@ -1367,8 +1367,8 @@ def validate_data(data, required_columns=None, min_length=50):
     if (data[price_cols] <= 0).any().any(): return False
     return True
 
-def calculate_swing_indicators(data):
-    """Calculate swing trading indicators matching TradingView defaults"""
+def calculate_swing_indicators(data, debug_mode=False):
+    """Calculate swing trading indicators matching TradingView defaults with DEBUG"""
     if not validate_data(data, min_length=200):
         return data
     
@@ -1382,9 +1382,48 @@ def calculate_swing_indicators(data):
     df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
     df.drop(['EMA_12', 'EMA_26'], axis=1, inplace=True)
     
-    # 200 EMA
+    # 200 EMA - CRITICAL CALCULATION
     df['EMA_200'] = ta.trend.EMAIndicator(df['Close'], window=200).ema_indicator()
     df['Above_EMA200'] = df['Close'] > df['EMA_200']
+    
+    # 🔍 DEBUG OUTPUT - Always log for swing analysis
+    if len(df) >= 200:
+        latest_close = df['Close'].iloc[-1]
+        latest_ema = df['EMA_200'].iloc[-1]
+        
+        if pd.notna(latest_ema):
+            above_ema = latest_close > latest_ema
+            diff_pct = ((latest_close - latest_ema) / latest_ema) * 100
+            
+            # Always log this critical info
+            logging.info(f"{'='*60}")
+            logging.info(f"📊 EMA 200 Analysis:")
+            logging.info(f"   Symbol: {df.get('Symbol', 'Unknown')}")
+            logging.info(f"   Latest Close: ₹{latest_close:.2f}")
+            logging.info(f"   EMA 200: ₹{latest_ema:.2f}")
+            logging.info(f"   Position: {'ABOVE ✅' if above_ema else 'BELOW ⬇️'} EMA 200")
+            logging.info(f"   Distance: {diff_pct:+.2f}%")
+            logging.info(f"   Total bars: {len(df)}")
+            
+            # Extended debug
+            if debug_mode:
+                logging.info(f"\n   📈 Last 10 Days:")
+                for i in range(-10, 0):
+                    close = df['Close'].iloc[i]
+                    ema = df['EMA_200'].iloc[i]
+                    position = "↑" if close > ema else "↓"
+                    logging.info(f"     {df.index[i].strftime('%Y-%m-%d')}: Close=₹{close:.2f}, EMA=₹{ema:.2f} {position}")
+                
+                # Data quality check
+                null_count = df['Close'].isnull().sum()
+                logging.info(f"\n   🔍 Data Quality:")
+                logging.info(f"     Null values in Close: {null_count}")
+                logging.info(f"     Date range: {df.index[0]} to {df.index[-1]}")
+                logging.info(f"     First valid EMA: {df['EMA_200'].first_valid_index()}")
+            
+            logging.info(f"{'='*60}\n")
+        else:
+            logging.error(f"❌ EMA 200 is NaN for symbol! Data length: {len(df)}")
     
     # RSI
     df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
