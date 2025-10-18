@@ -387,6 +387,171 @@ STOCK_NEWS_IDS = {
     # Consumer Durables/FMCG
     "BUTTERFLY-EQ": 6113,  # Butterfly Gandhimathi Appliances Ltd.
     "EVERESTIND-EQ": 6110,  # Everest Industries Ltd.
+    "ORICON-EQ": 7744,  # Oricon Enterprises Ltd.
+    "PRIMAAGRO-EQ": 6121,  # Prima Agro Ltd.
+    "KHAITAN-EQ": 7748,  # Khaitan (India) Ltd.
+    "PRIMAIND-EQ": 7728,  # Prima Industries Ltd.
+    "RAJOIL-EQ": 6109,  # Raj Oil Mills Ltd.
+    
+    # Iron & Steel
+    "GALLISPAT-EQ": 6122,  # Gallantt Ispat Ltd.
+    "WELSPUNSPEC-EQ": 7750,  # Welspun Specialty Solutions Ltd.
+    
+    # Capital Goods
+    "KPTINDUSTRIES-EQ": 7749,  # KPT Industries Ltd.
+    "ACE-EQ": 7752,  # Action Construction Equipment Ltd.
+    "KIRLOSBROS-EQ": 7753,  # Kirloskar Brothers Ltd.
+    
+    # Construction Materials
+    "RESTILE-EQ": 6126,  # Restile Ceramics Ltd.
+    "NCLIND-EQ": 7754,  # NCL Industries Ltd.
+    
+    # Realty
+    "TIRUPATI-EQ": 6123,  # Tirupati Sarjan Ltd.
+    "HAMPTONSKY-EQ": 6130,  # Hampton Sky Realty Ltd.
+    "AJMERA-EQ": 6127,  # Ajmera Realty & Infra India Ltd.
+    
+    # Power
+    "WAAREERENEW-EQ": 6131,  # Waaree Renewable Technologies Ltd.
+    "NAVA-EQ": 7731,  # Nava Ltd.
+    "KARMAENG-EQ": 7734,  # Karma Energy Ltd.
+    "NTPC-EQ": 7760,  # NTPC Ltd.
+    "ENERGYDEV-EQ": 6156,  # Energy Development Company Ltd.
+    
+    # Textile
+    "KIRANSYNTEX-EQ": 6104,  # Kiran Syntex Ltd.
+    "RUDRAECO-EQ": 7726,  # Rudra Ecovation Ltd.
+    "FIBERWEB-EQ": 6115,  # Fiberweb (India) Ltd.
+    "RAJAPALAYAM-EQ": 6117,  # Rajapalayam Mills Ltd.
+    "UNITEDTEXT-EQ": 7740,  # United Textiles Ltd.
+    "RUBYMILLS-EQ": 6137,  # The Ruby Mills Ltd.
+    "SAMBANDAMSPG-EQ": 6147,  # Sambandam Spinning Mills Ltd.
+    "GTNTEX-EQ": 6144,  # GTN Textiles Ltd.
+    "SRIRAMMILL-EQ": 6157,  # Sri Ramakrishna Mills (Coimbatore) Ltd.
+    "SVPGLOBAL-EQ": 6162,  # SVP Global Textiles Ltd.
+    
+    # Finance (Additional)
+    "DELPHIWORLD-EQ": 7737,  # Delphi World Money Ltd.
+    "PROFINCAP-EQ": 7757,  # Pro Fin Capital Services Ltd.
+    "FINKURVE-EQ": 7763,  # Finkurve Financial Services Ltd.
+    "KREON-EQ": 6140,  # Kreon Finnancial Services Ltd.
+    "MAHAN-EQ": 7766,  # Mahan Industries Ltd.
+    "SAKTHIFIN-EQ": 6142,  # Sakthi Finance Ltd.
+    "TFCI-EQ": 6149,  # Tourism Finance Corporation Of India Ltd.
+    "SAVANIFIN-EQ": 6148,  # Savani Financials Ltd.
+    "MRUGESH-EQ": 7778,  # Mrugesh Trading Ltd.
+    "SUGALDAMANI-EQ": 6166,  # Sugal & Damani Share Brokers Ltd.
+    "VISAGAR-EQ": 6167,  # Visagar Financial Services Ltd.
+    "MCX-EQ": 7802,  # Multi Commodity Exchange Of India Ltd.
+    
+    # Pharma (Additional)
+    "LINKPHARMA-EQ": 6143,  # Link Pharma Chem Ltd.
+    "CRESANTOGLOBAL-EQ": 7788,  # Cresanto Global Ltd.
+    "GUFICBIO-EQ": 7792,  # Gufic Biosciences Ltd.
+    "SYNCOMF-EQ": 6178,  # Syncom Formulations (India) Ltd.
+    
+    # Chemicals (Additional)
+    "VIVIDGLOBAL-EQ": 7773,  # Vivid Global Industries Ltd.
+    "KHAITANCHEM-EQ": 7800,  # Khaitan Chemicals & Fertilizers Ltd.
+    "DICINDIA-EQ": 6145,  # DIC India Ltd.
+    "MYSOREPETRO-EQ": 7786,  # Mysore Petro Chemicals Ltd.
+    
+    # Auto (Additional)
+    "EXIDEIND-EQ": 6139,  # Exide Industries Ltd.
+    "GSAUTOINT-EQ": 7769,  # GS Auto International Ltd.
+    "PANAMAPETRO-EQ": 6150,  # Panama Petrochem Ltd.
+    "FIEMIND-EQ": 7776,  # Fiem Industries Ltd.
+    "HINDCOMPOS-EQ": 6171,  # Hindustan Composites Ltd.
+    
+    # IT (Additional)
+    "ADROITINFO-EQ": 7772,  # Adroit Infotech Ltd.
+    "ECLERX-EQ": 7779,  # eClerx Services Ltd.
+    "FGIL-EQ": 7781,  # Fourth Generation Information Systems Ltd.
+    "ERPSOFT-EQ": 6161,  # ERP Soft Systems Ltd.
+    "HITKITGLOBAL-EQ": 6165,  # Hit Kit Global Solutions Ltd.
+    "DANLAWTECH-EQ": 6170,  # Danlaw Technologies India Ltd.
+    
+    # Construction Materials (Additional)
+    "CERASANITARY-EQ": 7782,  # Cera Sanitaryware Ltd.
+    "GLITTEKGRAN-EQ": 7787,  # Glittek Granites Ltd.
+    "NEELKANTH-EQ": 7789,  # Neelkanth Rockminerals Ltd.
+    
+    # Paper
+    "TRIDEVINFRA-EQ": 7727,  # Tridev InfraEstates Ltd.
+    "STARPAPER-EQ": 7759,  # Star Paper Mills Ltd.
+    "SOMAPAPER-EQ": 7775,  # Soma Papers & Industries Ltd.
+    "NRAGARWAL-EQ": 7785,  # NR Agarwal Industries Ltd.
+    
+    # Plastic Products
+    "CROPSTER-EQ": 6105,  # Cropster Agro Ltd.
+    "KKALPANA-EQ": 6136,  # Kkalpana lndustries (India) Ltd.
+    "NAHARPOLY-EQ": 6160,  # Nahar Poly Films Ltd.
+    "PREMIERPOLY-EQ": 6168,  # Premier Polyfilm Ltd.
+    "NILKAMAL-EQ": 6169,  # Nilkamal Ltd.
+    
+    # FMCG (Additional)
+    "VIRATCRANE-EQ": 6111,  # Virat Crane Industries Ltd.
+    "LAKESHORE-EQ": 7762,  # Lake Shore Realty Ltd.
+    "SARUP-EQ": 6151,  # Sarup Industries Ltd.
+    
+    # Capital Goods (Additional)
+    "MODISON-EQ": 7774,  # Modison Ltd.
+    "RHIMAGNESITA-EQ": 7798,  # RHI Magnesita India Ltd.
+    "SHRADDHAPRIME-EQ": 6175,  # Shraddha Prime Projects Ltd.
+    
+    # Iron & Steel (Additional)
+    "MUKAND-EQ": 6146,  # Mukand Ltd.
+    
+    # Logistics
+    "LYNXMACH-EQ": 7755,  # Lynx Machinery & Commercials Ltd.
+    "SNOWMAN-EQ": 7764,  # Snowman Logistics Ltd.
+    "ADANIPORTS-EQ": 7794,  # Adani Ports and Special Economic Zone Ltd.
+    
+    # Electricals
+    "RIRPOWER-EQ": 6141,  # RIR Power Electronics Ltd.
+    "SWITCHTECH-EQ": 6173,  # Switching Technologies Gunther Ltd.
+    
+    # Non-Ferrous Metals
+    "SOUTHERNMAG-EQ": 6164,  # Southern Magnesium & Chemicals Ltd.
+    
+    # Ratings
+    "ICRA-EQ": 7733,  # ICRA Ltd.
+    
+    # Hospitality
+    "ASHRAMONLINE-EQ": 6103,  # Ashram Online.Com Ltd.
+    "JINDALHOTELS-EQ": 7735,  # Jindal Hotels Ltd.
+    "UPHOTELS-EQ": 7736,  # UP Hotels Ltd.
+    "HSINDIA-EQ": 7747,  # HS India Ltd.
+    
+    # Mining
+    "ORISSAMINERAL-EQ": 7732,  # The Orissa Minerals Development Company Ltd.
+    
+    # Industrial Gases & Fuels
+    "NATIONALOXY-EQ": 6116,  # National Oxygen Ltd.
+    
+    # Agriculture
+    "GOODRICKE-EQ": 6132,  # Goodricke Group Ltd.
+    "BAJAJHIND-EQ": 6154,  # Bajaj Hindusthan Sugar Ltd.
+    "SAMPANNUTP-EQ": 7768,  # Sampann Utpadan India Ltd.
+    
+    # Infrastructure
+    "DUCON-EQ": 7790,  # Ducon Infratechnologies Ltd.
+    
+    # Oil Exploration
+    "JINDALDRILL-EQ": 7793,  # Jindal Drilling & Industries Ltd.
+    "RUDRAECO-EQ": 7726,  # Rudra Ecovation Ltd.
+    
+    # Plastic Products
+    "CROPSTER-EQ": 6105,  # Cropster Agro Ltd.
+    
+    # Paper
+    "TRIDEVINFRA-EQ": 7727,  # Tridev InfraEstates Ltd.
+    
+    # Hospitality
+    "ASHRAMONLINE-EQ": 6103,  # Ashram Online.Com Ltd.
+    
+    # Mining
+    "OMDC-EQ": 7732,  # The Orissa Minerals Development Company Ltd.
     
     # Ratings
     "ICRA-EQ": 7733,  # ICRA Ltd.
