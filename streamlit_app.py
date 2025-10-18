@@ -118,6 +118,47 @@ def get_bullish_sectors():
         logging.error(f"Error getting bullish sectors: {e}")
         return []
 
+def get_neutral_sectors():
+    """Get list of currently neutral sectors from market breadth"""
+    try:
+        breadth_data = fetch_market_breadth()
+        if not breadth_data or 'industry' not in breadth_data:
+            logging.warning("No industry data available")
+            return []
+        
+        industries = breadth_data['industry']
+        neutral_sectors = []
+        
+        for industry in industries:
+            avg_change = industry.get('avgChange', 0)
+            total = industry.get('total', 1)
+            advancing = industry.get('advancing', 0)
+            advance_ratio = (advancing / total) * 100 if total > 0 else 0
+            
+            # Filter neutral sectors (not bullish but not too bearish)
+            # Neutral: -0.5% to +0.5% change OR 40-60% advance ratio
+            if ((abs(avg_change) <= 0.5) or 
+                (40 <= advance_ratio <= 60 and avg_change >= -1.0)):
+                
+                sector_name = industry.get('Industry', '')
+                neutral_sectors.append({
+                    'sector': sector_name,
+                    'change': avg_change,
+                    'advance_ratio': advance_ratio,
+                    'advancing': advancing,
+                    'total': total
+                })
+        
+        # Sort by advance ratio (higher is better for neutral)
+        neutral_sectors.sort(key=lambda x: x['advance_ratio'], reverse=True)
+        
+        logging.info(f"Found {len(neutral_sectors)} neutral sectors")
+        return neutral_sectors
+        
+    except Exception as e:
+        logging.error(f"Error getting neutral sectors: {e}")
+        return []
+
 def get_stocks_from_bullish_sectors(bullish_sectors):
     """Get stock list from bullish sectors only"""
     if not bullish_sectors:
@@ -125,37 +166,99 @@ def get_stocks_from_bullish_sectors(bullish_sectors):
     
     sector_names = [s['sector'] for s in bullish_sectors]
     stock_list = []
+    matched_sectors = []
+    unmatched_sectors = []
     
-    # Map industry names to SECTORS dictionary keys
+    # Enhanced sector mapping with multiple variations
     sector_mapping = {
         'Bank': 'Bank',
+        'Banking': 'Bank',
         'IT': 'IT',
+        'Information Technology': 'IT',
+        'Software': 'IT',
         'Finance': 'Finance',
+        'Financial Services': 'Finance',
         'Auto': 'Auto',
+        'Automobile': 'Auto',
+        'Automotive': 'Auto',
         'Pharma': 'Pharma',
+        'Pharmaceuticals': 'Pharma',
+        'Healthcare': 'Pharma',
         'Metals': 'Metals',
+        'Metal': 'Metals',
+        'Steel': 'Metals',
         'FMCG': 'FMCG',
+        'Consumer Goods': 'FMCG',
         'Power': 'Power',
+        'Energy': 'Power',
+        'Utilities': 'Power',
         'Capital Goods': 'Capital Goods',
+        'Industrials': 'Capital Goods',
         'Oil & Gas': 'Oil & Gas',
+        'Oil and Gas': 'Oil & Gas',
         'Chemicals': 'Chemicals',
+        'Chemical': 'Chemicals',
         'Telecom': 'Telecom',
+        'Telecommunications': 'Telecom',
         'Infrastructure': 'Infrastructure',
         'Insurance': 'Insurance',
         'Cement': 'Cement',
+        'Construction Materials': 'Cement',
         'Realty': 'Realty',
+        'Real Estate': 'Realty',
+        'Media': 'Media',
+        'Entertainment': 'Media',
+        'Aviation': 'Aviation',
+        'Airlines': 'Aviation',
+        'Retail': 'Retail',
+        'Consumer Discretionary': 'Retail'
     }
     
     for sector_name in sector_names:
         sector_key = sector_mapping.get(sector_name)
         if sector_key and sector_key in SECTORS:
             stock_list.extend(SECTORS[sector_key])
+            matched_sectors.append(sector_name)
+        else:
+            # Try fuzzy matching for unmatched sectors
+            fuzzy_match = None
+            for mapping_key, mapping_value in sector_mapping.items():
+                if (sector_name.lower() in mapping_key.lower() or 
+                    mapping_key.lower() in sector_name.lower()):
+                    fuzzy_match = mapping_value
+                    break
+            
+            if fuzzy_match and fuzzy_match in SECTORS:
+                stock_list.extend(SECTORS[fuzzy_match])
+                matched_sectors.append(f"{sector_name} → {fuzzy_match}")
+            else:
+                unmatched_sectors.append(sector_name)
     
     # Remove duplicates while preserving order
     stock_list = list(dict.fromkeys(stock_list))
     
-    logging.info(f"Got {len(stock_list)} stocks from bullish sectors: {sector_names}")
+    logging.info(f"Got {len(stock_list)} stocks from {len(matched_sectors)} bullish sectors: {matched_sectors}")
+    if unmatched_sectors:
+        logging.warning(f"Could not match {len(unmatched_sectors)} sectors: {unmatched_sectors}")
+    
     return stock_list
+
+def get_stocks_from_bullish_and_neutral_sectors():
+    """Get stock list from both bullish and neutral sectors"""
+    bullish_sectors = get_bullish_sectors()
+    neutral_sectors = get_neutral_sectors()
+    
+    # Combine both lists
+    all_sectors = bullish_sectors + neutral_sectors
+    
+    if not all_sectors:
+        logging.warning("No bullish or neutral sectors found, using all sectors")
+        return get_unique_stock_list(SECTORS), [], []
+    
+    # Get stocks from combined sectors
+    stock_list = get_stocks_from_bullish_sectors(all_sectors)  # Reuse the mapping logic
+    
+    return stock_list, bullish_sectors, neutral_sectors
 
 def live_scan_iteration(stock_list, timeframe, api_provider, alert_history):
     """Single iteration of live scanner"""
@@ -2516,8 +2619,78 @@ def main():
     if contrarian_mode: st.sidebar.info("⚠️ Market context weight reduced by 50%.")
     st.sidebar.divider()
     
-    selected_sectors = st.sidebar.multiselect("Select Sectors", ["All"] + list(SECTORS.keys()), default=["All"])
-    stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
+    # Sector selection with auto-bullish option
+    sector_selection_mode = st.sidebar.radio(
+        "Sector Selection Mode", 
+        ["Manual Selection", "Auto-Bullish Sectors", "Auto-Bullish + Neutral Sectors"],
+        help="Manual: Choose sectors manually | Auto-Bullish: Only bullish sectors | Auto-Bullish + Neutral: Both bullish and neutral sectors"
+    )
+    
+    if sector_selection_mode == "Auto-Bullish Sectors":
+        # Get stocks from bullish sectors automatically
+        with st.sidebar:
+            with st.spinner("🔍 Analyzing sector performance..."):
+                bullish_sectors = get_bullish_sectors()
+                if bullish_sectors:
+                    sector_names = [s['sector'] for s in bullish_sectors[:5]]  # Top 5 bullish sectors
+                    st.success(f"📈 Found {len(bullish_sectors)} bullish sectors")
+                    st.info("**Top Bullish Sectors:**\n" + "\n".join([f"• {s['sector']} (+{s['change']:.1f}%)" for s in bullish_sectors[:3]]))
+                    
+                    # Show detailed sector info in expander
+                    with st.expander(f"📊 View All {len(bullish_sectors)} Bullish Sectors"):
+                        for sector in bullish_sectors:
+                            st.write(f"**{sector['sector']}**: +{sector['change']:.2f}% | "
+                                   f"{sector['advancing']}/{sector['total']} stocks advancing "
+                                   f"({sector['advance_ratio']:.1f}%)")
+                    
+                    stock_list = get_stocks_from_bullish_sectors(bullish_sectors)
+                    st.metric("Selected Stocks", len(stock_list))
+                else:
+                    st.warning("⚠️ No bullish sectors found, using all sectors")
+                    stock_list = get_unique_stock_list(SECTORS)
+    
+    elif sector_selection_mode == "Auto-Bullish + Neutral Sectors":
+        # Get stocks from both bullish and neutral sectors
+        with st.sidebar:
+            with st.spinner("🔍 Analyzing sector performance..."):
+                stock_list, bullish_sectors, neutral_sectors = get_stocks_from_bullish_and_neutral_sectors()
+                
+                if bullish_sectors or neutral_sectors:
+                    st.success(f"📈 Found {len(bullish_sectors)} bullish + {len(neutral_sectors)} neutral sectors")
+                    
+                    # Show bullish sectors
+                    if bullish_sectors:
+                        st.info("**🟢 Top Bullish Sectors:**\n" + "\n".join([f"• {s['sector']} (+{s['change']:.1f}%)" for s in bullish_sectors[:3]]))
+                    
+                    # Show neutral sectors
+                    if neutral_sectors:
+                        st.info("**🟡 Top Neutral Sectors:**\n" + "\n".join([f"• {s['sector']} ({s['change']:+.1f}%)" for s in neutral_sectors[:3]]))
+                    
+                    # Show detailed info in expander
+                    with st.expander(f"📊 View All Selected Sectors ({len(bullish_sectors + neutral_sectors)} total)"):
+                        if bullish_sectors:
+                            st.write("**🟢 Bullish Sectors:**")
+                            for sector in bullish_sectors:
+                                st.write(f"• **{sector['sector']}**: +{sector['change']:.2f}% | "
+                                       f"{sector['advancing']}/{sector['total']} advancing "
+                                       f"({sector['advance_ratio']:.1f}%)")
+                        
+                        if neutral_sectors:
+                            st.write("**🟡 Neutral Sectors:**")
+                            for sector in neutral_sectors:
+                                st.write(f"• **{sector['sector']}**: {sector['change']:+.2f}% | "
+                                       f"{sector['advancing']}/{sector['total']} advancing "
+                                       f"({sector['advance_ratio']:.1f}%)")
+                    
+                    st.metric("Selected Stocks", len(stock_list))
+                else:
+                    st.warning("⚠️ No suitable sectors found, using all sectors")
+                    stock_list = get_unique_stock_list(SECTORS)
+    
+    else:
+        # Manual sector selection
+        selected_sectors = st.sidebar.multiselect("Select Sectors", ["All"] + list(SECTORS.keys()), default=["All"])
+        stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
     symbol = st.sidebar.selectbox("Select Stock", stock_list, index=0) if stock_list else "SBIN-EQ"
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, value=30000, step=5000)
 
@@ -2562,6 +2735,33 @@ def main():
     # --- SCANNER TAB ---
     with tab2:
         st.markdown("### 📡 Stock Scanner")
+        
+        # Display scan information
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if sector_selection_mode == "Auto-Bullish Sectors":
+                bullish_sectors_info = get_bullish_sectors()
+                if bullish_sectors_info:
+                    sector_list = [s['sector'] for s in bullish_sectors_info[:3]]
+                    st.info(f"🎯 **Auto-Bullish Mode**: Scanning {len(stock_list)} stocks from {len(bullish_sectors_info)} bullish sectors: {', '.join(sector_list)}{'...' if len(bullish_sectors_info) > 3 else ''}")
+                else:
+                    st.warning("⚠️ No bullish sectors detected, scanning all sectors")
+            elif sector_selection_mode == "Auto-Bullish + Neutral Sectors":
+                _, bullish_sectors_info, neutral_sectors_info = get_stocks_from_bullish_and_neutral_sectors()
+                if bullish_sectors_info or neutral_sectors_info:
+                    total_sectors = len(bullish_sectors_info) + len(neutral_sectors_info)
+                    st.info(f"🎯 **Auto-Mixed Mode**: Scanning {len(stock_list)} stocks from {len(bullish_sectors_info)} bullish + {len(neutral_sectors_info)} neutral sectors ({total_sectors} total)")
+                else:
+                    st.warning("⚠️ No suitable sectors detected, scanning all sectors")
+            else:
+                if "All" in selected_sectors:
+                    st.info(f"📊 **Manual Mode**: Scanning {len(stock_list)} stocks from all sectors")
+                else:
+                    st.info(f"📊 **Manual Mode**: Scanning {len(stock_list)} stocks from {len(selected_sectors)} selected sectors: {', '.join(selected_sectors[:3])}{'...' if len(selected_sectors) > 3 else ''}")
+        
+        with col2:
+            st.metric("Total Stocks", len(stock_list))
+        
         current_scan_params = {"trading_style": trading_style, "timeframe": timeframe, "contrarian_mode": contrarian_mode, "api_provider": api_provider}
         
         can_auto_resume = False
@@ -2681,7 +2881,7 @@ def main():
     # --- LIVE INTRADAY SCANNER TAB ---
     with tab4:
         st.markdown("### 🔄 Live Intraday Scanner")
-        st.caption("🎯 Automatically scans stocks from bullish sectors only")
+        st.caption("🎯 Automatically scans stocks from bullish and neutral sectors")
         
         # Initialize session state for live scanner
         if 'live_scan_active' not in st.session_state:
@@ -2708,11 +2908,14 @@ def main():
             scan_interval = st.slider("Scan Interval (sec)", 60, 300, 120, step=30, key="scan_int")
             LIVE_SCAN_CONFIG['scan_interval'] = scan_interval
         
-        # Display current bullish sectors
-        st.markdown("#### 📊 Current Bullish Sectors")
+        # Display current sector analysis
+        st.markdown("#### 📊 Current Market Sectors")
         bullish_sectors = get_bullish_sectors()
+        neutral_sectors = get_neutral_sectors()
         
+        # Display bullish sectors
         if bullish_sectors:
+            st.markdown("**🟢 Bullish Sectors:**")
             sector_cols = st.columns(min(len(bullish_sectors), 4))
             for idx, sector in enumerate(bullish_sectors[:4]):
                 with sector_cols[idx]:
@@ -2721,14 +2924,35 @@ def main():
                         value=f"{sector['change']:+.2f}%",
                         delta=f"{sector['advance_ratio']:.0f}% advancing"
                     )
-            
-            if len(bullish_sectors) > 4:
-                with st.expander(f"View all {len(bullish_sectors)} bullish sectors"):
+        
+        # Display neutral sectors
+        if neutral_sectors:
+            st.markdown("**🟡 Neutral Sectors:**")
+            neutral_cols = st.columns(min(len(neutral_sectors), 4))
+            for idx, sector in enumerate(neutral_sectors[:4]):
+                with neutral_cols[idx]:
+                    st.metric(
+                        label=f"🟡 {sector['sector']}",
+                        value=f"{sector['change']:+.2f}%",
+                        delta=f"{sector['advance_ratio']:.0f}% advancing"
+                    )
+        
+        # Expandable detailed view
+        if bullish_sectors or neutral_sectors:
+            with st.expander(f"📋 View All Sectors ({len(bullish_sectors)} bullish, {len(neutral_sectors)} neutral)"):
+                if bullish_sectors:
+                    st.markdown("**🟢 Bullish Sectors:**")
                     for sector in bullish_sectors:
-                        st.write(f"**{sector['sector']}**: {sector['change']:+.2f}% | "
+                        st.write(f"• **{sector['sector']}**: {sector['change']:+.2f}% | "
+                                f"{sector['advancing']}/{sector['total']} advancing ({sector['advance_ratio']:.1f}%)")
+                
+                if neutral_sectors:
+                    st.markdown("**🟡 Neutral Sectors:**")
+                    for sector in neutral_sectors:
+                        st.write(f"• **{sector['sector']}**: {sector['change']:+.2f}% | "
                                 f"{sector['advancing']}/{sector['total']} advancing ({sector['advance_ratio']:.1f}%)")
         else:
-            st.warning("⚠️ No bullish sectors found at the moment")
+            st.warning("⚠️ No suitable sectors found at the moment")
         
         st.divider()
         
@@ -2738,8 +2962,8 @@ def main():
         with col1:
             if not st.session_state.live_scan_active:
                 if st.button("🚀 Start Live Scanner", type="primary", use_container_width=True):
-                    if not bullish_sectors:
-                        st.error("❌ Cannot start: No bullish sectors found")
+                    if not bullish_sectors and not neutral_sectors:
+                        st.error("❌ Cannot start: No suitable sectors found")
                     else:
                         st.session_state.live_scan_active = True
                         st.session_state.scan_iteration = 0
@@ -2752,11 +2976,13 @@ def main():
         
         with col2:
             if st.button("🔄 Manual Scan Now", use_container_width=True):
-                if not bullish_sectors:
-                    st.error("❌ No bullish sectors available")
+                if not bullish_sectors and not neutral_sectors:
+                    st.error("❌ No suitable sectors available")
                 else:
-                    with st.spinner("Scanning bullish sectors..."):
-                        stock_list = get_stocks_from_bullish_sectors(bullish_sectors)
+                    with st.spinner("Scanning bullish and neutral sectors..."):
+                        # Combine bullish and neutral sectors
+                        combined_sectors = bullish_sectors + neutral_sectors
+                        stock_list = get_stocks_from_bullish_sectors(combined_sectors)
                         if stock_list:
                             results, alerts = live_scan_iteration(
                                 stock_list[:50],  # Limit to 50 stocks for manual scan
@@ -2801,10 +3027,14 @@ def main():
             
             if should_scan:
                 with st.spinner(f"🔍 Running scan iteration #{st.session_state.scan_iteration + 1}..."):
-                    # Get fresh bullish sectors
+                    # Get fresh bullish and neutral sectors
                     current_bullish = get_bullish_sectors()
-                    if current_bullish:
-                        stock_list = get_stocks_from_bullish_sectors(current_bullish)
+                    current_neutral = get_neutral_sectors()
+                    
+                    if current_bullish or current_neutral:
+                        # Combine both sector types
+                        combined_sectors = current_bullish + current_neutral
+                        stock_list = get_stocks_from_bullish_sectors(combined_sectors)
                         
                         if stock_list:
                             results, alerts = live_scan_iteration(
