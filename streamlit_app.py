@@ -66,6 +66,149 @@ SCAN_CONFIG = {
     "session_refresh_interval": 20,
     "max_stocks_per_scan": 1000
 }
+
+# Live scanner configuration
+LIVE_SCAN_CONFIG = {
+    "scan_interval": 120,  # Scan every 2 minutes
+    "stocks_per_batch": 10,  # Analyze 10 stocks per batch
+    "batch_delay": 5,  # 5 seconds between batches
+    "min_sector_change": 0.5,  # Minimum sector change % to consider bullish
+    "min_sector_advance_ratio": 60,  # Minimum advance ratio (60%)
+    "cooldown_period": 300,  # 5 minutes cooldown for same stock alert
+    "alert_score_threshold": 65,  # Minimum score to trigger alert
+}
+
+def get_bullish_sectors():
+    """Get list of currently bullish sectors from market breadth"""
+    try:
+        breadth_data = fetch_market_breadth()
+        if not breadth_data or 'industry' not in breadth_data:
+            logging.warning("No industry data available")
+            return []
+        
+        industries = breadth_data['industry']
+        bullish_sectors = []
+        
+        for industry in industries:
+            avg_change = industry.get('avgChange', 0)
+            total = industry.get('total', 1)
+            advancing = industry.get('advancing', 0)
+            advance_ratio = (advancing / total) * 100 if total > 0 else 0
+            
+            # Filter bullish sectors
+            if (avg_change >= LIVE_SCAN_CONFIG['min_sector_change'] and 
+                advance_ratio >= LIVE_SCAN_CONFIG['min_sector_advance_ratio']):
+                
+                sector_name = industry.get('Industry', '')
+                bullish_sectors.append({
+                    'sector': sector_name,
+                    'change': avg_change,
+                    'advance_ratio': advance_ratio,
+                    'advancing': advancing,
+                    'total': total
+                })
+        
+        # Sort by strength (combination of change and advance ratio)
+        bullish_sectors.sort(key=lambda x: (x['change'] * x['advance_ratio']), reverse=True)
+        
+        logging.info(f"Found {len(bullish_sectors)} bullish sectors")
+        return bullish_sectors
+        
+    except Exception as e:
+        logging.error(f"Error getting bullish sectors: {e}")
+        return []
+
+def get_stocks_from_bullish_sectors(bullish_sectors):
+    """Get stock list from bullish sectors only"""
+    if not bullish_sectors:
+        return []
+    
+    sector_names = [s['sector'] for s in bullish_sectors]
+    stock_list = []
+    
+    # Map industry names to SECTORS dictionary keys
+    sector_mapping = {
+        'Bank': 'Bank',
+        'IT': 'IT',
+        'Finance': 'Finance',
+        'Auto': 'Auto',
+        'Pharma': 'Pharma',
+        'Metals': 'Metals',
+        'FMCG': 'FMCG',
+        'Power': 'Power',
+        'Capital Goods': 'Capital Goods',
+        'Oil & Gas': 'Oil & Gas',
+        'Chemicals': 'Chemicals',
+        'Telecom': 'Telecom',
+        'Infrastructure': 'Infrastructure',
+        'Insurance': 'Insurance',
+        'Cement': 'Cement',
+        'Realty': 'Realty',
+    }
+    
+    for sector_name in sector_names:
+        sector_key = sector_mapping.get(sector_name)
+        if sector_key and sector_key in SECTORS:
+            stock_list.extend(SECTORS[sector_key])
+    
+    # Remove duplicates while preserving order
+    stock_list = list(dict.fromkeys(stock_list))
+    
+    logging.info(f"Got {len(stock_list)} stocks from bullish sectors: {sector_names}")
+    return stock_list
+
+def live_scan_iteration(stock_list, timeframe, api_provider, alert_history):
+    """Single iteration of live scanner"""
+    results = []
+    new_alerts = []
+    current_time = time_module.time()
+    
+    # Analyze stocks in batches
+    for batch_idx in range(0, len(stock_list), LIVE_SCAN_CONFIG['stocks_per_batch']):
+        batch = stock_list[batch_idx:batch_idx + LIVE_SCAN_CONFIG['stocks_per_batch']]
+        
+        for symbol in batch:
+            try:
+                # Check if stock is in cooldown
+                last_alert_time = alert_history.get(symbol, 0)
+                if (current_time - last_alert_time) < LIVE_SCAN_CONFIG['cooldown_period']:
+                    continue
+                
+                # Analyze stock
+                result = analyze_stock_batch(
+                    symbol, 
+                    trading_style='intraday', 
+                    timeframe=timeframe, 
+                    contrarian_mode=False, 
+                    max_retries=2,
+                    api_provider=api_provider
+                )
+                
+                if result:
+                    result['Sector'] = assign_primary_sector(symbol, SECTORS)
+                    result['Timestamp'] = datetime.now().strftime('%H:%M:%S')
+                    results.append(result)
+                    
+                    # Check if this is a new alert
+                    if result['Score'] >= LIVE_SCAN_CONFIG['alert_score_threshold']:
+                        if result['Signal'] in ['Buy', 'Strong Buy']:
+                            new_alerts.append(result)
+                            alert_history[symbol] = current_time
+                            logging.info(f"🚨 NEW ALERT: {symbol} - Score: {result['Score']}")
+                
+                # Small delay between stocks
+                time_module.sleep(1)
+                
+            except Exception as e:
+                logging.error(f"Error analyzing {symbol}: {e}")
+                continue
+        
+        # Delay between batches
+        if batch_idx + LIVE_SCAN_CONFIG['stocks_per_batch'] < len(stock_list):
+            time_module.sleep(LIVE_SCAN_CONFIG['batch_delay'])
+    
+    return results, new_alerts
+
 def get_unique_stock_list(sectors_dict):
     """Get unique stock list from SECTORS dictionary"""
     all_stocks = []
@@ -2392,7 +2535,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -2533,8 +2676,225 @@ def main():
                         st.warning(f"⚠️ No stocks found matching the criteria. Try 'Moderate' filter mode.")
                 else:
                     st.error("❌ Failed to fetch technical data. Please try again.")
-    # --- BACKTEST TAB ---
+
+
+    # --- LIVE INTRADAY SCANNER TAB ---
     with tab4:
+        st.markdown("### 🔄 Live Intraday Scanner")
+        st.caption("🎯 Automatically scans stocks from bullish sectors only")
+        
+        # Initialize session state for live scanner
+        if 'live_scan_active' not in st.session_state:
+            st.session_state.live_scan_active = False
+        if 'live_scan_results' not in st.session_state:
+            st.session_state.live_scan_results = []
+        if 'live_scan_alerts' not in st.session_state:
+            st.session_state.live_scan_alerts = []
+        if 'alert_history' not in st.session_state:
+            st.session_state.alert_history = {}
+        if 'last_scan_time' not in st.session_state:
+            st.session_state.last_scan_time = None
+        if 'scan_iteration' not in st.session_state:
+            st.session_state.scan_iteration = 0
+        
+        # Configuration
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            scan_timeframe = st.selectbox("Timeframe", ["5m", "15m", "30m"], index=1, key="live_tf")
+        with col2:
+            alert_threshold = st.slider("Alert Score", 60, 80, 65, key="alert_score")
+            LIVE_SCAN_CONFIG['alert_score_threshold'] = alert_threshold
+        with col3:
+            scan_interval = st.slider("Scan Interval (sec)", 60, 300, 120, step=30, key="scan_int")
+            LIVE_SCAN_CONFIG['scan_interval'] = scan_interval
+        
+        # Display current bullish sectors
+        st.markdown("#### 📊 Current Bullish Sectors")
+        bullish_sectors = get_bullish_sectors()
+        
+        if bullish_sectors:
+            sector_cols = st.columns(min(len(bullish_sectors), 4))
+            for idx, sector in enumerate(bullish_sectors[:4]):
+                with sector_cols[idx]:
+                    st.metric(
+                        label=f"🟢 {sector['sector']}",
+                        value=f"{sector['change']:+.2f}%",
+                        delta=f"{sector['advance_ratio']:.0f}% advancing"
+                    )
+            
+            if len(bullish_sectors) > 4:
+                with st.expander(f"View all {len(bullish_sectors)} bullish sectors"):
+                    for sector in bullish_sectors:
+                        st.write(f"**{sector['sector']}**: {sector['change']:+.2f}% | "
+                                f"{sector['advancing']}/{sector['total']} advancing ({sector['advance_ratio']:.1f}%)")
+        else:
+            st.warning("⚠️ No bullish sectors found at the moment")
+        
+        st.divider()
+        
+        # Control buttons
+        col1, col2, col3 = st.columns([2, 2, 1])
+        
+        with col1:
+            if not st.session_state.live_scan_active:
+                if st.button("🚀 Start Live Scanner", type="primary", use_container_width=True):
+                    if not bullish_sectors:
+                        st.error("❌ Cannot start: No bullish sectors found")
+                    else:
+                        st.session_state.live_scan_active = True
+                        st.session_state.scan_iteration = 0
+                        st.session_state.live_scan_alerts = []
+                        st.rerun()
+            else:
+                if st.button("⏹️ Stop Scanner", type="secondary", use_container_width=True):
+                    st.session_state.live_scan_active = False
+                    st.rerun()
+        
+        with col2:
+            if st.button("🔄 Manual Scan Now", use_container_width=True):
+                if not bullish_sectors:
+                    st.error("❌ No bullish sectors available")
+                else:
+                    with st.spinner("Scanning bullish sectors..."):
+                        stock_list = get_stocks_from_bullish_sectors(bullish_sectors)
+                        if stock_list:
+                            results, alerts = live_scan_iteration(
+                                stock_list[:50],  # Limit to 50 stocks for manual scan
+                                scan_timeframe,
+                                api_provider,
+                                st.session_state.alert_history
+                            )
+                            st.session_state.live_scan_results = results
+                            st.session_state.live_scan_alerts.extend(alerts)
+                            st.session_state.last_scan_time = datetime.now()
+                            st.success(f"✅ Scanned {len(stock_list)} stocks from bullish sectors")
+                            st.rerun()
+        
+        with col3:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state.live_scan_results = []
+                st.session_state.live_scan_alerts = []
+                st.session_state.alert_history = {}
+                st.rerun()
+        
+        # Live scanning logic
+        if st.session_state.live_scan_active:
+            # Display status
+            status_container = st.container()
+            with status_container:
+                col1, col2, col3 = st.columns(3)
+                col1.success("🟢 **Scanner Active**")
+                col2.info(f"⏱️ Interval: {scan_interval}s")
+                if st.session_state.last_scan_time:
+                    next_scan = st.session_state.last_scan_time + timedelta(seconds=scan_interval)
+                    time_until = (next_scan - datetime.now()).total_seconds()
+                    col3.warning(f"⏳ Next scan in: {max(0, int(time_until))}s")
+            
+            # Check if it's time to scan
+            should_scan = False
+            if st.session_state.last_scan_time is None:
+                should_scan = True
+            else:
+                time_since_last = (datetime.now() - st.session_state.last_scan_time).total_seconds()
+                if time_since_last >= scan_interval:
+                    should_scan = True
+            
+            if should_scan:
+                with st.spinner(f"🔍 Running scan iteration #{st.session_state.scan_iteration + 1}..."):
+                    # Get fresh bullish sectors
+                    current_bullish = get_bullish_sectors()
+                    if current_bullish:
+                        stock_list = get_stocks_from_bullish_sectors(current_bullish)
+                        
+                        if stock_list:
+                            results, alerts = live_scan_iteration(
+                                stock_list,
+                                scan_timeframe,
+                                api_provider,
+                                st.session_state.alert_history
+                            )
+                            
+                            st.session_state.live_scan_results = results
+                            st.session_state.live_scan_alerts.extend(alerts)
+                            st.session_state.last_scan_time = datetime.now()
+                            st.session_state.scan_iteration += 1
+                            
+                            if alerts:
+                                st.toast(f"🚨 {len(alerts)} new alerts!", icon="🚨")
+                    
+                    time_module.sleep(2)
+                    st.rerun()
+            else:
+                # Auto-refresh every 5 seconds to update countdown
+                time_module.sleep(5)
+                st.rerun()
+        
+        # Display alerts
+        if st.session_state.live_scan_alerts:
+            st.markdown("### 🚨 Recent Alerts")
+            alerts_df = pd.DataFrame(st.session_state.live_scan_alerts[-10:])  # Last 10 alerts
+            
+            # Style alerts
+            def highlight_alerts(row):
+                if row['Score'] >= 75:
+                    return ['background-color: #90EE90'] * len(row)
+                elif row['Score'] >= 70:
+                    return ['background-color: #FFFACD'] * len(row)
+                return [''] * len(row)
+            
+            styled_alerts = alerts_df.style.apply(highlight_alerts, axis=1)
+            st.dataframe(styled_alerts, use_container_width=True, height=300)
+        
+        st.divider()
+        
+        # Display all results
+        if st.session_state.live_scan_results:
+            st.markdown("### 📊 Current Scan Results")
+            
+            results_df = pd.DataFrame(st.session_state.live_scan_results)
+            
+            # Filter and sort
+            results_df = results_df[results_df['Signal'].str.contains('Buy', na=False)]
+            results_df = results_df.sort_values('Score', ascending=False).head(20)
+            
+            if not results_df.empty:
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total Opportunities", len(results_df))
+                col2.metric("Avg Score", f"{results_df['Score'].mean():.1f}")
+                col3.metric("Strong Buys", len(results_df[results_df['Signal'] == 'Strong Buy']))
+                
+                # Style the results
+                def color_score(val):
+                    if val >= 75:
+                        return 'background-color: #90EE90; font-weight: bold'
+                    elif val >= 70:
+                        return 'background-color: #FFFACD'
+                    elif val >= 65:
+                        return 'background-color: #E0E0E0'
+                    return ''
+                
+                styled_results = results_df.style.applymap(color_score, subset=['Score'])
+                st.dataframe(styled_results, use_container_width=True, height=500)
+                
+                # Download button
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Results",
+                    data=csv,
+                    file_name=f"live_scan_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("ℹ️ No buy signals in current scan")
+            
+            # Display scan stats
+            if st.session_state.last_scan_time:
+                st.caption(f"Last scan: {st.session_state.last_scan_time.strftime('%H:%M:%S')} | "
+                          f"Iteration: #{st.session_state.scan_iteration} | "
+                          f"Total alerts: {len(st.session_state.live_scan_alerts)}")
+
+
+    with tab5:
         if st.button("📊 Run Backtest"):
             with st.spinner("Backtesting..."):
                 try:
@@ -2551,7 +2911,7 @@ def main():
                 except Exception as e: st.error(f"❌ Backtest error: {e}")
 
     # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
-    with tab5:
+    with tab6:
         try:
             conn = sqlite3.connect('stock_picks.db')
             history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
@@ -2559,7 +2919,7 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-    with tab6:
+    with tab7:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
