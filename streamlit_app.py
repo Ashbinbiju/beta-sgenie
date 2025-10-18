@@ -4259,23 +4259,52 @@ def main():
                 with col2:
                     trade_style = st.radio("Trading Style", ["Swing", "Intraday"], horizontal=True, key="paper_trade_style")
                     
-                    # Get current price
+                    # Get current price with multiple fallback attempts
                     current_price_available = False
-                    try:
-                        current_data = fetch_stock_data_cached(trade_symbol, period="1d", interval="1d", api_provider=api_provider)
-                        if not current_data.empty:
-                            suggested_price = current_data['Close'].iloc[-1]
-                            current_price_available = True
-                        else:
-                            suggested_price = 100.0
-                    except:
-                        suggested_price = 100.0
+                    suggested_price = 100.0
+                    fetch_error = None
                     
-                    # Show current market price
-                    if current_price_available:
-                        st.info(f"📊 **Current Market Price:** ₹{suggested_price:.2f}")
-                    else:
-                        st.warning("⚠️ Unable to fetch current price")
+                    # Try different intervals and periods
+                    fetch_attempts = [
+                        ("5d", "1d"),      # 5 days, daily interval
+                        ("1d", "5m"),      # 1 day, 5min interval (for intraday)
+                        ("1d", "15m"),     # 1 day, 15min interval
+                        ("2y", "1d"),      # 2 years, daily (long history)
+                    ]
+                    
+                    for period, interval in fetch_attempts:
+                        try:
+                            current_data = fetch_stock_data_cached(
+                                trade_symbol, 
+                                period=period, 
+                                interval=interval, 
+                                api_provider=api_provider
+                            )
+                            
+                            if current_data is not None and not current_data.empty and 'Close' in current_data.columns:
+                                suggested_price = float(current_data['Close'].iloc[-1])
+                                if suggested_price > 0:  # Valid price
+                                    current_price_available = True
+                                    break
+                        except Exception as e:
+                            fetch_error = str(e)
+                            continue
+                    
+                    # Show current market price with refresh button
+                    price_col1, price_col2 = st.columns([4, 1])
+                    with price_col1:
+                        if current_price_available:
+                            st.success(f"📊 **Current Price:** ₹{suggested_price:.2f}")
+                        else:
+                            st.warning("⚠️ Unable to fetch price - using default")
+                            if fetch_error:
+                                with st.expander("🔍 Debug Info"):
+                                    st.caption(f"Error: {fetch_error}")
+                                    st.caption(f"API: {api_provider}")
+                    
+                    with price_col2:
+                        if st.button("🔄", help="Refresh price", key="refresh_price"):
+                            st.rerun()
                     
                     trade_price = st.number_input("Price (₹)", min_value=0.01, value=float(suggested_price), step=0.05, format="%.2f")
                     trade_notes = st.text_input("Notes (optional)", key="paper_trade_notes")
