@@ -2918,32 +2918,65 @@ def main():
 
     # --- ANALYSIS TAB ---
     with tab1:
-        # Chart type selector
-        chart_type = st.radio("📊 Chart Type", ["TradingView (Interactive)", "Plotly (Local Data with Levels)"], horizontal=True)
-        
         if st.button("🔍 Analyze Selected Stock"):
             with st.spinner(f"Analyzing {symbol} using {api_provider}..."):
                 try:
                     data = fetch_stock_data_cached(symbol, interval=timeframe, api_provider=api_provider)
                     if not data.empty:
                         rec = generate_recommendation(data, symbol, 'swing' if trading_style == "Swing Trading" else 'intraday', timeframe, account_size, contrarian_mode)
-                        st.subheader(f"{rec['symbol']} ({rec['trading_style']} - {rec['timeframe']})")
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Score", f"{rec['score']}/100")
+                        
+                        # Display metrics in columns
+                        st.subheader(f"📊 {rec['symbol']} - {rec['trading_style'].upper()} Analysis")
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        
+                        col1.metric("Score", f"{rec['score']}/100", 
+                                   delta="Strong" if rec['score'] >= 70 else "Moderate" if rec['score'] >= 50 else "Weak")
                         col2.metric("Signal", rec['signal'])
                         col3.metric("Regime", rec['regime'])
                         col4.metric("Current Price", f"₹{rec['current_price']}")
-                        st.info(f"**Reason**: {rec['reason']}")
                         
-                        # Display selected chart type
-                        if chart_type == "TradingView (Interactive)":
-                            st.caption("📊 TradingView Chart - Use toolbar to change symbol if loading fails")
-                            tradingview_html = display_tradingview_chart(rec['symbol'], rec.get('timeframe', '1d'), height=600)
-                            st.components.v1.html(tradingview_html, height=650)
-                        else:
-                            st.caption("📊 Plotly Chart - Showing local data with entry/exit levels")
-                            fig = display_intraday_chart(rec, data)
-                            st.plotly_chart(fig, use_container_width=True)
+                        # Calculate R:R ratio
+                        risk = abs(rec['buy_at'] - rec['stop_loss'])
+                        reward = abs(rec['target'] - rec['buy_at'])
+                        rr_ratio = reward / risk if risk > 0 else 0
+                        col5.metric("Risk:Reward", f"1:{rr_ratio:.2f}",
+                                   delta="Good" if rr_ratio >= 2 else "Fair" if rr_ratio >= 1.5 else "Low")
+                        
+                        # Display detailed trade setup
+                        st.info(f"**📋 Analysis Reason**: {rec['reason']}")
+                        
+                        # Trade setup details in expandable section
+                        with st.expander("📍 **Detailed Trade Setup**", expanded=True):
+                            tcol1, tcol2, tcol3 = st.columns(3)
+                            
+                            with tcol1:
+                                st.markdown("### 🎯 Entry & Targets")
+                                st.write(f"**Entry Price:** ₹{rec['buy_at']:.2f}")
+                                st.write(f"**Target Price:** ₹{rec['target']:.2f}")
+                                target_gain = ((rec['target'] - rec['buy_at']) / rec['buy_at'] * 100)
+                                st.success(f"**Potential Gain:** +{target_gain:.2f}%")
+                            
+                            with tcol2:
+                                st.markdown("### 🛑 Risk Management")
+                                st.write(f"**Stop Loss:** ₹{rec['stop_loss']:.2f}")
+                                risk_percent = abs((rec['buy_at'] - rec['stop_loss']) / rec['buy_at'] * 100)
+                                st.error(f"**Max Risk:** -{risk_percent:.2f}%")
+                                st.write(f"**Risk Amount:** ₹{risk:.2f}/share")
+                            
+                            with tcol3:
+                                st.markdown("### 💰 Position Sizing")
+                                shares = int(account_size / rec['buy_at'])
+                                total_risk = shares * risk
+                                total_reward = shares * reward
+                                st.write(f"**Shares to Buy:** {shares}")
+                                st.write(f"**Total Investment:** ₹{shares * rec['buy_at']:.2f}")
+                                st.write(f"**Max Loss:** ₹{total_risk:.2f}")
+                                st.write(f"**Potential Profit:** ₹{total_reward:.2f}")
+                        
+                        # Display enhanced chart
+                        st.markdown("---")
+                        fig = display_enhanced_chart(rec, data)
+                        st.plotly_chart(fig, use_container_width=True)
                             
                     else: st.warning("No data available for the selected stock.")
                 except Exception as e: st.error(f"❌ Error: {str(e)}")
