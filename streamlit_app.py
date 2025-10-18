@@ -2933,8 +2933,7 @@ def display_intraday_chart(rec, data):
 def main():
     init_database()
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
-    st.title("📊 StockGenie Pro V2.9 - Multi-API Analysis")
-    st.caption("✨ FIX: Adapted to new Dhan master file column names & improved API health checks.")
+    st.title("📊 StockGenie Pro V2.9 ")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
     # --- SIDEBAR CONFIGURATION ---
@@ -3228,7 +3227,25 @@ def main():
             if not results.empty:
                 save_picks(results, trading_style)
                 st.subheader(f"🏆 Top {trading_style} Picks")
-                st.dataframe(results.style.applymap(lambda v: 'background-color: #90EE90' if v >= 75 else 'background-color: #E6F3FF' if v >= 60 else '', subset=['Score']), use_container_width=True)
+                
+                # Style the dataframe with better color contrast
+                def style_score(val):
+                    """Style score column with readable colors"""
+                    try:
+                        score = float(val)
+                        if score >= 75:
+                            return 'background-color: #2d5016; color: #90EE90; font-weight: bold'  # Dark green bg, light green text
+                        elif score >= 60:
+                            return 'background-color: #1a4d2e; color: #90EE90; font-weight: bold'  # Dark green bg, light green text
+                        elif score >= 50:
+                            return 'background-color: #3d3d3d; color: #FFD700; font-weight: bold'  # Dark gray bg, gold text
+                        else:
+                            return 'background-color: #4a1a1a; color: #FF6B6B; font-weight: bold'  # Dark red bg, light red text
+                    except:
+                        return ''
+                
+                styled_df = results.style.applymap(style_score, subset=['Score'])
+                st.dataframe(styled_df, use_container_width=True)
             else:
                 st.warning("⚠️ No stocks met the criteria.")
 
