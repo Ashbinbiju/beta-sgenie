@@ -26,6 +26,14 @@ import subprocess
 from dotenv import load_dotenv
 from dhanhq import dhanhq # New import for Dhan
 
+# Try to import supabase (optional)
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    logging.warning("Supabase not installed. Paper trading will be disabled. Install with: pip install supabase")
+
 # ============================================================================
 # CONFIGURATION & SETUP
 # ============================================================================
@@ -44,12 +52,30 @@ TOTP_SECRET = os.getenv("TOTP_SECRET")
 # Dhan
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+# Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 API_KEYS = {
     "Historical": "c3C0tMGn",
     "Trading": os.getenv("TRADING_API_KEY"),
     "Market": os.getenv("MARKET_API_KEY")
 }
+
+# Initialize Supabase client
+supabase: Client = None
+if SUPABASE_AVAILABLE and SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logging.info("✅ Supabase connected successfully")
+    except Exception as e:
+        logging.error(f"Failed to connect to Supabase: {e}")
+        supabase = None
+else:
+    if not SUPABASE_AVAILABLE:
+        logging.warning("Supabase package not installed")
+    elif not SUPABASE_URL or not SUPABASE_KEY:
+        logging.warning("Supabase credentials not configured")
 
 # --- Global session caches ---
 _global_smart_api = None
@@ -2935,6 +2961,190 @@ def save_picks(results_df, trading_style):
     conn.commit()
     conn.close()
 
+# ============================================================================
+# PAPER TRADING FUNCTIONS
+# ============================================================================
+
+def get_paper_account(user_id='default'):
+    """Get paper trading account details"""
+    if not supabase:
+        return None
+    
+    try:
+        response = supabase.table('paper_account').select('*').eq('user_id', user_id).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        logging.error(f"Error fetching paper account: {e}")
+        return None
+
+def get_paper_portfolio(user_id='default'):
+    """Get current paper trading portfolio"""
+    if not supabase:
+        return []
+    
+    try:
+        response = supabase.table('paper_portfolio').select('*').eq('user_id', user_id).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        logging.error(f"Error fetching portfolio: {e}")
+        return []
+
+def get_paper_trades_history(user_id='default', limit=50):
+    """Get paper trading history"""
+    if not supabase:
+        return []
+    
+    try:
+        response = supabase.table('paper_trades').select('*').eq('user_id', user_id).order('timestamp', desc=True).limit(limit).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        logging.error(f"Error fetching trades history: {e}")
+        return []
+
+def execute_paper_trade(symbol, action, quantity, price, trading_style, notes='', user_id='default'):
+    """Execute a paper trade (BUY or SELL)"""
+    if not supabase:
+        return False, "Supabase not configured"
+    
+    try:
+        total_amount = quantity * price
+        
+        # Get current account
+        account = get_paper_account(user_id)
+        if not account:
+            return False, "Account not found"
+        
+        if action == 'BUY':
+            # Check if enough cash
+            if account['cash_balance'] < total_amount:
+                return False, f"Insufficient funds. Need ₹{total_amount:.2f}, have ₹{account['cash_balance']:.2f}"
+            
+            # Update or insert portfolio
+            existing = supabase.table('paper_portfolio').select('*').eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
+            
+            if existing.data:
+                # Update existing position
+                old_qty = existing.data[0]['quantity']
+                old_invested = existing.data[0]['invested_amount']
+                new_qty = old_qty + quantity
+                new_invested = old_invested + total_amount
+                new_avg_price = new_invested / new_qty
+                
+                supabase.table('paper_portfolio').update({
+                    'quantity': new_qty,
+                    'invested_amount': new_invested,
+                    'avg_price': new_avg_price
+                }).eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
+            else:
+                # Create new position
+                supabase.table('paper_portfolio').insert({
+                    'user_id': user_id,
+                    'symbol': symbol,
+                    'quantity': quantity,
+                    'avg_price': price,
+                    'invested_amount': total_amount,
+                    'trading_style': trading_style,
+                    'notes': notes
+                }).execute()
+            
+            # Deduct cash
+            new_balance = account['cash_balance'] - total_amount
+            supabase.table('paper_account').update({'cash_balance': new_balance}).eq('user_id', user_id).execute()
+            
+            # Record trade
+            supabase.table('paper_trades').insert({
+                'user_id': user_id,
+                'symbol': symbol,
+                'action': action,
+                'quantity': quantity,
+                'price': price,
+                'total_amount': total_amount,
+                'trading_style': trading_style,
+                'notes': notes
+            }).execute()
+            
+            return True, f"✅ Bought {quantity} shares of {symbol} at ₹{price:.2f}"
+        
+        elif action == 'SELL':
+            # Check if position exists
+            existing = supabase.table('paper_portfolio').select('*').eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
+            
+            if not existing.data:
+                return False, "No position found to sell"
+            
+            position = existing.data[0]
+            if position['quantity'] < quantity:
+                return False, f"Insufficient shares. Have {position['quantity']}, trying to sell {quantity}"
+            
+            # Calculate P&L
+            avg_buy_price = position['avg_price']
+            pnl = (price - avg_buy_price) * quantity
+            pnl_percent = ((price - avg_buy_price) / avg_buy_price) * 100
+            
+            # Update or remove position
+            new_qty = position['quantity'] - quantity
+            if new_qty == 0:
+                # Close position
+                supabase.table('paper_portfolio').delete().eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
+            else:
+                # Reduce position
+                new_invested = position['invested_amount'] * (new_qty / position['quantity'])
+                supabase.table('paper_portfolio').update({
+                    'quantity': new_qty,
+                    'invested_amount': new_invested
+                }).eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
+            
+            # Add cash
+            new_balance = account['cash_balance'] + total_amount
+            supabase.table('paper_account').update({'cash_balance': new_balance}).eq('user_id', user_id).execute()
+            
+            # Record trade
+            supabase.table('paper_trades').insert({
+                'user_id': user_id,
+                'symbol': symbol,
+                'action': action,
+                'quantity': quantity,
+                'price': price,
+                'total_amount': total_amount,
+                'trading_style': trading_style,
+                'pnl': pnl,
+                'pnl_percent': pnl_percent,
+                'notes': notes
+            }).execute()
+            
+            pnl_emoji = "🟢" if pnl > 0 else "🔴" if pnl < 0 else "⚪"
+            return True, f"✅ Sold {quantity} shares of {symbol} at ₹{price:.2f}\n{pnl_emoji} P&L: ₹{pnl:.2f} ({pnl_percent:+.2f}%)"
+        
+        return False, "Invalid action"
+        
+    except Exception as e:
+        logging.error(f"Error executing trade: {e}")
+        return False, f"Error: {str(e)}"
+
+def reset_paper_account(user_id='default', initial_balance=100000):
+    """Reset paper trading account"""
+    if not supabase:
+        return False, "Supabase not configured"
+    
+    try:
+        # Clear portfolio
+        supabase.table('paper_portfolio').delete().eq('user_id', user_id).execute()
+        
+        # Reset account
+        supabase.table('paper_account').update({
+            'cash_balance': initial_balance,
+            'initial_balance': initial_balance
+        }).eq('user_id', user_id).execute()
+        
+        # Keep trade history (don't delete)
+        
+        return True, f"✅ Account reset to ₹{initial_balance:,.2f}"
+    except Exception as e:
+        logging.error(f"Error resetting account: {e}")
+        return False, f"Error: {str(e)}"
+
 def display_tradingview_chart(symbol, timeframe='D', height=600):
     """
     Display TradingView mini chart widget (more reliable for NSE stocks)
@@ -3419,7 +3629,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "📜 History", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -3973,8 +4183,234 @@ def main():
                     else: st.warning("Insufficient data for backtest")
                 except Exception as e: st.error(f"❌ Backtest error: {e}")
 
-    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
+    # --- PAPER TRADING TAB ---
     with tab6:
+        st.markdown("### 💰 Paper Trading - Practice Without Risk")
+        
+        if not supabase:
+            st.warning("⚠️ **Paper Trading is not configured**")
+            st.info("""
+            To enable Paper Trading:
+            1. Create a Supabase account at [supabase.com](https://supabase.com)
+            2. Create the required tables (see SUPABASE_SETUP.md)
+            3. Add your credentials to Streamlit secrets or .env:
+               - SUPABASE_URL
+               - SUPABASE_KEY
+            4. Install supabase: `pip install supabase`
+            """)
+        else:
+            # Get account info
+            account = get_paper_account()
+            
+            if not account:
+                st.error("❌ Paper trading account not found. Please check Supabase setup.")
+            else:
+                # Account summary
+                portfolio = get_paper_portfolio()
+                
+                # Calculate portfolio value
+                portfolio_value = 0
+                portfolio_pnl = 0
+                
+                if portfolio:
+                    for position in portfolio:
+                        try:
+                            # Fetch current price
+                            current_data = fetch_stock_data_cached(position['symbol'], period="1d", interval="1d", api_provider=api_provider)
+                            if not current_data.empty:
+                                current_price = current_data['Close'].iloc[-1]
+                                position_value = position['quantity'] * current_price
+                                position_pnl = position_value - position['invested_amount']
+                                portfolio_value += position_value
+                                portfolio_pnl += position_pnl
+                        except:
+                            # If fetch fails, use invested amount
+                            portfolio_value += position['invested_amount']
+                
+                total_value = account['cash_balance'] + portfolio_value
+                total_pnl = total_value - account['initial_balance']
+                total_pnl_percent = (total_pnl / account['initial_balance']) * 100 if account['initial_balance'] > 0 else 0
+                
+                # Display metrics
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.metric("💵 Cash Balance", f"₹{account['cash_balance']:,.2f}")
+                col2.metric("📊 Portfolio Value", f"₹{portfolio_value:,.2f}")
+                col3.metric("💼 Total Value", f"₹{total_value:,.2f}")
+                
+                pnl_delta = f"{total_pnl_percent:+.2f}%"
+                col4.metric("📈 Total P&L", f"₹{total_pnl:,.2f}", delta=pnl_delta)
+                col5.metric("🎯 Positions", len(portfolio))
+                
+                st.divider()
+                
+                # Trade execution form
+                st.markdown("#### 🔄 Execute Trade")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    trade_action = st.radio("Action", ["BUY", "SELL"], horizontal=True)
+                    trade_symbol = st.selectbox("Stock", stock_list, key="paper_trade_symbol")
+                    trade_quantity = st.number_input("Quantity", min_value=1, value=1, step=1)
+                
+                with col2:
+                    trade_style = st.radio("Trading Style", ["Swing", "Intraday"], horizontal=True, key="paper_trade_style")
+                    
+                    # Get current price
+                    try:
+                        current_data = fetch_stock_data_cached(trade_symbol, period="1d", interval="1d", api_provider=api_provider)
+                        if not current_data.empty:
+                            suggested_price = current_data['Close'].iloc[-1]
+                        else:
+                            suggested_price = 100.0
+                    except:
+                        suggested_price = 100.0
+                    
+                    trade_price = st.number_input("Price (₹)", min_value=0.01, value=float(suggested_price), step=0.05, format="%.2f")
+                    trade_notes = st.text_input("Notes (optional)", key="paper_trade_notes")
+                
+                total_cost = trade_quantity * trade_price
+                st.info(f"💰 Total: ₹{total_cost:,.2f}")
+                
+                if trade_action == "BUY" and total_cost > account['cash_balance']:
+                    st.error(f"⚠️ Insufficient funds! Need ₹{total_cost:,.2f}, have ₹{account['cash_balance']:,.2f}")
+                
+                if st.button(f"✅ Execute {trade_action}", type="primary", use_container_width=True):
+                    with st.spinner(f"Executing {trade_action}..."):
+                        success, message = execute_paper_trade(
+                            trade_symbol,
+                            trade_action,
+                            trade_quantity,
+                            trade_price,
+                            trade_style.lower(),
+                            trade_notes
+                        )
+                        
+                        if success:
+                            st.success(message)
+                            time_module.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(message)
+                
+                st.divider()
+                
+                # Current positions
+                st.markdown("#### 📊 Current Positions")
+                
+                if portfolio:
+                    positions_data = []
+                    
+                    for position in portfolio:
+                        try:
+                            # Fetch current price
+                            current_data = fetch_stock_data_cached(position['symbol'], period="1d", interval="1d", api_provider=api_provider)
+                            if not current_data.empty:
+                                current_price = current_data['Close'].iloc[-1]
+                            else:
+                                current_price = position['avg_price']
+                        except:
+                            current_price = position['avg_price']
+                        
+                        current_value = position['quantity'] * current_price
+                        pnl = current_value - position['invested_amount']
+                        pnl_percent = (pnl / position['invested_amount']) * 100 if position['invested_amount'] > 0 else 0
+                        
+                        positions_data.append({
+                            'Symbol': position['symbol'],
+                            'Style': position['trading_style'].capitalize(),
+                            'Qty': position['quantity'],
+                            'Avg Price': f"₹{position['avg_price']:.2f}",
+                            'Current Price': f"₹{current_price:.2f}",
+                            'Invested': f"₹{position['invested_amount']:,.2f}",
+                            'Current Value': f"₹{current_value:,.2f}",
+                            'P&L': f"₹{pnl:,.2f}",
+                            'P&L %': f"{pnl_percent:+.2f}%"
+                        })
+                    
+                    positions_df = pd.DataFrame(positions_data)
+                    
+                    # Style the dataframe
+                    def color_pnl(val):
+                        if isinstance(val, str) and '%' in val:
+                            num = float(val.replace('%', '').replace('+', ''))
+                            if num > 0:
+                                return 'background-color: #90EE90; color: black'
+                            elif num < 0:
+                                return 'background-color: #FFB6C6; color: black'
+                        return ''
+                    
+                    styled_positions = positions_df.style.applymap(color_pnl, subset=['P&L %'])
+                    st.dataframe(styled_positions, use_container_width=True)
+                else:
+                    st.info("📭 No open positions. Start trading to build your portfolio!")
+                
+                st.divider()
+                
+                # Trade history
+                st.markdown("#### 📜 Recent Trades")
+                
+                trades = get_paper_trades_history(limit=20)
+                
+                if trades:
+                    trades_data = []
+                    
+                    for trade in trades:
+                        trades_data.append({
+                            'Time': datetime.fromisoformat(trade['timestamp'].replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M'),
+                            'Symbol': trade['symbol'],
+                            'Action': trade['action'],
+                            'Qty': trade['quantity'],
+                            'Price': f"₹{trade['price']:.2f}",
+                            'Total': f"₹{trade['total_amount']:,.2f}",
+                            'P&L': f"₹{trade.get('pnl', 0):,.2f}" if trade['action'] == 'SELL' else '-',
+                            'P&L %': f"{trade.get('pnl_percent', 0):+.2f}%" if trade['action'] == 'SELL' else '-',
+                            'Style': trade['trading_style'].capitalize()
+                        })
+                    
+                    trades_df = pd.DataFrame(trades_data)
+                    
+                    # Color code actions
+                    def color_action(val):
+                        if val == 'BUY':
+                            return 'background-color: #90EE90; color: black; font-weight: bold'
+                        elif val == 'SELL':
+                            return 'background-color: #FFB6C6; color: black; font-weight: bold'
+                        return ''
+                    
+                    styled_trades = trades_df.style.applymap(color_action, subset=['Action'])
+                    st.dataframe(styled_trades, use_container_width=True, height=400)
+                    
+                    # Download button
+                    csv = trades_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Trade History",
+                        data=csv,
+                        file_name=f"paper_trades_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("📭 No trade history yet. Execute your first trade above!")
+                
+                st.divider()
+                
+                # Reset account
+                with st.expander("⚙️ Account Settings"):
+                    st.warning("**Reset Account** - This will clear all positions and reset balance")
+                    reset_balance = st.number_input("Initial Balance (₹)", min_value=10000, value=100000, step=10000)
+                    
+                    if st.button("🔄 Reset Account", type="secondary"):
+                        if st.checkbox("⚠️ I understand this will clear all positions"):
+                            success, message = reset_paper_account(initial_balance=reset_balance)
+                            if success:
+                                st.success(message)
+                                time_module.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(message)
+
+    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
+    with tab7:
         try:
             conn = sqlite3.connect('stock_picks.db')
             history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
@@ -3982,7 +4418,7 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-    with tab7:
+    with tab8:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
