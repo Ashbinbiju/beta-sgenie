@@ -1106,7 +1106,7 @@ def fetch_sector_performance():
         return None
 
 def fetch_block_deals(page=1, page_size=10):
-    """Fetch latest block deals from StockEdge API"""
+    """Fetch latest block deals"""
     try:
         url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBlockDeals?page={page}&pageSize={page_size}&lang=en"
         response = requests.get(url, timeout=10)
@@ -1124,7 +1124,7 @@ def fetch_block_deals(page=1, page_size=10):
         return []
 
 def fetch_bulk_deals(page=1, page_size=20):
-    """Fetch latest bulk deals from StockEdge API"""
+    """Fetch latest bulk deals"""
     try:
         url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBulkDeals?page={page}&pageSize={page_size}&lang=en"
         response = requests.get(url, timeout=10)
