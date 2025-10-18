@@ -2956,7 +2956,7 @@ def main():
             if not results.empty:
                 save_picks(results, trading_style)
                 st.subheader(f"🏆 Top {trading_style} Picks")
-                st.dataframe(results.style.applymap(lambda v: 'background-color: #90EE90' if v >= 75 else 'background-color: #FFFACD' if v >= 60 else '', subset=['Score']), use_container_width=True)
+                st.dataframe(results.style.applymap(lambda v: 'background-color: #90EE90' if v >= 75 else 'background-color: #E6F3FF' if v >= 60 else '', subset=['Score']), use_container_width=True)
             else:
                 st.warning("⚠️ No stocks met the criteria.")
 
