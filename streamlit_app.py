@@ -1105,6 +1105,42 @@ def fetch_sector_performance():
         logging.warning(f"Sector performance API failed: {str(e)}")
         return None
 
+def fetch_block_deals(page=1, page_size=10):
+    """Fetch latest block deals from StockEdge API"""
+    try:
+        url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBlockDeals?page={page}&pageSize={page_size}&lang=en"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        deals_data = response.json()
+        
+        if deals_data:
+            logging.info(f"✅ Fetched {len(deals_data)} block deals")
+            return deals_data
+        return []
+        
+    except Exception as e:
+        logging.error(f"Error fetching block deals: {e}")
+        return []
+
+def fetch_bulk_deals(page=1, page_size=20):
+    """Fetch latest bulk deals from StockEdge API"""
+    try:
+        url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBulkDeals?page={page}&pageSize={page_size}&lang=en"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        deals_data = response.json()
+        
+        if deals_data:
+            logging.info(f"✅ Fetched {len(deals_data)} bulk deals")
+            return deals_data
+        return []
+        
+    except Exception as e:
+        logging.error(f"Error fetching bulk deals: {e}")
+        return []
+
 def calculate_market_health_score():
     """Calculate overall market health score (0-100)"""
     breadth_data = fetch_market_breadth()
@@ -3632,7 +3668,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "📜 History", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "💼 Block/Bulk Deals", "📜 History", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -4494,8 +4530,122 @@ def main():
                             else:
                                 st.error(message)
 
-    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
+    # --- BLOCK/BULK DEALS TAB ---
     with tab7:
+        st.markdown("### 💼 Block & Bulk Deals - Institutional Activity")
+        st.caption("Track large institutional trades that can signal market moves")
+        
+        # Toggle between Block and Bulk deals
+        deal_type = st.radio("Deal Type", ["📦 Block Deals", "📊 Bulk Deals"], horizontal=True)
+        
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            buy_sell_filter = st.selectbox("Action Filter", ["All", "Buy Only", "Sell Only"])
+        with col2:
+            min_value_filter = st.number_input("Min Deal Value (₹ Cr)", min_value=0.0, value=0.0, step=1.0)
+        with col3:
+            if st.button("🔄 Refresh Deals", use_container_width=True):
+                st.rerun()
+        
+        # Fetch deals
+        with st.spinner("Fetching latest deals..."):
+            if "Block" in deal_type:
+                deals = fetch_block_deals(page=1, page_size=50)
+            else:
+                deals = fetch_bulk_deals(page=1, page_size=50)
+        
+        if deals:
+            # Process and display deals
+            deals_data = []
+            
+            for deal in deals:
+                deal_value = deal['Quantity'] * deal['Price']
+                deal_value_cr = deal_value / 10000000  # Convert to crores
+                
+                # Apply filters
+                if buy_sell_filter == "Buy Only" and deal['BuySellName'] != "Buy":
+                    continue
+                if buy_sell_filter == "Sell Only" and deal['BuySellName'] != "Sell":
+                    continue
+                if deal_value_cr < min_value_filter:
+                    continue
+                
+                deals_data.append({
+                    'Date': datetime.fromisoformat(deal['Date'].replace('Z', '+00:00')).strftime('%d %b %Y'),
+                    'Stock': deal['SecurityName'],
+                    'Client': deal['ClientName'][:40] + '...' if len(deal['ClientName']) > 40 else deal['ClientName'],
+                    'Action': deal['BuySellName'],
+                    'Quantity': f"{deal['Quantity']:,.0f}",
+                    'Price': f"₹{deal['Price']:.2f}",
+                    'Value (₹ Cr)': f"{deal_value_cr:.2f}",
+                    'Exchange': deal['ExchangeName']
+                })
+            
+            if deals_data:
+                df = pd.DataFrame(deals_data)
+                
+                st.success(f"✅ Found {len(deals_data)} deals matching your criteria")
+                
+                # Summary metrics
+                total_buy_value = sum([float(d['Value (₹ Cr)']) for d in deals_data if d['Action'] == 'Buy'])
+                total_sell_value = sum([float(d['Value (₹ Cr)']) for d in deals_data if d['Action'] == 'Sell'])
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Total Deals", len(deals_data))
+                col2.metric("Buy Deals", len([d for d in deals_data if d['Action'] == 'Buy']))
+                col3.metric("Sell Deals", len([d for d in deals_data if d['Action'] == 'Sell']))
+                col4.metric("Net Flow", f"₹{total_buy_value - total_sell_value:.2f} Cr", 
+                           delta="Buying" if total_buy_value > total_sell_value else "Selling")
+                
+                st.divider()
+                
+                # Style the dataframe
+                def color_action(val):
+                    if val == 'Buy':
+                        return 'background-color: #90EE90; color: black; font-weight: bold'
+                    elif val == 'Sell':
+                        return 'background-color: #FFB6C6; color: black; font-weight: bold'
+                    return ''
+                
+                styled_df = df.style.applymap(color_action, subset=['Action'])
+                st.dataframe(styled_df, use_container_width=True, height=600)
+                
+                # Download button
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Deals Data",
+                    data=csv,
+                    file_name=f"{'block' if 'Block' in deal_type else 'bulk'}_deals_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+                
+                # Top stocks by deal value
+                st.divider()
+                st.markdown("#### 📊 Top Stocks by Deal Value")
+                
+                stock_summary = {}
+                for deal in deals:
+                    stock = deal['SecurityName']
+                    value = (deal['Quantity'] * deal['Price']) / 10000000
+                    if stock in stock_summary:
+                        stock_summary[stock] += value if deal['BuySellName'] == 'Buy' else -value
+                    else:
+                        stock_summary[stock] = value if deal['BuySellName'] == 'Buy' else -value
+                
+                top_stocks = sorted(stock_summary.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
+                
+                if top_stocks:
+                    for idx, (stock, net_value) in enumerate(top_stocks, 1):
+                        sentiment = "🟢 Net Buying" if net_value > 0 else "🔴 Net Selling"
+                        st.write(f"{idx}. **{stock}**: {sentiment} ₹{abs(net_value):.2f} Cr")
+            else:
+                st.info("ℹ️ No deals match your filter criteria. Try adjusting the filters.")
+        else:
+            st.error("❌ Unable to fetch deals data. Please try again later.")
+
+    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
+    with tab8:
         try:
             conn = sqlite3.connect('stock_picks.db')
             history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
@@ -4503,7 +4653,7 @@ def main():
             st.dataframe(history, use_container_width=True)
         except Exception as e: st.error(f"❌ Database error: {e}")
         
-    with tab8:
+    with tab9:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
