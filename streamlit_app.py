@@ -3176,13 +3176,15 @@ def main():
     if AUTO_UPDATE_CONFIG["enabled"]:
         # Show current commit info
         try:
+            repo_path = os.path.dirname(os.path.abspath(__file__))
             current_commit = subprocess.check_output(
                 ["git", "rev-parse", "--short", "HEAD"],
-                cwd="/workspaces/beta-sgenie",
+                cwd=repo_path,
                 timeout=5
             ).decode('utf-8').strip()
             st.sidebar.caption(f"📌 Current: `{current_commit}`")
-        except:
+        except Exception as e:
+            st.sidebar.caption(f"⚠️ Git error: {str(e)}")
             pass
         
         # Display status and check button in same row
