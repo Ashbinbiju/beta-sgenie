@@ -181,6 +181,7 @@ def get_stocks_from_bullish_sectors(bullish_sectors):
         'Auto': 'Auto',
         'Automobile': 'Auto',
         'Automotive': 'Auto',
+        'Automobile and Auto Components': 'Auto',
         'Pharma': 'Pharma',
         'Pharmaceuticals': 'Pharma',
         'Healthcare': 'Pharma',
@@ -188,6 +189,7 @@ def get_stocks_from_bullish_sectors(bullish_sectors):
         'Metal': 'Metals',
         'Steel': 'Metals',
         'FMCG': 'FMCG',
+        'Fast Moving Consumer Goods': 'FMCG',
         'Consumer Goods': 'FMCG',
         'Power': 'Power',
         'Energy': 'Power',
@@ -200,6 +202,7 @@ def get_stocks_from_bullish_sectors(bullish_sectors):
         'Chemical': 'Chemicals',
         'Telecom': 'Telecom',
         'Telecommunications': 'Telecom',
+        'Telecommunication': 'Telecom',
         'Infrastructure': 'Infrastructure',
         'Insurance': 'Insurance',
         'Cement': 'Cement',
@@ -211,35 +214,31 @@ def get_stocks_from_bullish_sectors(bullish_sectors):
         'Aviation': 'Aviation',
         'Airlines': 'Aviation',
         'Retail': 'Retail',
-        'Consumer Discretionary': 'Retail'
+        'Consumer Discretionary': 'Retail',
+        'Consumer Durables': 'Consumer Durables',
+        'Consumer Services': 'Consumer Services',
+        'Services': 'Consumer Services',
+        'Hospitality': 'Consumer Services',
+        'Travel': 'Consumer Services',
+        'Food Services': 'Consumer Services'
     }
     
     for sector_name in sector_names:
+        # Direct mapping only - no fuzzy matching
         sector_key = sector_mapping.get(sector_name)
         if sector_key and sector_key in SECTORS:
             stock_list.extend(SECTORS[sector_key])
             matched_sectors.append(sector_name)
         else:
-            # Try fuzzy matching for unmatched sectors
-            fuzzy_match = None
-            for mapping_key, mapping_value in sector_mapping.items():
-                if (sector_name.lower() in mapping_key.lower() or 
-                    mapping_key.lower() in sector_name.lower()):
-                    fuzzy_match = mapping_value
-                    break
-            
-            if fuzzy_match and fuzzy_match in SECTORS:
-                stock_list.extend(SECTORS[fuzzy_match])
-                matched_sectors.append(f"{sector_name} → {fuzzy_match}")
-            else:
-                unmatched_sectors.append(sector_name)
+            unmatched_sectors.append(sector_name)
     
     # Remove duplicates while preserving order
     stock_list = list(dict.fromkeys(stock_list))
     
-    logging.info(f"Got {len(stock_list)} stocks from {len(matched_sectors)} bullish sectors: {matched_sectors}")
+    logging.info(f"Got {len(stock_list)} stocks from {len(matched_sectors)} matched sectors: {matched_sectors}")
     if unmatched_sectors:
         logging.warning(f"Could not match {len(unmatched_sectors)} sectors: {unmatched_sectors}")
+        logging.info(f"Available sectors in SECTORS dict: {list(SECTORS.keys())}")
     
     return stock_list
 
@@ -514,6 +513,20 @@ SECTORS = {
     "Media": [
         "ZEEL-EQ", "SUNTV-EQ", "TVTODAY-EQ", "DISHTV-EQ", "HATHWAY-EQ",
         "PVR-EQ", "INOXLEISUR-EQ", "SAREGAMA-EQ", "TIPS-EQ"
+    ],
+    "Consumer Durables": [
+        "WHIRLPOOL-EQ", "DIXON-EQ", "AMBER-EQ", "VOLTAS-EQ", "BLUESTARCO-EQ",
+        "HAVELLS-EQ", "CROMPTON-EQ", "VGUARD-EQ", "ORIENTELEC-EQ", "KIRIINDUS-EQ",
+        "RAJESHEXPO-EQ", "SYMPHONY-EQ", "TITAN-EQ", "KALPATPOWR-EQ", "RELAXO-EQ",
+        "TTKHLTCARE-EQ", "VAIBHAVGBL-EQ", "BAJAJELEC-EQ", "FINEORG-EQ", "CHOLAHLDNG-EQ",
+        "BSLIMITED-EQ", "SUPRAJIT-EQ", "NIITLTD-EQ", "APARINDS-EQ"
+    ],
+    "Consumer Services": [
+        "ZOMATO-EQ", "NYKAA-EQ", "ADANIPORTS-EQ", "IRCTC-EQ", "PAYTM-EQ",
+        "JUBLFOOD-EQ", "DEVYANI-EQ", "WESTLIFE-EQ", "SAPPHIRE-EQ", "BIKAJI-EQ",
+        "EASEMYTRIP-EQ", "IXIGO-EQ", "TEAMLEASE-EQ", "QUESS-EQ", "FIRSTSOURCE-EQ",
+        "MINDSPACE-EQ", "MAHINDCIE-EQ", "TATAMTRDVR-EQ", "VMART-EQ", "SHOPERSTOP-EQ",
+        "TRENT-EQ", "DMART-EQ", "ABFRL-EQ", "MANYAVAR-EQ", "V2RETAIL-EQ"
     ]
 }
 # ============================================================================
@@ -551,7 +564,8 @@ def assign_primary_sector(symbol, sectors_dict):
         "Metals", "Power", "Oil & Gas", "Telecom",
         "Finance", "Capital Goods", "Chemicals", 
         "Infrastructure", "Cement", "Realty", "Insurance",
-        "Diversified", "Aviation", "Retail", "Media"
+        "Diversified", "Aviation", "Retail", "Media",
+        "Consumer Durables", "Consumer Services"
     ]
     
     matching_sectors = [
