@@ -3148,22 +3148,21 @@ def main():
     
     # Display update notification if available
     if st.session_state.get('update_available', False):
-        update_banner = st.container()
-        with update_banner:
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
-            with col2:
-                if st.button("🚀 Update Now", type="primary"):
-                    with st.spinner("Pulling latest changes..."):
-                        success, message = pull_github_updates()
-                        if success:
-                            st.success("✅ Updated! Reloading app...")
-                            st.session_state.update_available = False
-                            time_module.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Update failed: {message}")
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
+        with col2:
+            st.write("")  # Spacing for vertical alignment
+            if st.button("🚀 Update Now", type="primary", use_container_width=True):
+                with st.spinner("Pulling latest changes..."):
+                    success, message = pull_github_updates()
+                    if success:
+                        st.success("✅ Updated! Reloading app...")
+                        st.session_state.update_available = False
+                        time_module.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Update failed: {message}")
     
     st.title("📊 StockGenie Pro V2.9 ")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
@@ -3343,17 +3342,23 @@ def main():
                 st.markdown(f"<div style='padding-top: 8px;'>✅ Checks every {AUTO_UPDATE_CONFIG['check_interval']//60}min</div>", unsafe_allow_html=True)
         with col2:
             if st.button("🔍", help="Check for updates now", key="check_updates", use_container_width=True):
-                with st.spinner("Checking..."):
-                    has_update, local, remote = check_for_github_updates()
-                    if has_update:
-                        st.session_state.update_available = True
-                        st.session_state.local_commit = local[:7] if local else "unknown"
-                        st.session_state.remote_commit = remote[:7] if remote else "unknown"
-                        st.sidebar.success(f"✅ Update found!")
-                        st.rerun()
-                    else:
-                        st.sidebar.info("✅ Up to date!")
-                        time_module.sleep(1)
+                # Show checking status immediately
+                status_placeholder = st.sidebar.empty()
+                status_placeholder.info("🔄 Checking...")
+                
+                has_update, local, remote = check_for_github_updates()
+                
+                if has_update:
+                    st.session_state.update_available = True
+                    st.session_state.local_commit = local[:7] if local else "unknown"
+                    st.session_state.remote_commit = remote[:7] if remote else "unknown"
+                    status_placeholder.success("✅ Update found!")
+                    time_module.sleep(1)
+                    st.rerun()
+                else:
+                    status_placeholder.success("✅ Up to date!")
+                    time_module.sleep(1)
+                    status_placeholder.empty()
     else:
         st.sidebar.caption("⏸️ Auto-update disabled")
 
