@@ -3123,7 +3123,7 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
         logging.error(f"Error executing trade: {e}")
         return False, f"Error: {str(e)}"
 
-def reset_paper_account(user_id='default', initial_balance=100000):
+def reset_paper_account(user_id='default', initial_balance=100000, clear_trades=False):
     """Reset paper trading account"""
     if not supabase:
         return False, "Supabase not configured"
@@ -3138,7 +3138,10 @@ def reset_paper_account(user_id='default', initial_balance=100000):
             'initial_balance': initial_balance
         }).eq('user_id', user_id).execute()
         
-        # Keep trade history (don't delete)
+        # Optionally clear trade history
+        if clear_trades:
+            supabase.table('paper_trades').delete().eq('user_id', user_id).execute()
+            return True, f"✅ Account and trade history reset to ₹{initial_balance:,.2f}"
         
         return True, f"✅ Account reset to ₹{initial_balance:,.2f}"
     except Exception as e:
@@ -4257,14 +4260,22 @@ def main():
                     trade_style = st.radio("Trading Style", ["Swing", "Intraday"], horizontal=True, key="paper_trade_style")
                     
                     # Get current price
+                    current_price_available = False
                     try:
                         current_data = fetch_stock_data_cached(trade_symbol, period="1d", interval="1d", api_provider=api_provider)
                         if not current_data.empty:
                             suggested_price = current_data['Close'].iloc[-1]
+                            current_price_available = True
                         else:
                             suggested_price = 100.0
                     except:
                         suggested_price = 100.0
+                    
+                    # Show current market price
+                    if current_price_available:
+                        st.info(f"📊 **Current Market Price:** ₹{suggested_price:.2f}")
+                    else:
+                        st.warning("⚠️ Unable to fetch current price")
                     
                     trade_price = st.number_input("Price (₹)", min_value=0.01, value=float(suggested_price), step=0.05, format="%.2f")
                     trade_notes = st.text_input("Notes (optional)", key="paper_trade_notes")
@@ -4397,11 +4408,20 @@ def main():
                 # Reset account
                 with st.expander("⚙️ Account Settings"):
                     st.warning("**Reset Account** - This will clear all positions and reset balance")
-                    reset_balance = st.number_input("Initial Balance (₹)", min_value=10000, value=100000, step=10000)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        reset_balance = st.number_input("Initial Balance (₹)", min_value=10000, value=100000, step=10000)
+                    with col2:
+                        clear_history = st.checkbox("🗑️ Also clear trade history", value=False)
+                    
+                    if clear_history:
+                        st.error("⚠️ This will permanently delete all trade records!")
                     
                     if st.button("🔄 Reset Account", type="secondary"):
-                        if st.checkbox("⚠️ I understand this will clear all positions"):
-                            success, message = reset_paper_account(initial_balance=reset_balance)
+                        confirm_text = "clear all positions and trade history" if clear_history else "clear all positions"
+                        if st.checkbox(f"⚠️ I understand this will {confirm_text}"):
+                            success, message = reset_paper_account(initial_balance=reset_balance, clear_trades=clear_history)
                             if success:
                                 st.success(message)
                                 time_module.sleep(1)
