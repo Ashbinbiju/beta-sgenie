@@ -234,6 +234,31 @@ def check_for_github_updates():
         logging.error(f"Error checking for updates: {e}")
         return False, None, None
 
+def get_changelog(local_commit, remote_commit):
+    """Get changelog between two commits"""
+    try:
+        repo_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Get commit messages between local and remote
+        result = subprocess.run(
+            ["git", "log", f"{local_commit}..{remote_commit}", "--pretty=format:%s", "--no-merges"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            # Split into individual commit messages
+            commits = [msg.strip() for msg in result.stdout.strip().split('\n') if msg.strip()]
+            return commits
+        else:
+            return []
+            
+    except Exception as e:
+        logging.error(f"Error getting changelog: {e}")
+        return []
+
 def pull_github_updates():
     """Pull latest changes from GitHub"""
     try:
@@ -289,8 +314,10 @@ def auto_update_check():
     
     if has_update:
         st.session_state.update_available = True
-        st.session_state.local_commit = local[:7]
-        st.session_state.remote_commit = remote[:7]
+        st.session_state.local_commit = local[:7] if local else "unknown"
+        st.session_state.remote_commit = remote[:7] if remote else "unknown"
+        st.session_state.local_commit_full = local  # Store full hash for changelog
+        st.session_state.remote_commit_full = remote  # Store full hash for changelog
 
 def get_bullish_sectors():
     """Get list of currently bullish sectors from market breadth"""
@@ -3148,9 +3175,32 @@ def main():
     
     # Display update notification if available
     if st.session_state.get('update_available', False):
+        # Get full commit hashes for changelog
+        local_full = st.session_state.get('local_commit_full', st.session_state.get('local_commit'))
+        remote_full = st.session_state.get('remote_commit_full', st.session_state.get('remote_commit'))
+        
         col1, col2 = st.columns([5, 1])
         with col1:
             st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
+            
+            # Show changelog
+            if local_full and remote_full:
+                changelog = get_changelog(local_full, remote_full)
+                if changelog:
+                    with st.expander(f"📋 What's New ({len(changelog)} change{'s' if len(changelog) > 1 else ''})", expanded=False):
+                        for idx, commit_msg in enumerate(changelog, 1):
+                            # Parse commit message for type and description
+                            if ':' in commit_msg:
+                                commit_type, commit_desc = commit_msg.split(':', 1)
+                                # Add emoji based on commit type
+                                emoji = {
+                                    'Feature': '✨', 'Fix': '🐛', 'Update': '📝', 
+                                    'Refactor': '♻️', 'Style': '🎨', 'Docs': '📚',
+                                    'Perf': '⚡', 'Test': '🧪', 'Chore': '🔧'
+                                }.get(commit_type.strip(), '•')
+                                st.markdown(f"{emoji} **{commit_type.strip()}**: {commit_desc.strip()}")
+                            else:
+                                st.markdown(f"• {commit_msg}")
         with col2:
             st.write("")  # Spacing for vertical alignment
             if st.button("🚀 Update Now", type="primary", use_container_width=True):
@@ -3352,6 +3402,8 @@ def main():
                     st.session_state.update_available = True
                     st.session_state.local_commit = local[:7] if local else "unknown"
                     st.session_state.remote_commit = remote[:7] if remote else "unknown"
+                    st.session_state.local_commit_full = local  # Store full hash for changelog
+                    st.session_state.remote_commit_full = remote  # Store full hash for changelog
                     status_placeholder.success("✅ Update found!")
                     time_module.sleep(1)
                     st.rerun()
