@@ -3188,17 +3188,15 @@ def main():
             pass
         
         # Display status and check button in same row
-        col1, col2 = st.sidebar.columns([3, 1])
+        col1, col2 = st.sidebar.columns([4, 1])
         with col1:
             last_check_time = st.session_state.get('last_update_check')
             if last_check_time:
                 time_ago = int((datetime.now() - last_check_time).total_seconds() / 60)
-                st.caption(f"✅ Last check: {time_ago}m ago")
+                st.markdown(f"<div style='padding-top: 8px;'>✅ Last check: {time_ago}m ago</div>", unsafe_allow_html=True)
             else:
-                st.caption(f"✅ Checks every {AUTO_UPDATE_CONFIG['check_interval']//60}min")
+                st.markdown(f"<div style='padding-top: 8px;'>✅ Checks every {AUTO_UPDATE_CONFIG['check_interval']//60}min</div>", unsafe_allow_html=True)
         with col2:
-            # Use container to align button properly
-            st.write("")  # Add small spacing
             if st.button("🔍", help="Check for updates now", key="check_updates", use_container_width=True):
                 with st.spinner("Checking..."):
                     has_update, local, remote = check_for_github_updates()
