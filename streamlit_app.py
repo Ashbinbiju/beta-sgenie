@@ -3076,8 +3076,19 @@ def main():
                         # Display detailed trade setup
                         st.info(f"**📋 Analysis Reason**: {rec['reason']}")
                         
+                        # Check if this is a sell signal
+                        is_sell_signal = rec['signal'] in ['Sell', 'Strong Sell']
+                        
+                        if is_sell_signal:
+                            st.warning("⚠️ **SELL SIGNAL - NOT RECOMMENDED FOR LONG ENTRY**")
+                            st.error("🚫 This stock shows bearish signals. Avoid buying or consider exiting existing positions.")
+                        
                         # Trade setup details in expandable section
-                        with st.expander("📍 **Detailed Trade Setup**", expanded=True):
+                        expander_title = "📍 **Hypothetical Long Trade Setup**" if is_sell_signal else "📍 **Detailed Trade Setup**"
+                        with st.expander(expander_title, expanded=not is_sell_signal):
+                            if is_sell_signal:
+                                st.warning("⚠️ Note: This shows what a long trade would look like, but it's NOT recommended due to bearish signals.")
+                            
                             tcol1, tcol2, tcol3 = st.columns(3)
                             
                             with tcol1:
