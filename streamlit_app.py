@@ -4312,10 +4312,46 @@ def main():
                 total_cost = trade_quantity * trade_price
                 st.info(f"💰 Total: ₹{total_cost:,.2f}")
                 
-                if trade_action == "BUY" and total_cost > account['cash_balance']:
-                    st.error(f"⚠️ Insufficient funds! Need ₹{total_cost:,.2f}, have ₹{account['cash_balance']:,.2f}")
+                # Validation checks before execution
+                can_execute = True
+                error_message = None
                 
-                if st.button(f"✅ Execute {trade_action}", type="primary", use_container_width=True):
+                if trade_action == "BUY":
+                    if total_cost > account['cash_balance']:
+                        can_execute = False
+                        error_message = f"⚠️ Insufficient funds! Need ₹{total_cost:,.2f}, have ₹{account['cash_balance']:,.2f}"
+                elif trade_action == "SELL":
+                    # Check if position exists
+                    existing_position = None
+                    for pos in portfolio:
+                        if pos['symbol'] == trade_symbol and pos['trading_style'] == trade_style.lower():
+                            existing_position = pos
+                            break
+                    
+                    if not existing_position:
+                        can_execute = False
+                        error_message = f"⚠️ No {trade_style} position found for {trade_symbol}. Buy first before selling!"
+                    elif existing_position['quantity'] < trade_quantity:
+                        can_execute = False
+                        error_message = f"⚠️ Insufficient shares! You have {existing_position['quantity']} shares, trying to sell {trade_quantity}"
+                    else:
+                        # Show position info for SELL
+                        avg_price = existing_position['avg_price']
+                        potential_pnl = (trade_price - avg_price) * trade_quantity
+                        potential_pnl_pct = ((trade_price - avg_price) / avg_price) * 100
+                        pnl_color = "🟢" if potential_pnl > 0 else "🔴" if potential_pnl < 0 else "⚪"
+                        
+                        st.info(f"""
+                        📊 **Position Details:**
+                        - Shares Available: {existing_position['quantity']}
+                        - Average Buy Price: ₹{avg_price:.2f}
+                        - Potential P&L: {pnl_color} ₹{potential_pnl:,.2f} ({potential_pnl_pct:+.2f}%)
+                        """)
+                
+                if error_message:
+                    st.error(error_message)
+                
+                if st.button(f"✅ Execute {trade_action}", type="primary", use_container_width=True, disabled=not can_execute):
                     with st.spinner(f"Executing {trade_action}..."):
                         success, message = execute_paper_trade(
                             trade_symbol,
