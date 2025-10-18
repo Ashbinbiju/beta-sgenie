@@ -345,6 +345,158 @@ def auto_update_check():
         st.session_state.local_commit_full = local  # Store full hash for changelog
         st.session_state.remote_commit_full = remote  # Store full hash for changelog
 
+# ============================================================================
+# NEWS SENTIMENT ANALYSIS
+# ============================================================================
+
+# Stock ID mapping for StockEdge API (will be expanded)
+STOCK_NEWS_IDS = {
+    "HDFCBANK-EQ": 5051,
+    "SBIN-EQ": 3045,
+    "RELIANCE-EQ": 2885,
+    "TCS-EQ": 3456,
+    "INFY-EQ": 1594,
+    # Add more as needed
+}
+
+def fetch_stock_news(symbol, page=1, page_size=10):
+    """Fetch news for a stock from StockEdge API"""
+    try:
+        # Get stock ID from mapping
+        stock_id = STOCK_NEWS_IDS.get(symbol)
+        if not stock_id:
+            logging.warning(f"No news ID mapping for {symbol}")
+            return []
+        
+        url = f"https://api.stockedge.com/Api/SecurityDashboardApi/GetNewsitemsForSecurity/{stock_id}"
+        params = {
+            "page": page,
+            "pageSize": page_size,
+            "lang": "en"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            news_data = response.json()
+            return news_data if isinstance(news_data, list) else []
+        else:
+            logging.error(f"News API error: {response.status_code}")
+            return []
+            
+    except Exception as e:
+        logging.error(f"Error fetching news: {e}")
+        return []
+
+def analyze_news_sentiment(description, caption="", details=""):
+    """
+    Analyze sentiment of news using keyword-based approach
+    Returns: sentiment (Positive/Negative/Neutral) and score (-100 to +100)
+    """
+    # Combine all text
+    text = f"{description} {caption} {details}".lower()
+    
+    # Positive keywords
+    positive_keywords = [
+        'profit', 'rise', 'surge', 'growth', 'gain', 'up', 'increase', 'higher',
+        'strong', 'beat', 'exceed', 'record', 'boost', 'upgrade', 'positive',
+        'rally', 'jump', 'soar', 'advance', 'outperform', 'improve', 'bullish'
+    ]
+    
+    # Negative keywords
+    negative_keywords = [
+        'loss', 'fall', 'decline', 'decrease', 'drop', 'down', 'lower', 'weak',
+        'miss', 'below', 'warning', 'concern', 'issue', 'problem', 'fraud',
+        'allegation', 'penalty', 'downgrade', 'bearish', 'slump', 'crash', 'npa'
+    ]
+    
+    # Count occurrences
+    positive_count = sum(text.count(word) for word in positive_keywords)
+    negative_count = sum(text.count(word) for word in negative_keywords)
+    
+    # Calculate sentiment score
+    total_count = positive_count + negative_count
+    
+    if total_count == 0:
+        return "Neutral", 0
+    
+    # Score from -100 to +100
+    sentiment_score = ((positive_count - negative_count) / total_count) * 100
+    
+    # Categorize sentiment
+    if sentiment_score > 20:
+        sentiment = "Positive"
+    elif sentiment_score < -20:
+        sentiment = "Negative"
+    else:
+        sentiment = "Neutral"
+    
+    return sentiment, round(sentiment_score, 1)
+
+def calculate_news_sentiment_score(symbol, days_lookback=30):
+    """
+    Calculate overall news sentiment score for a stock
+    Returns: score (0-100), sentiment breakdown, recent news
+    """
+    try:
+        news_items = fetch_stock_news(symbol, page=1, page_size=20)
+        
+        if not news_items:
+            return 50, {"positive": 0, "neutral": 0, "negative": 0}, []  # Neutral default
+        
+        # Filter news by date (last N days)
+        cutoff_date = datetime.now() - timedelta(days=days_lookback)
+        recent_news = []
+        
+        sentiments = {"Positive": 0, "Negative": 0, "Neutral": 0}
+        sentiment_scores = []
+        
+        for news in news_items:
+            try:
+                news_date = datetime.fromisoformat(news['Date'].replace('Z', '+00:00'))
+                
+                if news_date >= cutoff_date:
+                    description = news.get('Description', '')
+                    caption = news.get('Caption', '') or ''
+                    details = news.get('Details', '') or ''
+                    
+                    sentiment, score = analyze_news_sentiment(description, caption, details)
+                    
+                    sentiments[sentiment] += 1
+                    sentiment_scores.append(score)
+                    
+                    recent_news.append({
+                        'date': news_date.strftime('%Y-%m-%d'),
+                        'description': description,
+                        'sentiment': sentiment,
+                        'score': score
+                    })
+            except:
+                continue
+        
+        # Calculate overall score (0-100 scale)
+        if sentiment_scores:
+            # Average sentiment score (-100 to +100) converted to 0-100 scale
+            avg_sentiment = np.mean(sentiment_scores)
+            news_score = 50 + (avg_sentiment / 2)  # Convert to 0-100 scale
+            
+            # Apply recency weight (recent news more important)
+            news_score = np.clip(news_score, 0, 100)
+        else:
+            news_score = 50  # Neutral
+        
+        sentiment_breakdown = {
+            "positive": sentiments["Positive"],
+            "neutral": sentiments["Neutral"],
+            "negative": sentiments["Negative"]
+        }
+        
+        return round(news_score, 1), sentiment_breakdown, recent_news[:5]  # Return top 5 recent
+        
+    except Exception as e:
+        logging.error(f"Error calculating news sentiment: {e}")
+        return 50, {"positive": 0, "neutral": 0, "negative": 0}, []
+
 def get_bullish_sectors():
     """Get list of currently bullish sectors from market breadth"""
     try:
@@ -2134,6 +2286,23 @@ def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False
         else:
             score -= 1
     
+    # News Sentiment Analysis (±5)
+    news_adjustment = 0
+    if symbol:
+        try:
+            news_score, sentiment_breakdown, recent_news = calculate_news_sentiment_score(symbol, days_lookback=30)
+            # Convert 0-100 scale to ±5 points
+            # 50 is neutral, >50 is positive, <50 is negative
+            if news_score >= 50:
+                news_adjustment = ((news_score - 50) / 50) * 5  # 50-100 → 0 to +5
+            else:
+                news_adjustment = ((news_score - 50) / 50) * 5  # 0-50 → -5 to 0
+            
+            score += news_adjustment
+        except Exception as e:
+            # If news sentiment fails, continue without it
+            pass
+    
     # Market context adjustments (CORRECTLY IMPLEMENTED)
     confidence_adjustment = 0
     
@@ -2168,9 +2337,9 @@ def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False
     final_score = score + confidence_adjustment
     
     # Normalization with CORRECT range mapping + Division by Zero Safety
-    # Technical range: ~±13, Context: ±6 (normal) or ±3 (contrarian)
-    # Total expected range: ±19 (normal) or ±16 (contrarian)
-    max_expected = 19 if not contrarian_mode else 16
+    # Technical range: ~±13, News: ±5, Context: ±6 (normal) or ±3 (contrarian)
+    # Total expected range: ±24 (normal) or ±21 (contrarian)
+    max_expected = 24 if not contrarian_mode else 21
     
     if final_score >= 0:
         # Map [0, max_expected] → [50, 85] (conservative bullish)
@@ -3660,6 +3829,43 @@ def main():
                         rr_ratio = reward / risk if risk > 0 else 0
                         col5.metric("Risk:Reward", f"1:{rr_ratio:.2f}",
                                    delta="Good" if rr_ratio >= 2 else "Fair" if rr_ratio >= 1.5 else "Low")
+                        
+                        # News Sentiment Analysis Display
+                        try:
+                            news_score, sentiment_breakdown, recent_news = calculate_news_sentiment_score(rec['symbol'], days_lookback=30)
+                            
+                            # Display sentiment score with color coding
+                            if news_score >= 60:
+                                sentiment_color = "🟢"
+                                sentiment_label = "Positive"
+                            elif news_score >= 40:
+                                sentiment_color = "🟡"
+                                sentiment_label = "Neutral"
+                            else:
+                                sentiment_color = "🔴"
+                                sentiment_label = "Negative"
+                            
+                            st.markdown(f"### {sentiment_color} News Sentiment: {sentiment_label} ({news_score}/100)")
+                            
+                            # Sentiment breakdown
+                            scol1, scol2, scol3 = st.columns(3)
+                            scol1.metric("📈 Positive News", sentiment_breakdown['positive'])
+                            scol2.metric("😐 Neutral News", sentiment_breakdown['neutral'])
+                            scol3.metric("📉 Negative News", sentiment_breakdown['negative'])
+                            
+                            # Recent news in expandable section
+                            if recent_news:
+                                with st.expander(f"📰 Recent News ({len(recent_news)} items)", expanded=False):
+                                    for idx, news in enumerate(recent_news, 1):
+                                        sentiment_emoji = "🟢" if news['sentiment'] == "Positive" else "🔴" if news['sentiment'] == "Negative" else "⚪"
+                                        st.markdown(f"**{idx}. {sentiment_emoji} {news['caption']}**")
+                                        st.caption(f"📅 {news['date']} | Sentiment Score: {news['score']}")
+                                        if news.get('description'):
+                                            st.write(news['description'][:200] + "..." if len(news['description']) > 200 else news['description'])
+                                        st.markdown("---")
+                        except Exception as e:
+                            # If news sentiment fails, don't display but log it
+                            pass
                         
                         # Display detailed trade setup
                         st.info(f"**📋 Analysis Reason**: {rec['reason']}")
