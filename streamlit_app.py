@@ -356,10 +356,45 @@ STOCK_NEWS_IDS = {
     "RELIANCE-EQ": 2885,
     "TCS-EQ": 3456,
     "INFY-EQ": 1594,
+    
+    # Finance Sector
+    "BAJFINANCE-EQ": 6114,
+    "MUTHOOTFIN-EQ": 6118,  # Muthoot Capital Services Ltd.
+    "EMKAYGLOBAL-EQ": 6119,  # Emkay Global Financial Services Ltd.
+    "LKPFIN-EQ": 7729,  # LKP Finance Ltd.
+    "MONEYBOXX-EQ": 6120,  # Moneyboxx Finance Ltd.
+    "PRISMMED-EQ": 7745,  # Prism Medico and Pharmacy Ltd.
+    "KHOOBSURAT-EQ": 7751,  # Khoobsurat Ltd.
+    "INDIAINFOTECH-EQ": 6133,  # Indian Infotech & Software Ltd.
+    
+    # Auto Sector
+    "SMLISUZU-EQ": 6108,  # SML Mahindra Ltd.
+    "HINDMOTORS-EQ": 7730,  # Hindustan Hardy Ltd.
+    "CUMMINSIND-EQ": 6125,  # Cummins India Ltd.
+    
+    # IT Sector
+    "ROLTA-EQ": 6102,  # Rolta India Ltd.
+    "GENESYSINTL-EQ": 7738,  # Genesys International Corporation Ltd.
+    
+    # Chemicals
+    "CRESTCHEM-EQ": 6106,  # Crestchem Ltd.
+    "NACLIND-EQ": 6112,  # NACL Industries Ltd.
+    "ARIES-EQ": 6128,  # Aries Agro Ltd.
+    
+    # Pharma
+    "KILITCH-EQ": 7742,  # Kilitch Drugs (India) Ltd.
+    
+    # Consumer Durables/FMCG
+    "BUTTERFLY-EQ": 6113,  # Butterfly Gandhimathi Appliances Ltd.
+    "EVERESTIND-EQ": 6110,  # Everest Industries Ltd.
+    
+    # Ratings
+    "ICRA-EQ": 7733,  # ICRA Ltd.
+    
     # Add more as needed
 }
 
-def fetch_stock_news(symbol, page=1, page_size=10):
+def fetch_stock_news(symbol, page=1, page_size=15):
     """Fetch news for a stock from StockEdge API"""
     try:
         # Get stock ID from mapping
