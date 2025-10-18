@@ -25,6 +25,7 @@ import os
 import subprocess
 from dotenv import load_dotenv
 from dhanhq import dhanhq # New import for Dhan
+import urllib.parse  # For URL encoding
 
 # ============================================================================
 # CONFIGURATION & SETUP
@@ -91,6 +92,296 @@ AUTO_UPDATE_CONFIG = {
     "github_repo": "Ashbinbiju/beta-sgenie",
     "branch": "main"
 }
+
+# Alert & Notification Configuration
+ALERT_CONFIG = {
+    "telegram_enabled": False,  # Set to True and add bot token
+    "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
+    "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", ""),
+    "whatsapp_enabled": False,  # WhatsApp uses URL scheme for instant messaging
+    "alert_cooldown": 300,  # 5 minutes between same stock alerts
+}
+
+# Mobile UI Configuration
+MOBILE_CONFIG = {
+    "compact_mode": False,  # Auto-detect or manual toggle
+    "show_quick_actions": True,
+    "swipeable_charts": True,
+    "touch_friendly_buttons": True,
+}
+
+# ============================================================================
+# ALERT & NOTIFICATION SYSTEM
+# ============================================================================
+
+def send_telegram_alert(message):
+    """Send alert via Telegram Bot"""
+    if not ALERT_CONFIG["telegram_enabled"]:
+        return False, "Telegram alerts disabled"
+    
+    if not ALERT_CONFIG["telegram_bot_token"] or not ALERT_CONFIG["telegram_chat_id"]:
+        return False, "Telegram credentials not configured"
+    
+    try:
+        url = f"https://api.telegram.org/bot{ALERT_CONFIG['telegram_bot_token']}/sendMessage"
+        payload = {
+            "chat_id": ALERT_CONFIG["telegram_chat_id"],
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        
+        if response.status_code == 200:
+            return True, "Alert sent successfully"
+        else:
+            return False, f"Failed: {response.text}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+def generate_whatsapp_link(message):
+    """Generate WhatsApp share link"""
+    encoded_message = urllib.parse.quote(message)
+    return f"https://wa.me/?text={encoded_message}"
+
+def format_trade_alert(rec, alert_type="BUY"):
+    """Format trade recommendation as alert message"""
+    emoji = "🟢" if alert_type == "BUY" else "🔴" if alert_type == "SELL" else "⚠️"
+    
+    message = f"""
+{emoji} <b>{alert_type} SIGNAL - {rec['symbol']}</b>
+
+📊 Score: {rec['score']}/100
+📈 Signal: {rec['signal']}
+💹 Regime: {rec['regime']}
+
+💰 Entry: ₹{rec['buy_at']:.2f}
+🎯 Target: ₹{rec['target']:.2f} (+{((rec['target']-rec['buy_at'])/rec['buy_at']*100):.2f}%)
+🛑 Stop Loss: ₹{rec['stop_loss']:.2f} (-{((rec['buy_at']-rec['stop_loss'])/rec['buy_at']*100):.2f}%)
+
+⚖️ Risk:Reward = 1:{rec.get('rr_ratio', 0):.2f}
+
+📝 Reason: {rec['reason']}
+
+⏰ {datetime.now().strftime('%d %b %Y, %I:%M %p')}
+    """.strip()
+    
+    return message
+
+def format_scanner_alert(results_df):
+    """Format scanner results as alert message"""
+    if results_df.empty:
+        return "📊 Scanner completed - No opportunities found"
+    
+    top_picks = results_df.head(5)
+    message = f"""
+🎯 <b>Scanner Alert - {len(results_df)} Opportunities Found!</b>
+
+<b>Top 5 Picks:</b>
+"""
+    
+    for idx, row in top_picks.iterrows():
+        message += f"\n{idx+1}. {row['Symbol']} - Score: {row['Score']}/100"
+        message += f"\n   Entry: ₹{row['Buy At']:.2f} | Target: ₹{row['Target']:.2f}"
+    
+    message += f"\n\n⏰ {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
+    
+    return message
+
+def check_alert_cooldown(symbol, alert_history):
+    """Check if enough time has passed since last alert for this symbol"""
+    if symbol not in alert_history:
+        return True
+    
+    last_alert_time = alert_history[symbol]
+    time_since = (datetime.now() - last_alert_time).total_seconds()
+    
+    return time_since >= ALERT_CONFIG["alert_cooldown"]
+
+# ============================================================================
+# MOBILE RESPONSIVENESS FUNCTIONS
+# ============================================================================
+
+def inject_mobile_css():
+    """Inject custom CSS for mobile responsiveness"""
+    mobile_css = """
+    <style>
+    /* Mobile-First Responsive Design */
+    @media (max-width: 768px) {
+        /* Compact headers */
+        .stApp header {
+            padding: 0.5rem 1rem !important;
+        }
+        
+        /* Larger touch targets */
+        .stButton > button {
+            min-height: 48px !important;
+            font-size: 16px !important;
+            padding: 12px 24px !important;
+        }
+        
+        /* Compact metrics */
+        .stMetric {
+            padding: 8px !important;
+        }
+        
+        .stMetric label {
+            font-size: 14px !important;
+        }
+        
+        .stMetric .metric-value {
+            font-size: 24px !important;
+        }
+        
+        /* Full-width cards */
+        .element-container {
+            width: 100% !important;
+        }
+        
+        /* Compact sidebar */
+        section[data-testid="stSidebar"] {
+            width: 100% !important;
+            max-width: 320px !important;
+        }
+        
+        /* Swipeable charts */
+        .js-plotly-plot {
+            touch-action: pan-x pan-y !important;
+        }
+        
+        /* Compact tables */
+        .dataframe {
+            font-size: 12px !important;
+        }
+        
+        /* Stack columns on mobile */
+        .row-widget.stHorizontal {
+            flex-direction: column !important;
+        }
+    }
+    
+    /* Quick Action Buttons */
+    .quick-action-btn {
+        display: inline-block;
+        padding: 12px 20px;
+        margin: 5px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    
+    .quick-action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    }
+    
+    /* Alert badges */
+    .alert-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        margin: 2px;
+    }
+    
+    .alert-badge.success {
+        background-color: #10b981;
+        color: white;
+    }
+    
+    .alert-badge.warning {
+        background-color: #f59e0b;
+        color: white;
+    }
+    
+    .alert-badge.danger {
+        background-color: #ef4444;
+        color: white;
+    }
+    
+    /* Touch-friendly tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        padding: 12px 16px !important;
+        font-size: 14px !important;
+    }
+    </style>
+    """
+    st.markdown(mobile_css, unsafe_allow_html=True)
+
+def create_quick_action_buttons():
+    """Create mobile-friendly quick action buttons"""
+    st.markdown("### ⚡ Quick Actions")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📊 Scan Now", use_container_width=True, type="primary"):
+            st.session_state.quick_action = "scan"
+            return "scan"
+    
+    with col2:
+        if st.button("📈 Analyze", use_container_width=True):
+            st.session_state.quick_action = "analyze"
+            return "analyze"
+    
+    with col3:
+        if st.button("🔔 Alerts", use_container_width=True):
+            st.session_state.quick_action = "alerts"
+            return "alerts"
+    
+    return None
+
+def is_mobile_device():
+    """Detect if user is on mobile device (simple check)"""
+    # This is a placeholder - in production, you'd use JS injection or user-agent detection
+    # For now, we'll use session state toggle
+    return st.session_state.get('mobile_mode', False)
+
+def create_mobile_chart(data, rec):
+    """Create mobile-optimized chart with touch support"""
+    fig = go.Figure()
+    
+    # Simplified candlestick for mobile
+    fig.add_trace(go.Candlestick(
+        x=data.index,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name='Price',
+        increasing_line_color='#26a69a',
+        decreasing_line_color='#ef5350'
+    ))
+    
+    # Add key levels only
+    fig.add_hline(y=rec['buy_at'], line_color="white", line_width=2,
+                  annotation_text=f"Entry: ₹{rec['buy_at']:.2f}")
+    fig.add_hline(y=rec['target'], line_color="green", line_width=2, line_dash="dash",
+                  annotation_text=f"Target: ₹{rec['target']:.2f}")
+    fig.add_hline(y=rec['stop_loss'], line_color="red", line_width=2, line_dash="dash",
+                  annotation_text=f"SL: ₹{rec['stop_loss']:.2f}")
+    
+    # Mobile-optimized layout
+    fig.update_layout(
+        height=400,  # Smaller height for mobile
+        template="plotly_dark",
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=10, r=10, t=30, b=10),
+        showlegend=False,
+        dragmode='pan',  # Enable touch panning
+        hovermode='x unified'
+    )
+    
+    return fig
 
 def check_for_github_updates():
     """Check if there are new commits on GitHub"""
@@ -3000,7 +3291,16 @@ def display_intraday_chart(rec, data):
 
 def main():
     init_database()
-    st.set_page_config(page_title="StockGenie Pro", layout="wide")
+    st.set_page_config(page_title="StockGenie Pro", layout="wide", initial_sidebar_state="expanded")
+    
+    # Inject mobile CSS
+    inject_mobile_css()
+    
+    # Initialize session state for mobile mode
+    if 'mobile_mode' not in st.session_state:
+        st.session_state.mobile_mode = False
+    if 'alert_history' not in st.session_state:
+        st.session_state.alert_history = {}
     
     # Check for GitHub updates
     auto_update_check()
@@ -3029,6 +3329,10 @@ def main():
     
     # --- SIDEBAR CONFIGURATION ---
     st.sidebar.title("🔍 Configuration")
+    
+    # Mobile Mode Toggle
+    st.sidebar.checkbox("📱 Mobile Mode", value=st.session_state.mobile_mode, 
+                       key="mobile_mode", help="Optimize UI for mobile devices")
     
     api_provider = st.sidebar.selectbox("Data Provider", ["SmartAPI", "Dhan"], index=0)
     
@@ -3149,11 +3453,56 @@ def main():
                     st.sidebar.success("✅ Up to date!")
     else:
         st.sidebar.caption("⏸️ Auto-update disabled")
+    
+    # Alerts & Notifications section
+    st.sidebar.divider()
+    st.sidebar.subheader("🔔 Alerts & Notifications")
+    
+    with st.sidebar.expander("⚙️ Alert Settings"):
+        # Telegram settings
+        telegram_enabled = st.checkbox("📱 Enable Telegram Alerts", 
+                                      value=ALERT_CONFIG["telegram_enabled"])
+        if telegram_enabled:
+            ALERT_CONFIG["telegram_enabled"] = True
+            st.caption("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env file")
+            st.caption("Get bot token from @BotFather on Telegram")
+            if ALERT_CONFIG["telegram_bot_token"] and ALERT_CONFIG["telegram_chat_id"]:
+                st.success("✅ Telegram configured")
+            else:
+                st.warning("⚠️ Configure credentials in .env")
+        
+        # WhatsApp (uses share URL)
+        whatsapp_enabled = st.checkbox("💬 Enable WhatsApp Alerts",
+                                       value=ALERT_CONFIG["whatsapp_enabled"])
+        if whatsapp_enabled:
+            ALERT_CONFIG["whatsapp_enabled"] = True
+            st.caption("Opens WhatsApp with pre-filled message")
+    
+    # Test alert button
+    if st.sidebar.button("🧪 Test Alert", help="Send test notification"):
+        test_message = f"🧪 Test Alert from StockGenie Pro\n\n✅ Alerts are working!\n\n⏰ {datetime.now().strftime('%I:%M %p')}"
+        
+        if ALERT_CONFIG["telegram_enabled"]:
+            success, msg = send_telegram_alert(test_message)
+            if success:
+                st.sidebar.success("✅ Telegram alert sent!")
+            else:
+                st.sidebar.error(f"❌ {msg}")
+        
+        if ALERT_CONFIG["whatsapp_enabled"]:
+            whatsapp_link = generate_whatsapp_link(test_message)
+            st.sidebar.markdown(f'<a href="{whatsapp_link}" target="_blank" class="quick-action-btn">📱 Open WhatsApp</a>', 
+                              unsafe_allow_html=True)
 
     # --- SESSION STATE & TABS ---
     if 'scan_running' not in st.session_state: st.session_state.scan_running = False
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
+    
+    # Quick Actions (Mobile-Friendly)
+    if st.session_state.mobile_mode or MOBILE_CONFIG["show_quick_actions"]:
+        create_quick_action_buttons()
+        st.divider()
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "📜 History", "🌍 Market Dashboard"])
 
@@ -3228,8 +3577,51 @@ def main():
                         
                         # Display enhanced chart
                         st.markdown("---")
-                        fig = display_enhanced_chart(rec, data)
-                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Choose chart type based on mobile mode
+                        if st.session_state.mobile_mode:
+                            fig = create_mobile_chart(data, rec)
+                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        else:
+                            fig = display_enhanced_chart(rec, data)
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Alert buttons
+                        st.markdown("---")
+                        st.markdown("### 🔔 Send Alert")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            if st.button("📱 Telegram Alert", use_container_width=True):
+                                if ALERT_CONFIG["telegram_enabled"]:
+                                    alert_msg = format_trade_alert(rec, "BUY" if "Buy" in rec['signal'] else "SELL")
+                                    success, msg = send_telegram_alert(alert_msg)
+                                    if success:
+                                        st.success("✅ Alert sent to Telegram!")
+                                        st.session_state.alert_history[rec['symbol']] = datetime.now()
+                                    else:
+                                        st.error(f"❌ {msg}")
+                                else:
+                                    st.warning("⚠️ Enable Telegram in sidebar settings")
+                        
+                        with col2:
+                            if st.button("💬 WhatsApp Alert", use_container_width=True):
+                                if ALERT_CONFIG["whatsapp_enabled"]:
+                                    alert_msg = format_trade_alert(rec, "BUY" if "Buy" in rec['signal'] else "SELL")
+                                    whatsapp_link = generate_whatsapp_link(alert_msg)
+                                    st.markdown(f'<a href="{whatsapp_link}" target="_blank" class="quick-action-btn">📱 Open WhatsApp</a>', 
+                                              unsafe_allow_html=True)
+                                    st.session_state.alert_history[rec['symbol']] = datetime.now()
+                                else:
+                                    st.warning("⚠️ Enable WhatsApp in sidebar settings")
+                        
+                        with col3:
+                            if st.button("📋 Copy Alert", use_container_width=True):
+                                alert_msg = format_trade_alert(rec, "BUY" if "Buy" in rec['signal'] else "SELL")
+                                # Note: clipboard copy requires JS, showing message instead
+                                st.code(alert_msg, language=None)
+                                st.caption("👆 Copy the text above")
                             
                     else: st.warning("No data available for the selected stock.")
                 except Exception as e: st.error(f"❌ Error: {str(e)}")
