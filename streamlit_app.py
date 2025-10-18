@@ -22,6 +22,7 @@ from diskcache import Cache
 from SmartApi import SmartConnect
 import pyotp
 import os
+import subprocess
 from dotenv import load_dotenv
 from dhanhq import dhanhq # New import for Dhan
 
@@ -82,6 +83,73 @@ LIVE_SCAN_CONFIG = {
     "cooldown_period": 300,  # 5 minutes cooldown for same stock alert
     "alert_score_threshold": 65,  # Minimum score to trigger alert
 }
+
+# Auto-update configuration
+AUTO_UPDATE_CONFIG = {
+    "enabled": True,  # Set to False to disable auto-updates
+    "check_interval": 300,  # Check for updates every 5 minutes
+    "github_repo": "Ashbinbiju/beta-sgenie",
+    "branch": "main"
+}
+
+def check_for_github_updates():
+    """Check if there are new commits on GitHub"""
+    try:
+        # Get local commit hash
+        local_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], 
+            cwd="/workspaces/beta-sgenie"
+        ).decode('utf-8').strip()
+        
+        # Get remote commit hash
+        remote_commit = subprocess.check_output(
+            ["git", "ls-remote", "origin", "HEAD"], 
+            cwd="/workspaces/beta-sgenie"
+        ).decode('utf-8').split()[0]
+        
+        return local_commit != remote_commit, local_commit, remote_commit
+    except Exception as e:
+        logging.error(f"Error checking for updates: {e}")
+        return False, None, None
+
+def pull_github_updates():
+    """Pull latest changes from GitHub"""
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd="/workspaces/beta-sgenie",
+            capture_output=True,
+            text=True
+        )
+        return result.returncode == 0, result.stdout
+    except Exception as e:
+        logging.error(f"Error pulling updates: {e}")
+        return False, str(e)
+
+def auto_update_check():
+    """Check for updates and notify user"""
+    if not AUTO_UPDATE_CONFIG["enabled"]:
+        return
+    
+    # Check if enough time has passed since last check
+    if 'last_update_check' not in st.session_state:
+        st.session_state.last_update_check = datetime.now()
+    
+    time_since_check = (datetime.now() - st.session_state.last_update_check).total_seconds()
+    
+    if time_since_check < AUTO_UPDATE_CONFIG["check_interval"]:
+        return
+    
+    # Update last check time
+    st.session_state.last_update_check = datetime.now()
+    
+    # Check for updates
+    has_update, local, remote = check_for_github_updates()
+    
+    if has_update:
+        st.session_state.update_available = True
+        st.session_state.local_commit = local[:7]
+        st.session_state.remote_commit = remote[:7]
 
 def get_bullish_sectors():
     """Get list of currently bullish sectors from market breadth"""
@@ -2933,6 +3001,29 @@ def display_intraday_chart(rec, data):
 def main():
     init_database()
     st.set_page_config(page_title="StockGenie Pro", layout="wide")
+    
+    # Check for GitHub updates
+    auto_update_check()
+    
+    # Display update notification if available
+    if st.session_state.get('update_available', False):
+        update_banner = st.container()
+        with update_banner:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
+            with col2:
+                if st.button("🚀 Update Now", type="primary"):
+                    with st.spinner("Pulling latest changes..."):
+                        success, message = pull_github_updates()
+                        if success:
+                            st.success("✅ Updated! Reloading app...")
+                            st.session_state.update_available = False
+                            time_module.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Update failed: {message}")
+    
     st.title("📊 StockGenie Pro V2.9 ")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
     
@@ -3037,6 +3128,27 @@ def main():
         st.sidebar.success(f"✅ {api_provider}: {msg}")
     else:
         st.sidebar.error(f"❌ {api_provider}: {msg}")
+    
+    # Auto-update section in sidebar
+    st.sidebar.divider()
+    st.sidebar.subheader("🔄 Auto-Update")
+    
+    if AUTO_UPDATE_CONFIG["enabled"]:
+        col1, col2 = st.sidebar.columns([2, 1])
+        with col1:
+            st.caption(f"✅ Enabled (checks every {AUTO_UPDATE_CONFIG['check_interval']//60}min)")
+        with col2:
+            if st.button("🔍", help="Check for updates now"):
+                has_update, local, remote = check_for_github_updates()
+                if has_update:
+                    st.session_state.update_available = True
+                    st.session_state.local_commit = local[:7]
+                    st.session_state.remote_commit = remote[:7]
+                    st.rerun()
+                else:
+                    st.sidebar.success("✅ Up to date!")
+    else:
+        st.sidebar.caption("⏸️ Auto-update disabled")
 
     # --- SESSION STATE & TABS ---
     if 'scan_running' not in st.session_state: st.session_state.scan_running = False
