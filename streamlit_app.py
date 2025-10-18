@@ -2699,19 +2699,70 @@ def save_picks(results_df, trading_style):
     conn.commit()
     conn.close()
 
+def display_tradingview_chart(symbol, timeframe='D', height=600):
+    """
+    Display TradingView advanced chart widget
+    
+    Args:
+        symbol: Stock symbol (e.g., 'NSE:SBIN')
+        timeframe: Chart timeframe (D=Daily, 60=1hour, 15=15min, 5=5min)
+        height: Chart height in pixels
+    """
+    # Convert symbol format to TradingView format (NSE:SYMBOL)
+    # Remove -EQ suffix if present
+    clean_symbol = symbol.replace('-EQ', '').replace('-eq', '')
+    tv_symbol = f"NSE:{clean_symbol}"
+    
+    # Map timeframe to TradingView format
+    timeframe_map = {
+        '1d': 'D',
+        '5m': '5',
+        '15m': '15',
+        '30m': '30',
+        '1h': '60'
+    }
+    tv_timeframe = timeframe_map.get(timeframe, 'D')
+    
+    # TradingView widget HTML
+    tradingview_html = f"""
+    <!-- TradingView Widget BEGIN -->
+    <div class="tradingview-widget-container" style="height:{height}px;width:100%">
+      <div id="tradingview_chart" style="height:calc(100% - 32px);width:100%"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+        "width": "100%",
+        "height": "{height}",
+        "symbol": "{tv_symbol}",
+        "interval": "{tv_timeframe}",
+        "timezone": "Asia/Kolkata",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "hide_top_toolbar": false,
+        "hide_legend": false,
+        "save_image": false,
+        "container_id": "tradingview_chart",
+        "studies": [
+          "VWAP@tv-basicstudies",
+          "MACD@tv-basicstudies",
+          "RSI@tv-basicstudies"
+        ]
+      }}
+      );
+      </script>
+    </div>
+    <!-- TradingView Widget END -->
+    """
+    
+    return tradingview_html
+
 def display_intraday_chart(rec, data):
-    fig = go.Figure()
-    fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name='Price'))
-    if 'VWAP' in data.columns:
-        fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], mode='lines', name='VWAP', line=dict(color='blue', width=2)))
-    if rec.get('or_high'):
-        fig.add_hline(y=rec['or_high'], line_dash="dot", annotation_text="OR High", line_color="green")
-        fig.add_hline(y=rec['or_low'], line_dash="dot", annotation_text="OR Low", line_color="red")
-    fig.add_hline(y=rec['buy_at'], annotation_text="Entry", line_color="white")
-    fig.add_hline(y=rec['stop_loss'], line_dash="dash", annotation_text="Stop", line_color="red")
-    fig.add_hline(y=rec['target'], line_dash="dash", annotation_text="Target", line_color="green")
-    fig.update_layout(title=f"{rec['symbol']} - {rec['timeframe']} Intraday", height=600, xaxis_rangeslider_visible=False)
-    return fig
+    """Legacy function kept for backward compatibility - now returns TradingView chart"""
+    return display_tradingview_chart(rec['symbol'], rec.get('timeframe', '1d'), height=600)
 
 def main():
     init_database()
@@ -2846,8 +2897,9 @@ def main():
                         col4.metric("Current Price", f"₹{rec['current_price']}")
                         st.info(f"**Reason**: {rec['reason']}")
                         
-                        fig = display_intraday_chart(rec, data) if trading_style == "Intraday Trading" else go.Figure(go.Candlestick(x=rec['processed_data'].index, open=rec['processed_data']['Open'], high=rec['processed_data']['High'], low=rec['processed_data']['Low'], close=rec['processed_data']['Close']))
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Display TradingView chart
+                        tradingview_html = display_tradingview_chart(rec['symbol'], rec.get('timeframe', '1d'), height=600)
+                        st.components.v1.html(tradingview_html, height=650)
                     else: st.warning("No data available for the selected stock.")
                 except Exception as e: st.error(f"❌ Error: {str(e)}")
 
