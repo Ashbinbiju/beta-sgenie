@@ -1105,7 +1105,7 @@ def fetch_sector_performance():
         logging.warning(f"Sector performance API failed: {str(e)}")
         return None
 
-def fetch_block_deals(page=1, page_size=10):
+def fetch_block_deals(page=1, page_size=15):
     """Fetch latest block deals"""
     try:
         url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBlockDeals?page={page}&pageSize={page_size}&lang=en"
@@ -1123,7 +1123,7 @@ def fetch_block_deals(page=1, page_size=10):
         logging.error(f"Error fetching block deals: {e}")
         return []
 
-def fetch_bulk_deals(page=1, page_size=20):
+def fetch_bulk_deals(page=1, page_size=15):
     """Fetch latest bulk deals"""
     try:
         url = f"https://api.stockedge.com/Api/DealsDashboardApi/GetLatestBulkDeals?page={page}&pageSize={page_size}&lang=en"
@@ -4551,9 +4551,9 @@ def main():
         # Fetch deals
         with st.spinner("Fetching latest deals..."):
             if "Block" in deal_type:
-                deals = fetch_block_deals(page=1, page_size=50)
+                deals = fetch_block_deals(page=1, page_size=15)
             else:
-                deals = fetch_bulk_deals(page=1, page_size=50)
+                deals = fetch_bulk_deals(page=1, page_size=15)
         
         if deals:
             # Process and display deals
