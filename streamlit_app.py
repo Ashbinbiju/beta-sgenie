@@ -58,13 +58,18 @@ SESSION_EXPIRY = 1800  # 30 minutes for safety
 
 cache = Cache("stock_data_cache")
 
-# Scan configuration
+# Enhanced scan configuration for large stock lists
 SCAN_CONFIG = {
-    "batch_size": 5,
-    "delay_within_batch": 2,
-    "delay_between_batches": 5,
-    "session_refresh_interval": 20,
-    "max_stocks_per_scan": 1000
+    "batch_size": 8,  # Increased for better efficiency
+    "delay_within_batch": 1.5,  # Reduced delay for faster scanning
+    "delay_between_batches": 4,  # Slightly reduced
+    "session_refresh_interval": 25,  # More frequent refreshes
+    "max_stocks_per_scan": 1000,
+    "checkpoint_interval_small": 5,  # For <100 stocks
+    "checkpoint_interval_large": 3,  # For >100 stocks  
+    "memory_cleanup_interval": 20,  # Clean memory every 20 stocks
+    "max_consecutive_failures": 10,  # Stop if too many failures
+    "api_health_check_interval": 50,  # Check API health every 50 stocks
 }
 
 # Live scanner configuration
@@ -774,6 +779,35 @@ def clear_checkpoint():
             logging.info("Checkpoint cleared")
     except Exception as e:
         logging.error(f"Failed to clear checkpoint: {str(e)}")
+
+def get_scan_progress_info():
+    """Get detailed scan progress information"""
+    try:
+        if CHECKPOINT_FILE.exists():
+            with open(CHECKPOINT_FILE, 'rb') as f:
+                checkpoint = pickle.load(f)
+            
+            completed = len(checkpoint.get('completed_stocks', []))
+            successful = len(checkpoint.get('all_results', []))
+            failed = len(checkpoint.get('failed_stocks', []))
+            timestamp = checkpoint.get('timestamp', datetime.now())
+            age_minutes = (datetime.now() - timestamp).total_seconds() / 60
+            
+            return {
+                'exists': True,
+                'completed': completed,
+                'successful': successful,
+                'failed': failed,
+                'success_rate': (successful / completed * 100) if completed > 0 else 0,
+                'age_minutes': age_minutes,
+                'trading_style': checkpoint.get('trading_style', 'unknown'),
+                'timeframe': checkpoint.get('timeframe', 'unknown'),
+                'api_provider': checkpoint.get('api_provider', 'unknown')
+            }
+    except Exception as e:
+        logging.error(f"Error reading checkpoint info: {e}")
+    
+    return {'exists': False}
 
 # ============================================================================
 # MARKET BREADTH & SECTOR PERFORMANCE
@@ -2465,9 +2499,13 @@ def analyze_stock_batch(symbol, trading_style='swing', timeframe='1d', contraria
     return None
 
 def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', progress_callback=None, resume=False, contrarian_mode=False, api_provider="SmartAPI"):
-    """Analyze multiple stocks with resume and robust error handling."""
+    """Analyze multiple stocks with enhanced resume capability and robust error handling."""
+    global _global_smart_api, _global_dhan_client  # Declare globals at function start
+    
     all_results, failed_stocks, completed_stocks = [], [], []
     stock_list = list(dict.fromkeys(stock_list))
+    consecutive_failures = 0
+    max_consecutive_failures = 10  # Stop if 10 consecutive failures
     
     # Load checkpoint if resuming
     if resume and (checkpoint := load_checkpoint()):
@@ -2494,51 +2532,118 @@ def analyze_multiple_stocks(stock_list, trading_style='swing', timeframe='1d', p
         return pd.DataFrame(all_results) if all_results else pd.DataFrame()
     
     logging.info(f"Processing {len(remaining_stocks)} remaining stocks (out of {total_stocks} total)")
+    
+    # Pre-check API health before starting
+    api_healthy, api_msg = check_api_health(api_provider)
+    if not api_healthy:
+        logging.error(f"API not healthy before starting: {api_msg}")
+        # Try to reinitialize API
+        if api_provider == "SmartAPI":
+            global _global_smart_api
+            _global_smart_api = None
+        elif api_provider == "Dhan":
+            global _global_dhan_client  
+            _global_dhan_client = None
 
     try:
         for batch_idx in range(0, len(remaining_stocks), SCAN_CONFIG["batch_size"]):
             batch = remaining_stocks[batch_idx:batch_idx + SCAN_CONFIG["batch_size"]]
             
-            # Session refresh for SmartAPI
-            if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0 and api_provider == "SmartAPI":
-                logging.info("Refreshing SmartAPI session...")
-                global _global_smart_api
-                _global_smart_api = None
-                time_module.sleep(3)
+            # Enhanced session refresh and health check
+            if batch_idx > 0 and batch_idx % SCAN_CONFIG["session_refresh_interval"] == 0:
+                logging.info(f"🔄 Refreshing {api_provider} session after {batch_idx} stocks...")
+                
+                if api_provider == "SmartAPI":
+                    _global_smart_api = None
+                    time_module.sleep(3)
+                elif api_provider == "Dhan":
+                    _global_dhan_client = None
+                    time_module.sleep(2)
+                
+                # Verify API health after refresh
+                api_healthy, api_msg = check_api_health(api_provider)
+                if not api_healthy:
+                    logging.error(f"API health check failed after refresh: {api_msg}")
+                    # Force save checkpoint before potentially failing
+                    save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
+                    raise RuntimeError(f"API health check failed: {api_msg}")
 
             for i, symbol in enumerate(batch):
-                # Calculate progress based on total stocks
-                current_count = len(completed_stocks) + 1
-                progress_pct = min(current_count / total_stocks, 1.0)
-                
-                if progress_callback:
-                    progress_callback(progress_pct)
-                
-                logging.info(f"📊 Processing {current_count}/{total_stocks}: {symbol}")
-                
-                # Analyze stock
-                result = analyze_stock_batch(symbol, trading_style, timeframe, contrarian_mode, api_provider=api_provider)
-                
-                if result:
-                    result['Sector'] = assign_primary_sector(symbol, SECTORS)
-                    all_results.append(result)
-                    logging.info(f"✅ {symbol}: Score {result['Score']}")
-                else:
+                try:
+                    # Calculate progress based on total stocks
+                    current_count = len(completed_stocks) + 1
+                    progress_pct = min(current_count / total_stocks, 1.0)
+                    
+                    if progress_callback:
+                        progress_callback(progress_pct)
+                    
+                    logging.info(f"📊 Processing {current_count}/{total_stocks}: {symbol}")
+                    
+                    # Check for consecutive failures
+                    if consecutive_failures >= SCAN_CONFIG["max_consecutive_failures"]:
+                        logging.error(f"🛑 Stopping scan due to {consecutive_failures} consecutive failures")
+                        save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
+                        raise RuntimeError(f"Too many consecutive failures ({consecutive_failures})")
+                    
+                    # Analyze stock with enhanced error handling
+                    result = analyze_stock_batch(symbol, trading_style, timeframe, contrarian_mode, api_provider=api_provider)
+                    
+                    if result:
+                        result['Sector'] = assign_primary_sector(symbol, SECTORS) 
+                        all_results.append(result)
+                        consecutive_failures = 0  # Reset failure counter on success
+                        logging.info(f"✅ {symbol}: Score {result['Score']}")
+                    else:
+                        failed_stocks.append(symbol)
+                        consecutive_failures += 1
+                        logging.warning(f"❌ {symbol}: Failed to analyze (consecutive failures: {consecutive_failures})")
+                    
+                    completed_stocks.append(symbol)
+                    
+                    # Dynamic checkpoint saving based on scan size
+                    checkpoint_interval = SCAN_CONFIG["checkpoint_interval_large"] if len(remaining_stocks) > 100 else SCAN_CONFIG["checkpoint_interval_small"]
+                    if len(completed_stocks) % checkpoint_interval == 0:
+                        save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
+                        logging.info(f"💾 Checkpoint saved: {len(completed_stocks)}/{total_stocks} completed")
+                    
+                    # Memory cleanup for large scans
+                    if len(completed_stocks) % SCAN_CONFIG["memory_cleanup_interval"] == 0:
+                        gc.collect()
+                        logging.info("🧹 Memory cleanup performed")
+                    
+                    # Periodic API health check for large scans
+                    if len(completed_stocks) % SCAN_CONFIG["api_health_check_interval"] == 0 and len(remaining_stocks) > 50:
+                        api_healthy, api_msg = check_api_health(api_provider)
+                        if not api_healthy:
+                            logging.warning(f"⚠️ API health degraded at stock {len(completed_stocks)}: {api_msg}")
+                            # Try to recover by refreshing session
+                            if api_provider == "SmartAPI":
+                                _global_smart_api = None
+                            elif api_provider == "Dhan":
+                                _global_dhan_client = None
+                            time_module.sleep(2)
+                    
+                    # Adaptive delay based on consecutive failures
+                    base_delay = SCAN_CONFIG["delay_within_batch"]
+                    failure_delay = min(consecutive_failures * 0.5, 3)  # Max 3 seconds extra
+                    actual_delay = base_delay + failure_delay
+                    
+                    if i < len(batch) - 1:
+                        time_module.sleep(actual_delay)
+                    else:
+                        time_module.sleep(SCAN_CONFIG["delay_between_batches"] + failure_delay)
+                        
+                except Exception as stock_error:
+                    logging.error(f"💥 Critical error processing {symbol}: {stock_error}")
                     failed_stocks.append(symbol)
-                    logging.warning(f"❌ {symbol}: Failed to analyze")
-                
-                completed_stocks.append(symbol)
-                
-                # Save checkpoint every 5 stocks
-                if len(completed_stocks) % 5 == 0:
+                    completed_stocks.append(symbol)
+                    consecutive_failures += 1
+                    
+                    # Save checkpoint on critical errors
                     save_checkpoint(completed_stocks, all_results, failed_stocks, trading_style, timeframe, api_provider)
-                    logging.info(f"💾 Checkpoint saved: {len(completed_stocks)}/{total_stocks} completed")
-                
-                # Delay between stocks
-                if i < len(batch) - 1:
-                    time_module.sleep(SCAN_CONFIG["delay_within_batch"])
-                else:
-                    time_module.sleep(SCAN_CONFIG["delay_between_batches"])
+                    
+                    # Don't fail entire scan for individual stock errors
+                    continue
         
         # Clear checkpoint on successful completion
         clear_checkpoint()
@@ -2779,9 +2884,26 @@ def main():
         current_scan_params = {"trading_style": trading_style, "timeframe": timeframe, "contrarian_mode": contrarian_mode, "api_provider": api_provider}
         
         can_auto_resume = False
-        if (checkpoint := load_checkpoint()):
-            if checkpoint.get('api_provider') == api_provider and checkpoint.get('trading_style') == trading_style and checkpoint.get('timeframe') == timeframe:
+        progress_info = get_scan_progress_info()
+        
+        # Display checkpoint information if available
+        if progress_info['exists']:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Completed", progress_info['completed'])
+            with col2:
+                st.metric("Success Rate", f"{progress_info['success_rate']:.1f}%")
+            with col3:
+                st.metric("Age", f"{progress_info['age_minutes']:.1f}m")
+            
+            if (progress_info['api_provider'] == api_provider and 
+                progress_info['trading_style'] == trading_style and 
+                progress_info['timeframe'] == timeframe and
+                progress_info['age_minutes'] < 60):  # 1 hour expiry
                 can_auto_resume = True
+                st.success(f"✅ Can resume previous scan ({progress_info['completed']} stocks completed)")
+            else:
+                st.warning("⚠️ Previous scan found but parameters don't match or expired")
 
         if not st.session_state.scan_running:
             if st.button("🚀 Start / Resume Scan", type="primary", use_container_width=True):
@@ -2792,16 +2914,33 @@ def main():
                 st.rerun()
 
         if st.session_state.scan_running:
-            if st.button("⏹️ Cancel Scan", use_container_width=True):
-                st.session_state.scan_running = False
-                st.rerun()
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                if st.button("⏹️ Cancel Scan (Saves Progress)", use_container_width=True):
+                    st.session_state.scan_running = False
+                    st.info("🔄 Scan cancelled. Progress saved for resuming later.")
+                    st.rerun()
+            with col2:
+                if st.button("🗑️ Clear & Stop", use_container_width=True):
+                    st.session_state.scan_running = False
+                    clear_checkpoint()
+                    st.warning("🗑️ Scan stopped and progress cleared.")
+                    st.rerun()
             
             progress, status_text = st.progress(0), st.empty()
+            scan_info = st.empty()
+            
             try:
                 def update_progress(pct):
                     scan_count = min(len(stock_list), SCAN_CONFIG["max_stocks_per_scan"])
                     progress.progress(pct)
-                    status_text.text(f"📊 Scanning... {int(pct*100)}% ({int(pct*scan_count)}/{scan_count})")
+                    current_stock = int(pct * scan_count)
+                    status_text.text(f"📊 Scanning... {int(pct*100)}% ({current_stock}/{scan_count})")
+                    
+                    # Show additional scan info
+                    if current_stock > 0:
+                        eta_minutes = ((1 - pct) * scan_count * SCAN_CONFIG["delay_within_batch"]) / 60
+                        scan_info.info(f"⏱️ ETA: ~{eta_minutes:.0f} minutes | Batch size: {SCAN_CONFIG['batch_size']} | API: {api_provider}")
                 
                 results = analyze_multiple_stocks(stock_list, 'swing' if trading_style == "Swing Trading" else 'intraday', timeframe, update_progress, can_auto_resume, contrarian_mode, api_provider)
                 st.session_state.scan_results = results
