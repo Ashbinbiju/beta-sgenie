@@ -2758,46 +2758,177 @@ def display_tradingview_chart(symbol, timeframe='D', height=600):
     
     return tradingview_html
 
-def display_intraday_chart(rec, data):
-    """Display intraday chart with Plotly (reliable local data)"""
-    fig = go.Figure()
+def display_enhanced_chart(rec, data):
+    """Display enhanced trading chart with detailed levels and annotations"""
+    from plotly.subplots import make_subplots
+    
+    # Create subplots: candlestick + volume
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.7, 0.3],
+        subplot_titles=(f"{rec['symbol']} - {rec['timeframe']}", "Volume")
+    )
+    
+    # Candlestick chart
     fig.add_trace(go.Candlestick(
-        x=data.index, 
-        open=data['Open'], 
-        high=data['High'], 
-        low=data['Low'], 
-        close=data['Close'], 
-        name='Price'
-    ))
+        x=data.index,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name='Price',
+        increasing_line_color='#26a69a',
+        decreasing_line_color='#ef5350'
+    ), row=1, col=1)
+    
+    # Add EMAs if available
+    if 'EMA_20' in data.columns:
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data['EMA_20'],
+            mode='lines',
+            name='EMA 20',
+            line=dict(color='orange', width=1.5)
+        ), row=1, col=1)
+    
+    if 'EMA_50' in data.columns:
+        fig.add_trace(go.Scatter(
+            x=data.index,
+            y=data['EMA_50'],
+            mode='lines',
+            name='EMA 50',
+            line=dict(color='cyan', width=1.5)
+        ), row=1, col=1)
     
     # Add VWAP if available
     if 'VWAP' in data.columns:
         fig.add_trace(go.Scatter(
-            x=data.index, 
-            y=data['VWAP'], 
-            mode='lines', 
-            name='VWAP', 
-            line=dict(color='blue', width=2)
-        ))
+            x=data.index,
+            y=data['VWAP'],
+            mode='lines',
+            name='VWAP',
+            line=dict(color='yellow', width=2, dash='dash')
+        ), row=1, col=1)
+    
+    # Calculate percentages for annotations
+    entry_price = rec['buy_at']
+    stop_price = rec['stop_loss']
+    target_price = rec['target']
+    
+    stop_pct = abs((stop_price - entry_price) / entry_price * 100)
+    target_pct = abs((target_price - entry_price) / entry_price * 100)
+    risk_reward = target_pct / stop_pct if stop_pct > 0 else 0
     
     # Add Opening Range levels if available
     if rec.get('or_high'):
-        fig.add_hline(y=rec['or_high'], line_dash="dot", annotation_text="OR High", line_color="green")
-        fig.add_hline(y=rec['or_low'], line_dash="dot", annotation_text="OR Low", line_color="red")
+        fig.add_hline(
+            y=rec['or_high'],
+            line_dash="dot",
+            annotation_text=f"OR High: ₹{rec['or_high']:.2f}",
+            line_color="lightgreen",
+            line_width=1,
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=rec['or_low'],
+            line_dash="dot",
+            annotation_text=f"OR Low: ₹{rec['or_low']:.2f}",
+            line_color="lightcoral",
+            line_width=1,
+            row=1, col=1
+        )
     
-    # Add entry, stop loss, and target levels
-    fig.add_hline(y=rec['buy_at'], annotation_text="Entry", line_color="white")
-    fig.add_hline(y=rec['stop_loss'], line_dash="dash", annotation_text="Stop", line_color="red")
-    fig.add_hline(y=rec['target'], line_dash="dash", annotation_text="Target", line_color="green")
-    
-    fig.update_layout(
-        title=f"{rec['symbol']} - {rec['timeframe']} Chart", 
-        height=600, 
-        xaxis_rangeslider_visible=False,
-        template="plotly_dark"
+    # Add Entry Level
+    fig.add_hline(
+        y=entry_price,
+        annotation_text=f"Entry: ₹{entry_price:.2f}",
+        line_color="white",
+        line_width=2,
+        row=1, col=1
     )
     
+    # Add Stop Loss Level
+    fig.add_hline(
+        y=stop_price,
+        line_dash="dash",
+        annotation_text=f"Stop Loss: ₹{stop_price:.2f} (-{stop_pct:.2f}%)",
+        line_color="red",
+        line_width=2,
+        row=1, col=1
+    )
+    
+    # Add Target Level
+    fig.add_hline(
+        y=target_price,
+        line_dash="dash",
+        annotation_text=f"Target: ₹{target_price:.2f} (+{target_pct:.2f}%)",
+        line_color="green",
+        line_width=2,
+        row=1, col=1
+    )
+    
+    # Volume bars with color coding
+    colors = ['red' if data['Close'].iloc[i] < data['Open'].iloc[i] else 'green' 
+              for i in range(len(data))]
+    
+    fig.add_trace(go.Bar(
+        x=data.index,
+        y=data['Volume'],
+        name='Volume',
+        marker_color=colors,
+        showlegend=False
+    ), row=2, col=1)
+    
+    # Add annotation box with trade details
+    annotation_text = (
+        f"<b>Trade Setup</b><br>"
+        f"Signal: {rec['signal']}<br>"
+        f"Score: {rec['score']}/100<br>"
+        f"Risk: {stop_pct:.2f}%<br>"
+        f"Reward: {target_pct:.2f}%<br>"
+        f"R:R = 1:{risk_reward:.2f}"
+    )
+    
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=0.02, y=0.98,
+        xanchor='left', yanchor='top',
+        text=annotation_text,
+        showarrow=False,
+        font=dict(size=11, color="white"),
+        align="left",
+        bgcolor="rgba(0,0,0,0.6)",
+        bordercolor="white",
+        borderwidth=1,
+        borderpad=8
+    )
+    
+    # Update layout
+    fig.update_layout(
+        height=800,
+        template="plotly_dark",
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        hovermode='x unified'
+    )
+    
+    fig.update_xaxes(rangeslider_visible=False, row=1, col=1)
+    fig.update_yaxes(title_text="Price (₹)", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
+    
     return fig
+
+def display_intraday_chart(rec, data):
+    """Legacy function - redirects to enhanced chart"""
+    return display_enhanced_chart(rec, data)
 
 def main():
     init_database()
