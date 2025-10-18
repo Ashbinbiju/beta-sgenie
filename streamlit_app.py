@@ -95,10 +95,13 @@ AUTO_UPDATE_CONFIG = {
 def check_for_github_updates():
     """Check if there are new commits on GitHub"""
     try:
+        # Get the directory of the current script dynamically
+        repo_path = os.path.dirname(os.path.abspath(__file__))
+        
         # First, fetch the latest changes from remote (without merging)
         fetch_result = subprocess.run(
             ["git", "fetch", "origin", "main"],
-            cwd="/workspaces/beta-sgenie",
+            cwd=repo_path,
             capture_output=True,
             text=True,
             timeout=10
@@ -110,14 +113,14 @@ def check_for_github_updates():
         # Get local commit hash
         local_commit = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], 
-            cwd="/workspaces/beta-sgenie",
+            cwd=repo_path,
             timeout=5
         ).decode('utf-8').strip()
         
         # Get remote commit hash (after fetch)
         remote_commit = subprocess.check_output(
             ["git", "rev-parse", "origin/main"], 
-            cwd="/workspaces/beta-sgenie",
+            cwd=repo_path,
             timeout=5
         ).decode('utf-8').strip()
         
@@ -139,10 +142,13 @@ def check_for_github_updates():
 def pull_github_updates():
     """Pull latest changes from GitHub"""
     try:
+        # Get the directory of the current script dynamically
+        repo_path = os.path.dirname(os.path.abspath(__file__))
+        
         # Pull latest changes
         result = subprocess.run(
             ["git", "pull", "origin", "main"],
-            cwd="/workspaces/beta-sgenie",
+            cwd=repo_path,
             capture_output=True,
             text=True,
             timeout=30
