@@ -345,358 +345,6 @@ def auto_update_check():
         st.session_state.local_commit_full = local  # Store full hash for changelog
         st.session_state.remote_commit_full = remote  # Store full hash for changelog
 
-# ============================================================================
-# NEWS SENTIMENT ANALYSIS
-# ============================================================================
-
-# Stock ID mapping for StockEdge API (will be expanded)
-STOCK_NEWS_IDS = {
-    "HDFCBANK-EQ": 5051,
-    "SBIN-EQ": 3045,
-    "RELIANCE-EQ": 2885,
-    "TCS-EQ": 3456,
-    "INFY-EQ": 1594,
-    
-    # Finance Sector
-    "BAJFINANCE-EQ": 6114,
-    "MUTHOOTFIN-EQ": 6118,  # Muthoot Capital Services Ltd.
-    "EMKAYGLOBAL-EQ": 6119,  # Emkay Global Financial Services Ltd.
-    "LKPFIN-EQ": 7729,  # LKP Finance Ltd.
-    "MONEYBOXX-EQ": 6120,  # Moneyboxx Finance Ltd.
-    "PRISMMED-EQ": 7745,  # Prism Medico and Pharmacy Ltd.
-    "KHOOBSURAT-EQ": 7751,  # Khoobsurat Ltd.
-    "INDIAINFOTECH-EQ": 6133,  # Indian Infotech & Software Ltd.
-    
-    # Auto Sector
-    "SMLISUZU-EQ": 6108,  # SML Mahindra Ltd.
-    "HINDMOTORS-EQ": 7730,  # Hindustan Hardy Ltd.
-    "CUMMINSIND-EQ": 6125,  # Cummins India Ltd.
-    
-    # IT Sector
-    "ROLTA-EQ": 6102,  # Rolta India Ltd.
-    "GENESYSINTL-EQ": 7738,  # Genesys International Corporation Ltd.
-    
-    # Chemicals
-    "CRESTCHEM-EQ": 6106,  # Crestchem Ltd.
-    "NACLIND-EQ": 6112,  # NACL Industries Ltd.
-    "ARIES-EQ": 6128,  # Aries Agro Ltd.
-    
-    # Pharma
-    "KILITCH-EQ": 7742,  # Kilitch Drugs (India) Ltd.
-    
-    # Consumer Durables/FMCG
-    "BUTTERFLY-EQ": 6113,  # Butterfly Gandhimathi Appliances Ltd.
-    "EVERESTIND-EQ": 6110,  # Everest Industries Ltd.
-    "ORICON-EQ": 7744,  # Oricon Enterprises Ltd.
-    "PRIMAAGRO-EQ": 6121,  # Prima Agro Ltd.
-    "KHAITAN-EQ": 7748,  # Khaitan (India) Ltd.
-    "PRIMAIND-EQ": 7728,  # Prima Industries Ltd.
-    "RAJOIL-EQ": 6109,  # Raj Oil Mills Ltd.
-    
-    # Iron & Steel
-    "GALLISPAT-EQ": 6122,  # Gallantt Ispat Ltd.
-    "WELSPUNSPEC-EQ": 7750,  # Welspun Specialty Solutions Ltd.
-    
-    # Capital Goods
-    "KPTINDUSTRIES-EQ": 7749,  # KPT Industries Ltd.
-    "ACE-EQ": 7752,  # Action Construction Equipment Ltd.
-    "KIRLOSBROS-EQ": 7753,  # Kirloskar Brothers Ltd.
-    
-    # Construction Materials
-    "RESTILE-EQ": 6126,  # Restile Ceramics Ltd.
-    "NCLIND-EQ": 7754,  # NCL Industries Ltd.
-    
-    # Realty
-    "TIRUPATI-EQ": 6123,  # Tirupati Sarjan Ltd.
-    "HAMPTONSKY-EQ": 6130,  # Hampton Sky Realty Ltd.
-    "AJMERA-EQ": 6127,  # Ajmera Realty & Infra India Ltd.
-    
-    # Power
-    "WAAREERENEW-EQ": 6131,  # Waaree Renewable Technologies Ltd.
-    "NAVA-EQ": 7731,  # Nava Ltd.
-    "KARMAENG-EQ": 7734,  # Karma Energy Ltd.
-    "NTPC-EQ": 7760,  # NTPC Ltd.
-    "ENERGYDEV-EQ": 6156,  # Energy Development Company Ltd.
-    
-    # Textile
-    "KIRANSYNTEX-EQ": 6104,  # Kiran Syntex Ltd.
-    "RUDRAECO-EQ": 7726,  # Rudra Ecovation Ltd.
-    "FIBERWEB-EQ": 6115,  # Fiberweb (India) Ltd.
-    "RAJAPALAYAM-EQ": 6117,  # Rajapalayam Mills Ltd.
-    "UNITEDTEXT-EQ": 7740,  # United Textiles Ltd.
-    "RUBYMILLS-EQ": 6137,  # The Ruby Mills Ltd.
-    "SAMBANDAMSPG-EQ": 6147,  # Sambandam Spinning Mills Ltd.
-    "GTNTEX-EQ": 6144,  # GTN Textiles Ltd.
-    "SRIRAMMILL-EQ": 6157,  # Sri Ramakrishna Mills (Coimbatore) Ltd.
-    "SVPGLOBAL-EQ": 6162,  # SVP Global Textiles Ltd.
-    
-    # Finance (Additional)
-    "DELPHIWORLD-EQ": 7737,  # Delphi World Money Ltd.
-    "PROFINCAP-EQ": 7757,  # Pro Fin Capital Services Ltd.
-    "FINKURVE-EQ": 7763,  # Finkurve Financial Services Ltd.
-    "KREON-EQ": 6140,  # Kreon Finnancial Services Ltd.
-    "MAHAN-EQ": 7766,  # Mahan Industries Ltd.
-    "SAKTHIFIN-EQ": 6142,  # Sakthi Finance Ltd.
-    "TFCI-EQ": 6149,  # Tourism Finance Corporation Of India Ltd.
-    "SAVANIFIN-EQ": 6148,  # Savani Financials Ltd.
-    "MRUGESH-EQ": 7778,  # Mrugesh Trading Ltd.
-    "SUGALDAMANI-EQ": 6166,  # Sugal & Damani Share Brokers Ltd.
-    "VISAGAR-EQ": 6167,  # Visagar Financial Services Ltd.
-    "MCX-EQ": 7802,  # Multi Commodity Exchange Of India Ltd.
-    
-    # Pharma (Additional)
-    "LINKPHARMA-EQ": 6143,  # Link Pharma Chem Ltd.
-    "CRESANTOGLOBAL-EQ": 7788,  # Cresanto Global Ltd.
-    "GUFICBIO-EQ": 7792,  # Gufic Biosciences Ltd.
-    "SYNCOMF-EQ": 6178,  # Syncom Formulations (India) Ltd.
-    
-    # Chemicals (Additional)
-    "VIVIDGLOBAL-EQ": 7773,  # Vivid Global Industries Ltd.
-    "KHAITANCHEM-EQ": 7800,  # Khaitan Chemicals & Fertilizers Ltd.
-    "DICINDIA-EQ": 6145,  # DIC India Ltd.
-    "MYSOREPETRO-EQ": 7786,  # Mysore Petro Chemicals Ltd.
-    
-    # Auto (Additional)
-    "EXIDEIND-EQ": 6139,  # Exide Industries Ltd.
-    "GSAUTOINT-EQ": 7769,  # GS Auto International Ltd.
-    "PANAMAPETRO-EQ": 6150,  # Panama Petrochem Ltd.
-    "FIEMIND-EQ": 7776,  # Fiem Industries Ltd.
-    "HINDCOMPOS-EQ": 6171,  # Hindustan Composites Ltd.
-    
-    # IT (Additional)
-    "ADROITINFO-EQ": 7772,  # Adroit Infotech Ltd.
-    "ECLERX-EQ": 7779,  # eClerx Services Ltd.
-    "FGIL-EQ": 7781,  # Fourth Generation Information Systems Ltd.
-    "ERPSOFT-EQ": 6161,  # ERP Soft Systems Ltd.
-    "HITKITGLOBAL-EQ": 6165,  # Hit Kit Global Solutions Ltd.
-    "DANLAWTECH-EQ": 6170,  # Danlaw Technologies India Ltd.
-    
-    # Construction Materials (Additional)
-    "CERASANITARY-EQ": 7782,  # Cera Sanitaryware Ltd.
-    "GLITTEKGRAN-EQ": 7787,  # Glittek Granites Ltd.
-    "NEELKANTH-EQ": 7789,  # Neelkanth Rockminerals Ltd.
-    
-    # Paper
-    "TRIDEVINFRA-EQ": 7727,  # Tridev InfraEstates Ltd.
-    "STARPAPER-EQ": 7759,  # Star Paper Mills Ltd.
-    "SOMAPAPER-EQ": 7775,  # Soma Papers & Industries Ltd.
-    "NRAGARWAL-EQ": 7785,  # NR Agarwal Industries Ltd.
-    
-    # Plastic Products
-    "CROPSTER-EQ": 6105,  # Cropster Agro Ltd.
-    "KKALPANA-EQ": 6136,  # Kkalpana lndustries (India) Ltd.
-    "NAHARPOLY-EQ": 6160,  # Nahar Poly Films Ltd.
-    "PREMIERPOLY-EQ": 6168,  # Premier Polyfilm Ltd.
-    "NILKAMAL-EQ": 6169,  # Nilkamal Ltd.
-    
-    # FMCG (Additional)
-    "VIRATCRANE-EQ": 6111,  # Virat Crane Industries Ltd.
-    "LAKESHORE-EQ": 7762,  # Lake Shore Realty Ltd.
-    "SARUP-EQ": 6151,  # Sarup Industries Ltd.
-    
-    # Capital Goods (Additional)
-    "MODISON-EQ": 7774,  # Modison Ltd.
-    "RHIMAGNESITA-EQ": 7798,  # RHI Magnesita India Ltd.
-    "SHRADDHAPRIME-EQ": 6175,  # Shraddha Prime Projects Ltd.
-    
-    # Iron & Steel (Additional)
-    "MUKAND-EQ": 6146,  # Mukand Ltd.
-    
-    # Logistics
-    "LYNXMACH-EQ": 7755,  # Lynx Machinery & Commercials Ltd.
-    "SNOWMAN-EQ": 7764,  # Snowman Logistics Ltd.
-    "ADANIPORTS-EQ": 7794,  # Adani Ports and Special Economic Zone Ltd.
-    
-    # Electricals
-    "RIRPOWER-EQ": 6141,  # RIR Power Electronics Ltd.
-    "SWITCHTECH-EQ": 6173,  # Switching Technologies Gunther Ltd.
-    
-    # Non-Ferrous Metals
-    "SOUTHERNMAG-EQ": 6164,  # Southern Magnesium & Chemicals Ltd.
-    
-    # Ratings
-    "ICRA-EQ": 7733,  # ICRA Ltd.
-    
-    # Hospitality
-    "ASHRAMONLINE-EQ": 6103,  # Ashram Online.Com Ltd.
-    "JINDALHOTELS-EQ": 7735,  # Jindal Hotels Ltd.
-    "UPHOTELS-EQ": 7736,  # UP Hotels Ltd.
-    "HSINDIA-EQ": 7747,  # HS India Ltd.
-    
-    # Mining
-    "ORISSAMINERAL-EQ": 7732,  # The Orissa Minerals Development Company Ltd.
-    
-    # Industrial Gases & Fuels
-    "NATIONALOXY-EQ": 6116,  # National Oxygen Ltd.
-    
-    # Agriculture
-    "GOODRICKE-EQ": 6132,  # Goodricke Group Ltd.
-    "BAJAJHIND-EQ": 6154,  # Bajaj Hindusthan Sugar Ltd.
-    "SAMPANNUTP-EQ": 7768,  # Sampann Utpadan India Ltd.
-    
-    # Infrastructure
-    "DUCON-EQ": 7790,  # Ducon Infratechnologies Ltd.
-    
-    # Oil Exploration
-    "JINDALDRILL-EQ": 7793,  # Jindal Drilling & Industries Ltd.
-    "RUDRAECO-EQ": 7726,  # Rudra Ecovation Ltd.
-    
-    # Plastic Products
-    "CROPSTER-EQ": 6105,  # Cropster Agro Ltd.
-    
-    # Paper
-    "TRIDEVINFRA-EQ": 7727,  # Tridev InfraEstates Ltd.
-    
-    # Hospitality
-    "ASHRAMONLINE-EQ": 6103,  # Ashram Online.Com Ltd.
-    
-    # Mining
-    "OMDC-EQ": 7732,  # The Orissa Minerals Development Company Ltd.
-    
-    # Ratings
-    "ICRA-EQ": 7733,  # ICRA Ltd.
-    
-    # Add more as needed
-}
-
-def fetch_stock_news(symbol, page=1, page_size=15):
-    """Fetch news for a stock from StockEdge API"""
-    try:
-        # Get stock ID from mapping
-        stock_id = STOCK_NEWS_IDS.get(symbol)
-        if not stock_id:
-            logging.warning(f"No news ID mapping for {symbol}")
-            return []
-        
-        url = f"https://api.stockedge.com/Api/SecurityDashboardApi/GetNewsitemsForSecurity/{stock_id}"
-        params = {
-            "page": page,
-            "pageSize": page_size,
-            "lang": "en"
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            news_data = response.json()
-            return news_data if isinstance(news_data, list) else []
-        else:
-            logging.error(f"News API error: {response.status_code}")
-            return []
-            
-    except Exception as e:
-        logging.error(f"Error fetching news: {e}")
-        return []
-
-def analyze_news_sentiment(description, caption="", details=""):
-    """
-    Analyze sentiment of news using keyword-based approach
-    Returns: sentiment (Positive/Negative/Neutral) and score (-100 to +100)
-    """
-    # Combine all text
-    text = f"{description} {caption} {details}".lower()
-    
-    # Positive keywords
-    positive_keywords = [
-        'profit', 'rise', 'surge', 'growth', 'gain', 'up', 'increase', 'higher',
-        'strong', 'beat', 'exceed', 'record', 'boost', 'upgrade', 'positive',
-        'rally', 'jump', 'soar', 'advance', 'outperform', 'improve', 'bullish'
-    ]
-    
-    # Negative keywords
-    negative_keywords = [
-        'loss', 'fall', 'decline', 'decrease', 'drop', 'down', 'lower', 'weak',
-        'miss', 'below', 'warning', 'concern', 'issue', 'problem', 'fraud',
-        'allegation', 'penalty', 'downgrade', 'bearish', 'slump', 'crash', 'npa'
-    ]
-    
-    # Count occurrences
-    positive_count = sum(text.count(word) for word in positive_keywords)
-    negative_count = sum(text.count(word) for word in negative_keywords)
-    
-    # Calculate sentiment score
-    total_count = positive_count + negative_count
-    
-    if total_count == 0:
-        return "Neutral", 0
-    
-    # Score from -100 to +100
-    sentiment_score = ((positive_count - negative_count) / total_count) * 100
-    
-    # Categorize sentiment
-    if sentiment_score > 20:
-        sentiment = "Positive"
-    elif sentiment_score < -20:
-        sentiment = "Negative"
-    else:
-        sentiment = "Neutral"
-    
-    return sentiment, round(sentiment_score, 1)
-
-def calculate_news_sentiment_score(symbol, days_lookback=30):
-    """
-    Calculate overall news sentiment score for a stock
-    Returns: score (0-100), sentiment breakdown, recent news
-    """
-    try:
-        news_items = fetch_stock_news(symbol, page=1, page_size=20)
-        
-        if not news_items:
-            return 50, {"positive": 0, "neutral": 0, "negative": 0}, []  # Neutral default
-        
-        # Filter news by date (last N days)
-        cutoff_date = datetime.now() - timedelta(days=days_lookback)
-        recent_news = []
-        
-        sentiments = {"Positive": 0, "Negative": 0, "Neutral": 0}
-        sentiment_scores = []
-        
-        for news in news_items:
-            try:
-                news_date = datetime.fromisoformat(news['Date'].replace('Z', '+00:00'))
-                
-                if news_date >= cutoff_date:
-                    description = news.get('Description', '')
-                    caption = news.get('Caption', '') or ''
-                    details = news.get('Details', '') or ''
-                    
-                    sentiment, score = analyze_news_sentiment(description, caption, details)
-                    
-                    sentiments[sentiment] += 1
-                    sentiment_scores.append(score)
-                    
-                    recent_news.append({
-                        'date': news_date.strftime('%Y-%m-%d'),
-                        'description': description,
-                        'sentiment': sentiment,
-                        'score': score
-                    })
-            except:
-                continue
-        
-        # Calculate overall score (0-100 scale)
-        if sentiment_scores:
-            # Average sentiment score (-100 to +100) converted to 0-100 scale
-            avg_sentiment = np.mean(sentiment_scores)
-            news_score = 50 + (avg_sentiment / 2)  # Convert to 0-100 scale
-            
-            # Apply recency weight (recent news more important)
-            news_score = np.clip(news_score, 0, 100)
-        else:
-            news_score = 50  # Neutral
-        
-        sentiment_breakdown = {
-            "positive": sentiments["Positive"],
-            "neutral": sentiments["Neutral"],
-            "negative": sentiments["Negative"]
-        }
-        
-        return round(news_score, 1), sentiment_breakdown, recent_news[:5]  # Return top 5 recent
-        
-    except Exception as e:
-        logging.error(f"Error calculating news sentiment: {e}")
-        return 50, {"positive": 0, "neutral": 0, "negative": 0}, []
-
 def get_bullish_sectors():
     """Get list of currently bullish sectors from market breadth"""
     try:
@@ -2486,23 +2134,6 @@ def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False
         else:
             score -= 1
     
-    # News Sentiment Analysis (±5)
-    news_adjustment = 0
-    if symbol:
-        try:
-            news_score, sentiment_breakdown, recent_news = calculate_news_sentiment_score(symbol, days_lookback=30)
-            # Convert 0-100 scale to ±5 points
-            # 50 is neutral, >50 is positive, <50 is negative
-            if news_score >= 50:
-                news_adjustment = ((news_score - 50) / 50) * 5  # 50-100 → 0 to +5
-            else:
-                news_adjustment = ((news_score - 50) / 50) * 5  # 0-50 → -5 to 0
-            
-            score += news_adjustment
-        except Exception as e:
-            # If news sentiment fails, continue without it
-            pass
-    
     # Market context adjustments (CORRECTLY IMPLEMENTED)
     confidence_adjustment = 0
     
@@ -2537,9 +2168,9 @@ def calculate_swing_score(df, symbol=None, timeframe='1d', contrarian_mode=False
     final_score = score + confidence_adjustment
     
     # Normalization with CORRECT range mapping + Division by Zero Safety
-    # Technical range: ~±13, News: ±5, Context: ±6 (normal) or ±3 (contrarian)
-    # Total expected range: ±24 (normal) or ±21 (contrarian)
-    max_expected = 24 if not contrarian_mode else 21
+    # Technical range: ~±13, Context: ±6 (normal) or ±3 (contrarian)
+    # Total expected range: ±19 (normal) or ±16 (contrarian)
+    max_expected = 19 if not contrarian_mode else 16
     
     if final_score >= 0:
         # Map [0, max_expected] → [50, 85] (conservative bullish)
@@ -4001,7 +3632,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "📜 History", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -4029,43 +3660,6 @@ def main():
                         rr_ratio = reward / risk if risk > 0 else 0
                         col5.metric("Risk:Reward", f"1:{rr_ratio:.2f}",
                                    delta="Good" if rr_ratio >= 2 else "Fair" if rr_ratio >= 1.5 else "Low")
-                        
-                        # News Sentiment Analysis Display
-                        try:
-                            news_score, sentiment_breakdown, recent_news = calculate_news_sentiment_score(rec['symbol'], days_lookback=30)
-                            
-                            # Display sentiment score with color coding
-                            if news_score >= 60:
-                                sentiment_color = "🟢"
-                                sentiment_label = "Positive"
-                            elif news_score >= 40:
-                                sentiment_color = "🟡"
-                                sentiment_label = "Neutral"
-                            else:
-                                sentiment_color = "🔴"
-                                sentiment_label = "Negative"
-                            
-                            st.markdown(f"### {sentiment_color} News Sentiment: {sentiment_label} ({news_score}/100)")
-                            
-                            # Sentiment breakdown
-                            scol1, scol2, scol3 = st.columns(3)
-                            scol1.metric("📈 Positive News", sentiment_breakdown['positive'])
-                            scol2.metric("😐 Neutral News", sentiment_breakdown['neutral'])
-                            scol3.metric("📉 Negative News", sentiment_breakdown['negative'])
-                            
-                            # Recent news in expandable section
-                            if recent_news:
-                                with st.expander(f"📰 Recent News ({len(recent_news)} items)", expanded=False):
-                                    for idx, news in enumerate(recent_news, 1):
-                                        sentiment_emoji = "🟢" if news['sentiment'] == "Positive" else "🔴" if news['sentiment'] == "Negative" else "⚪"
-                                        st.markdown(f"**{idx}. {sentiment_emoji} {news['caption']}**")
-                                        st.caption(f"📅 {news['date']} | Sentiment Score: {news['score']}")
-                                        if news.get('description'):
-                                            st.write(news['description'][:200] + "..." if len(news['description']) > 200 else news['description'])
-                                        st.markdown("---")
-                        except Exception as e:
-                            # If news sentiment fails, don't display but log it
-                            pass
                         
                         # Display detailed trade setup
                         st.info(f"**📋 Analysis Reason**: {rec['reason']}")
@@ -4900,8 +4494,16 @@ def main():
                             else:
                                 st.error(message)
 
-    # --- MARKET DASHBOARD TAB ---
+    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
     with tab7:
+        try:
+            conn = sqlite3.connect('stock_picks.db')
+            history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
+            conn.close()
+            st.dataframe(history, use_container_width=True)
+        except Exception as e: st.error(f"❌ Database error: {e}")
+        
+    with tab8:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
