@@ -92,6 +92,101 @@ AUTO_UPDATE_CONFIG = {
     "branch": "main"
 }
 
+# Telegram configuration
+TELEGRAM_CONFIG = {
+    "enabled": os.getenv("TELEGRAM_ENABLED", "false").lower() == "true",
+    "bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
+    "chat_id": os.getenv("TELEGRAM_CHAT_ID", ""),
+    "alert_on_scan": True,  # Send alert when scan finds stocks
+    "alert_on_high_score": True,  # Send alert for scores >= 75
+    "alert_threshold": 75,  # Minimum score for individual alerts
+    "max_alerts_per_scan": 5,  # Maximum number of individual stock alerts per scan
+}
+
+def send_telegram_message(message, parse_mode="HTML"):
+    """Send message to Telegram"""
+    if not TELEGRAM_CONFIG["enabled"]:
+        return False
+    
+    if not TELEGRAM_CONFIG["bot_token"] or not TELEGRAM_CONFIG["chat_id"]:
+        logging.warning("Telegram bot token or chat ID not configured")
+        return False
+    
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_CONFIG['bot_token']}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CONFIG["chat_id"],
+            "text": message,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": True
+        }
+        
+        response = requests.post(url, json=payload, timeout=10)
+        
+        if response.status_code == 200:
+            logging.info("Telegram message sent successfully")
+            return True
+        else:
+            logging.error(f"Telegram API error: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logging.error(f"Error sending Telegram message: {e}")
+        return False
+
+def send_scan_results_alert(results_df, trading_style, scan_time=None):
+    """Send scan results summary to Telegram"""
+    if not TELEGRAM_CONFIG["enabled"] or not TELEGRAM_CONFIG["alert_on_scan"]:
+        return False
+    
+    if results_df.empty:
+        return False
+    
+    try:
+        scan_time = scan_time or datetime.now().strftime("%H:%M:%S")
+        
+        # Create summary message
+        message = f"🔍 <b>Stock Scanner Alert</b>\n\n"
+        message += f"⏰ Time: {scan_time}\n"
+        message += f"📊 Style: {trading_style}\n"
+        message += f"📈 Found: {len(results_df)} opportunities\n\n"
+        
+        # Add top 5 stocks
+        message += "<b>🏆 Top Picks:</b>\n"
+        for idx, row in results_df.head(5).iterrows():
+            score_emoji = "🟢" if row['Score'] >= 75 else "🟡" if row['Score'] >= 60 else "⚪"
+            message += f"{score_emoji} <b>{row['Symbol']}</b> - Score: {row['Score']}/100\n"
+            message += f"   Signal: {row['Signal']} | Price: ₹{row['Current Price']:.2f}\n"
+            message += f"   Target: ₹{row['Target']:.2f} | SL: ₹{row['Stop Loss']:.2f}\n\n"
+        
+        return send_telegram_message(message)
+        
+    except Exception as e:
+        logging.error(f"Error sending scan results alert: {e}")
+        return False
+
+def send_high_score_alert(stock_data):
+    """Send alert for individual high-scoring stock"""
+    if not TELEGRAM_CONFIG["enabled"] or not TELEGRAM_CONFIG["alert_on_high_score"]:
+        return False
+    
+    try:
+        message = f"🚨 <b>HIGH SCORE ALERT</b> 🚨\n\n"
+        message += f"📊 <b>{stock_data['Symbol']}</b>\n"
+        message += f"💯 Score: <b>{stock_data['Score']}/100</b>\n\n"
+        message += f"📈 Signal: {stock_data['Signal']}\n"
+        message += f"🎯 Regime: {stock_data['Regime']}\n\n"
+        message += f"💰 Current Price: ₹{stock_data['Current Price']:.2f}\n"
+        message += f"🎯 Target: ₹{stock_data['Target']:.2f}\n"
+        message += f"🛑 Stop Loss: ₹{stock_data['Stop Loss']:.2f}\n\n"
+        message += f"📝 Reason: {stock_data['Reason']}\n"
+        
+        return send_telegram_message(message)
+        
+    except Exception as e:
+        logging.error(f"Error sending high score alert: {e}")
+        return False
+
 def check_for_github_updates():
     """Check if there are new commits on GitHub"""
     try:
@@ -3175,6 +3270,50 @@ def main():
     else:
         st.sidebar.error(f"❌ {api_provider}: {msg}")
     
+    # Telegram alerts section
+    st.sidebar.divider()
+    st.sidebar.subheader("📱 Telegram Alerts")
+    
+    telegram_status = TELEGRAM_CONFIG["enabled"] and TELEGRAM_CONFIG["bot_token"] and TELEGRAM_CONFIG["chat_id"]
+    if telegram_status:
+        st.sidebar.success("✅ Telegram: Connected")
+        
+        # Alert preferences
+        with st.sidebar.expander("⚙️ Alert Settings"):
+            alert_on_scan = st.checkbox("Scan Summary", value=TELEGRAM_CONFIG["alert_on_scan"], help="Send summary when scan completes")
+            alert_on_high = st.checkbox("High Score Alerts", value=TELEGRAM_CONFIG["alert_on_high_score"], help="Alert for individual high-scoring stocks")
+            alert_threshold = st.slider("Alert Threshold", 60, 90, TELEGRAM_CONFIG["alert_threshold"], help="Minimum score for individual alerts")
+            
+            # Update config
+            TELEGRAM_CONFIG["alert_on_scan"] = alert_on_scan
+            TELEGRAM_CONFIG["alert_on_high_score"] = alert_on_high
+            TELEGRAM_CONFIG["alert_threshold"] = alert_threshold
+            
+            # Test button
+            if st.button("📤 Send Test Alert", use_container_width=True):
+                test_msg = f"🤖 <b>StockGenie Pro</b>\n\n✅ Telegram alerts are working!\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+                if send_telegram_message(test_msg):
+                    st.success("Test alert sent!")
+                else:
+                    st.error("Failed to send test alert")
+    else:
+        st.sidebar.warning("⚠️ Telegram: Not configured")
+        with st.sidebar.expander("ℹ️ Setup Instructions"):
+            st.markdown("""
+            **To enable Telegram alerts:**
+            
+            1. Create a bot with [@BotFather](https://t.me/botfather)
+            2. Get your bot token
+            3. Start a chat with your bot
+            4. Get your chat ID from [@userinfobot](https://t.me/userinfobot)
+            5. Add to Streamlit secrets:
+               ```
+               TELEGRAM_ENABLED = "true"
+               TELEGRAM_BOT_TOKEN = "your_token"
+               TELEGRAM_CHAT_ID = "your_chat_id"
+               ```
+            """)
+    
     # Auto-update section in sidebar
     st.sidebar.divider()
     st.sidebar.subheader("🔄 Auto-Update")
@@ -3397,6 +3536,21 @@ def main():
                 st.session_state.scan_results = results
                 st.session_state.scan_running = False
                 clear_checkpoint()
+                
+                # Send Telegram alert if enabled
+                if not results.empty and TELEGRAM_CONFIG["enabled"]:
+                    try:
+                        scan_time = datetime.now().strftime("%H:%M:%S")
+                        send_scan_results_alert(results, trading_style, scan_time)
+                        
+                        # Send individual alerts for very high scores
+                        high_score_stocks = results[results['Score'] >= TELEGRAM_CONFIG['alert_threshold']].head(TELEGRAM_CONFIG['max_alerts_per_scan'])
+                        for idx, stock in high_score_stocks.iterrows():
+                            send_high_score_alert(stock.to_dict())
+                            time_module.sleep(1)  # Small delay between alerts
+                    except Exception as e:
+                        logging.error(f"Error sending Telegram alerts: {e}")
+                
                 st.rerun()
             except Exception as e:
                 st.session_state.scan_running = False
