@@ -3,7 +3,7 @@ import numpy as np
 import ta
 import logging
 import streamlit as st
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from functools import wraps
 from tqdm import tqdm
 import plotly.graph_objects as go
@@ -4802,8 +4802,13 @@ def main():
                             pnl_pct_display = f"{pnl_pct:+.2f}%"
                             charges_display = f"₹{charges:.2f}" if charges > 0 else '₹0.00'
                         
+                        # Convert UTC timestamp to IST (UTC+5:30)
+                        utc_time = datetime.fromisoformat(trade['timestamp'].replace('Z', '+00:00'))
+                        ist_offset = timedelta(hours=5, minutes=30)
+                        ist_time = utc_time + ist_offset
+                        
                         trades_data.append({
-                            'Time': datetime.fromisoformat(trade['timestamp'].replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M'),
+                            'Time': ist_time.strftime('%Y-%m-%d %H:%M'),
                             'Symbol': trade['symbol'],
                             'Action': trade['action'],
                             'Qty': trade['quantity'],
