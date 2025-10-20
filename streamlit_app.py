@@ -3481,11 +3481,25 @@ def main():
         local_full = st.session_state.get('local_commit_full', st.session_state.get('local_commit'))
         remote_full = st.session_state.get('remote_commit_full', st.session_state.get('remote_commit'))
         
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
+        # Create a clean update banner
+        update_container = st.container()
+        with update_container:
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.info(f"🔄 **New version available!** Local: `{st.session_state.get('local_commit')}` → Remote: `{st.session_state.get('remote_commit')}`")
+            with col2:
+                if st.button("🚀 Update Now", type="primary", use_container_width=True, key="update_btn"):
+                    with st.spinner("Pulling latest changes..."):
+                        success, message = pull_github_updates()
+                        if success:
+                            st.success("✅ Updated! Reloading app...")
+                            st.session_state.update_available = False
+                            time_module.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Update failed: {message}")
             
-            # Show changelog
+            # Show changelog in a separate expander below
             if local_full and remote_full:
                 changelog = get_changelog(local_full, remote_full)
                 if changelog:
@@ -3496,28 +3510,20 @@ def main():
                                 commit_type, commit_desc = commit_msg.split(':', 1)
                                 # Add emoji based on commit type
                                 emoji = {
-                                    'Feature': '✨', 'Fix': '🐛', 'Update': '📝', 
-                                    'Refactor': '♻️', 'Style': '🎨', 'Docs': '📚',
-                                    'Perf': '⚡', 'Test': '🧪', 'Chore': '🔧'
-                                }.get(commit_type.strip(), '•')
+                                    'feat': '✨', 'fix': '🐛', 'update': '📝', 
+                                    'refactor': '♻️', 'style': '🎨', 'docs': '📚',
+                                    'perf': '⚡', 'test': '🧪', 'chore': '🔧'
+                                }.get(commit_type.strip().lower(), '•')
                                 st.markdown(f"{emoji} **{commit_type.strip()}**: {commit_desc.strip()}")
                             else:
                                 st.markdown(f"• {commit_msg}")
-        with col2:
-            st.write("")  # Spacing for vertical alignment
-            if st.button("🚀 Update Now", type="primary", use_container_width=True):
-                with st.spinner("Pulling latest changes..."):
-                    success, message = pull_github_updates()
-                    if success:
-                        st.success("✅ Updated! Reloading app...")
-                        st.session_state.update_available = False
-                        time_module.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Update failed: {message}")
+        
+        st.divider()
     
-    st.title("📊 StockGenie Pro V2.9 ")
+    # Main title with proper spacing
+    st.title("📊 StockGenie Pro V2.9")
     st.subheader(f"📅 {datetime.now().strftime('%d %b %Y, %A')}")
+    st.markdown("")  # Add spacing
     
     # --- SIDEBAR CONFIGURATION ---
     st.sidebar.title("🔍 Configuration")
@@ -4017,6 +4023,7 @@ def main():
     with tab4:
         st.markdown("### 🔄 Live Intraday Scanner")
         st.caption("🎯 Automatically scans stocks from bullish sectors only")
+        st.markdown("")  # Add spacing
         
         # Initialize session state for live scanner
         if 'live_scan_active' not in st.session_state:
@@ -4034,7 +4041,8 @@ def main():
         if 'scan_status' not in st.session_state:
             st.session_state.scan_status = ""
         
-        # Configuration
+        # Configuration section
+        st.markdown("#### ⚙️ Configuration")
         col1, col2, col3 = st.columns(3)
         with col1:
             scan_timeframe = st.selectbox("Timeframe", ["5m", "15m", "30m"], index=1, key="live_tf")
@@ -4046,17 +4054,19 @@ def main():
             LIVE_SCAN_CONFIG['scan_interval'] = scan_interval
         
         # Display current sector analysis
+        st.markdown("")  # Add spacing
         st.markdown("#### 📊 Current Bullish Sectors")
         bullish_sectors = get_bullish_sectors()
         
         # Display bullish sectors
         if bullish_sectors:
-            st.markdown(f"**🟢 {len(bullish_sectors)} Bullish Sectors Found:**")
+            st.markdown(f"**🟢 {len(bullish_sectors)} Bullish Sectors Found**")
+            st.markdown("")  # Add spacing
             sector_cols = st.columns(min(len(bullish_sectors), 4))
             for idx, sector in enumerate(bullish_sectors[:4]):
                 with sector_cols[idx]:
                     st.metric(
-                        label=f"� {sector['sector']}",
+                        label=f"🟢 {sector['sector']}",
                         value=f"{sector['change']:+.2f}%",
                         delta=f"{sector['advance_ratio']:.0f}% advancing"
                     )
@@ -4070,10 +4080,12 @@ def main():
         else:
             st.warning("⚠️ No bullish sectors found at the moment")
         
+        st.markdown("")  # Add spacing
         st.divider()
+        st.markdown("#### 🎮 Controls")
         
-        # Control buttons
-        col1, col2, col3 = st.columns([2, 2, 1])
+        # Control buttons with better spacing
+        col1, col2, col3 = st.columns([3, 3, 2])
         
         with col1:
             if not st.session_state.live_scan_active:
@@ -4218,7 +4230,8 @@ def main():
                 except Exception as e:
                     logging.warning(f"Rerun failed: {e}")
         
-        # Display alerts
+        # Display alerts section with proper spacing
+        st.markdown("")  # Add spacing
         if st.session_state.live_scan_alerts:
             st.markdown("### 🚨 Recent Alerts")
             alerts_df = pd.DataFrame(st.session_state.live_scan_alerts[-10:])  # Last 10 alerts
