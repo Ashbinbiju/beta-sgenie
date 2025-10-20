@@ -12,7 +12,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Optional, Tuple
-import pandas_ta as ta
+import ta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -112,38 +112,38 @@ class FeatureEngineer:
         
         try:
             # RSI
-            rsi = ta.rsi(close, length=14)
-            features['rsi_14'] = rsi.iloc[-1] if rsi is not None and len(rsi) > 0 else 50
+            rsi_indicator = ta.momentum.RSIIndicator(close=close, window=14)
+            features['rsi_14'] = rsi_indicator.rsi().iloc[-1] if len(close) > 14 else 50
             
             # MACD
-            macd_result = ta.macd(close, fast=12, slow=26, signal=9)
-            if macd_result is not None and not macd_result.empty:
-                features['macd'] = macd_result['MACD_12_26_9'].iloc[-1]
-                features['macd_signal'] = macd_result['MACDs_12_26_9'].iloc[-1]
-                features['macd_hist'] = macd_result['MACDh_12_26_9'].iloc[-1]
-            else:
-                features['macd'] = features['macd_signal'] = features['macd_hist'] = 0
+            macd_indicator = ta.trend.MACD(close=close, window_slow=26, window_fast=12, window_sign=9)
+            features['macd'] = macd_indicator.macd().iloc[-1] if len(close) > 26 else 0
+            features['macd_signal'] = macd_indicator.macd_signal().iloc[-1] if len(close) > 26 else 0
+            features['macd_hist'] = macd_indicator.macd_diff().iloc[-1] if len(close) > 26 else 0
             
             # ADX
-            adx_result = ta.adx(high, low, close, length=14)
-            if adx_result is not None and not adx_result.empty:
-                features['adx_14'] = adx_result['ADX_14'].iloc[-1]
-            else:
-                features['adx_14'] = 0
+            adx_indicator = ta.trend.ADXIndicator(high=high, low=low, close=close, window=14)
+            features['adx_14'] = adx_indicator.adx().iloc[-1] if len(close) > 14 else 0
             
             # ATR
-            atr = ta.atr(high, low, close, length=14)
-            features['atr_14'] = atr.iloc[-1] if atr is not None and len(atr) > 0 else 0
+            atr_indicator = ta.volatility.AverageTrueRange(high=high, low=low, close=close, window=14)
+            features['atr_14'] = atr_indicator.average_true_range().iloc[-1] if len(close) > 14 else 0
             
             # EMAs
-            features['ema_9'] = ta.ema(close, length=9).iloc[-1] if len(df) > 9 else close.iloc[-1]
-            features['ema_21'] = ta.ema(close, length=21).iloc[-1] if len(df) > 21 else close.iloc[-1]
-            features['ema_50'] = ta.ema(close, length=50).iloc[-1] if len(df) > 50 else close.iloc[-1]
+            ema_9 = ta.trend.EMAIndicator(close=close, window=9)
+            ema_21 = ta.trend.EMAIndicator(close=close, window=21)
+            ema_50 = ta.trend.EMAIndicator(close=close, window=50)
+            features['ema_9'] = ema_9.ema_indicator().iloc[-1] if len(df) > 9 else close.iloc[-1]
+            features['ema_21'] = ema_21.ema_indicator().iloc[-1] if len(df) > 21 else close.iloc[-1]
+            features['ema_50'] = ema_50.ema_indicator().iloc[-1] if len(df) > 50 else close.iloc[-1]
             
             # SMAs
-            features['sma_20'] = ta.sma(close, length=20).iloc[-1] if len(df) > 20 else close.iloc[-1]
-            features['sma_50'] = ta.sma(close, length=50).iloc[-1] if len(df) > 50 else close.iloc[-1]
-            features['sma_200'] = ta.sma(close, length=200).iloc[-1] if len(df) > 200 else close.iloc[-1]
+            sma_20 = ta.trend.SMAIndicator(close=close, window=20)
+            sma_50 = ta.trend.SMAIndicator(close=close, window=50)
+            sma_200 = ta.trend.SMAIndicator(close=close, window=200)
+            features['sma_20'] = sma_20.sma_indicator().iloc[-1] if len(df) > 20 else close.iloc[-1]
+            features['sma_50'] = sma_50.sma_indicator().iloc[-1] if len(df) > 50 else close.iloc[-1]
+            features['sma_200'] = sma_200.sma_indicator().iloc[-1] if len(df) > 200 else close.iloc[-1]
             
         except Exception as e:
             logger.warning(f"Error calculating technical indicators: {e}")
@@ -170,12 +170,16 @@ class FeatureEngineer:
             features['volume_ratio_20d'] = volume.iloc[-1] / avg_volume_20 if avg_volume_20 > 0 else 1.0
             
             # OBV
-            obv = ta.obv(close, volume)
-            features['obv'] = obv.iloc[-1] if obv is not None and len(obv) > 0 else 0
+            obv_indicator = ta.volume.OnBalanceVolumeIndicator(close=close, volume=volume)
+            features['obv'] = obv_indicator.on_balance_volume().iloc[-1] if len(volume) > 0 else 0
             
-            # VWAP
-            vwap = ta.vwap(df['High'], df['Low'], df['Close'], volume)
-            features['vwap'] = vwap.iloc[-1] if vwap is not None and len(vwap) > 0 else close.iloc[-1]
+            # VWAP - manual calculation as ta library doesn't have built-in VWAP
+            if len(df) >= 14:
+                typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+                vwap_value = (typical_price * volume).rolling(14).sum() / volume.rolling(14).sum()
+                features['vwap'] = vwap_value.iloc[-1] if not vwap_value.empty else close.iloc[-1]
+            else:
+                features['vwap'] = close.iloc[-1]
             
         except Exception as e:
             logger.warning(f"Error calculating volume features: {e}")
@@ -195,8 +199,8 @@ class FeatureEngineer:
             features['momentum_20d'] = (close.iloc[-1] - close.iloc[-21]) if len(df) > 20 else 0
             
             # Rate of Change
-            roc = ta.roc(close, length=10)
-            features['roc_10d'] = roc.iloc[-1] if roc is not None and len(roc) > 0 else 0
+            roc_indicator = ta.momentum.ROCIndicator(close=close, window=10)
+            features['roc_10d'] = roc_indicator.roc().iloc[-1] if len(close) > 10 else 0
             
         except Exception as e:
             logger.warning(f"Error calculating momentum features: {e}")
@@ -213,9 +217,12 @@ class FeatureEngineer:
         try:
             # Trend strength (based on ADX and MA alignment)
             if len(df) > 50:
-                ema_9 = ta.ema(close, length=9).iloc[-1]
-                ema_21 = ta.ema(close, length=21).iloc[-1]
-                ema_50 = ta.ema(close, length=50).iloc[-1]
+                ema_9_ind = ta.trend.EMAIndicator(close=close, window=9)
+                ema_21_ind = ta.trend.EMAIndicator(close=close, window=21)
+                ema_50_ind = ta.trend.EMAIndicator(close=close, window=50)
+                ema_9 = ema_9_ind.ema_indicator().iloc[-1]
+                ema_21 = ema_21_ind.ema_indicator().iloc[-1]
+                ema_50 = ema_50_ind.ema_indicator().iloc[-1]
                 current_price = close.iloc[-1]
                 
                 # Calculate alignment score
@@ -297,7 +304,8 @@ class FeatureEngineer:
             # Market regime (simplified - based on trend)
             close = df['Close']
             if len(df) > 50:
-                sma_50 = ta.sma(close, length=50).iloc[-1]
+                sma_50_ind = ta.trend.SMAIndicator(close=close, window=50)
+                sma_50 = sma_50_ind.sma_indicator().iloc[-1]
                 current_price = close.iloc[-1]
                 
                 if current_price > sma_50 * 1.02:
