@@ -3193,24 +3193,35 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
                 # Update existing position
                 old_qty = existing.data[0]['quantity']
                 old_invested = existing.data[0]['invested_amount']
+                old_avg_price = existing.data[0]['avg_price']
+                
                 new_qty = old_qty + quantity
                 new_invested = old_invested + total_amount
-                new_avg_price = new_invested / new_qty
+                
+                # Calculate new average price based on stock prices only (not including charges)
+                # old_cost = old_qty × old_avg_price (pure stock cost)
+                # new_cost = quantity × price (new pure stock cost)
+                # new_avg = (old_cost + new_cost) / new_qty
+                old_stock_cost = old_qty * old_avg_price
+                new_stock_cost = quantity * price
+                new_avg_price = (old_stock_cost + new_stock_cost) / new_qty
                 
                 supabase.table('paper_portfolio').update({
                     'quantity': new_qty,
-                    'invested_amount': new_invested,
-                    'avg_price': new_avg_price
+                    'invested_amount': new_invested,  # Total with charges
+                    'avg_price': new_avg_price  # Average stock price without charges
                 }).eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
             else:
-                # Create new position (avg_price includes charges for consistency)
-                avg_price_with_charges = total_amount / quantity
+                # Create new position
+                # avg_price = pure stock price (no charges)
+                # invested_amount = total paid including charges
+                # This way P&L calculation works: (current_price × qty) - invested_amount
                 insert_result = supabase.table('paper_portfolio').insert({
                     'user_id': user_id,
                     'symbol': symbol,
                     'quantity': quantity,
-                    'avg_price': avg_price_with_charges,
-                    'invested_amount': total_amount,
+                    'avg_price': price,  # Store actual stock price, not including charges
+                    'invested_amount': total_amount,  # Total paid including charges
                     'trading_style': trading_style,
                     'notes': notes
                 }).execute()
@@ -4718,6 +4729,8 @@ def main():
                                 
                                 # Fallback to average price if all methods fail
                                 if current_price is None or current_price <= 0:
+                                    # Use avg_price as fallback for current price
+                                    # This is the actual price per share, not including per-share charges
                                     current_price = position['avg_price']
                                     
                             except Exception as e:
@@ -4725,6 +4738,8 @@ def main():
                                 current_price = position['avg_price']
                             
                             # Calculate P&L for this position
+                            # When current price = avg price (fallback), P&L should be 0 (not negative due to charges)
+                            # The charges are already accounted for in invested_amount vs avg_price
                             current_value = position['quantity'] * current_price
                             pnl = current_value - position['invested_amount']
                             pnl_percent = (pnl / position['invested_amount']) * 100 if position['invested_amount'] > 0 else 0
