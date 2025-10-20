@@ -1810,10 +1810,11 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     if not smart_api:
         raise ValueError("SmartAPI session unavailable")
     
-    end_date = datetime.now()
+    # Fix: Use proper current date (not future date)
+    end_date = datetime.now().replace(microsecond=0)
     period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 1}
     days = period_map.get(period, 365)
-    start_date = end_date - timedelta(days=days)
+    start_date = (end_date - timedelta(days=days)).replace(microsecond=0)
     
     interval_map = {
         "1d": "ONE_DAY", 
@@ -1830,17 +1831,33 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
         logging.warning(f"[SmartAPI] Token not found for {symbol}")
         return pd.DataFrame()
     
-    historical_data = smart_api.getCandleData({
+    # Log request details for debugging
+    request_params = {
         "exchange": "NSE", 
         "symboltoken": symboltoken, 
         "interval": api_interval,
         "fromdate": start_date.strftime("%Y-%m-%d %H:%M"), 
         "todate": end_date.strftime("%Y-%m-%d %H:%M")
-    })
+    }
+    
+    logging.info(f"[SmartAPI] Requesting {symbol}: {api_interval} from {request_params['fromdate']} to {request_params['todate']}")
+    
+    try:
+        historical_data = smart_api.getCandleData(request_params)
+    except Exception as e:
+        logging.error(f"[SmartAPI] Exception for {symbol}: {str(e)}")
+        return pd.DataFrame()
     
     if not historical_data or not historical_data.get('status') or not historical_data.get('data'):
         error_msg = historical_data.get('message', 'No data') if historical_data else 'No response'
-        logging.warning(f"[SmartAPI] API error for {symbol}: {error_msg}")
+        error_code = historical_data.get('errorcode', 'N/A') if historical_data else 'N/A'
+        
+        # Handle specific error codes
+        if error_code == 'AB1004':
+            logging.warning(f"[SmartAPI] Rate limit or server error (AB1004) for {symbol} - will retry")
+            raise Exception(f"SmartAPI rate limit/server error for {symbol}")
+        
+        logging.warning(f"[SmartAPI] API error for {symbol}: {error_msg} (Code: {error_code})")
         return pd.DataFrame()
     
     # Create DataFrame
@@ -4095,46 +4112,60 @@ def main():
                 
                 def update_status(msg):
                     st.session_state.scan_status = msg
-                    status_placeholder.info(f"� {msg}")
+                    try:
+                        status_placeholder.info(f"📢 {msg}")
+                    except Exception:
+                        # Silently handle any Streamlit state errors during updates
+                        pass
                 
                 update_status(f"🔍 Starting scan iteration #{st.session_state.scan_iteration + 1}...")
                 
-                # Get fresh bullish sectors only
-                current_bullish = get_bullish_sectors()
-                
-                if current_bullish:
-                    update_status(f"📊 Found {len(current_bullish)} bullish sectors")
-                    stock_list = get_stocks_from_bullish_sectors(current_bullish)
+                try:
+                    # Get fresh bullish sectors only
+                    current_bullish = get_bullish_sectors()
                     
-                    if stock_list:
-                        update_status(f"🎯 Scanning {len(stock_list)} stocks from bullish sectors...")
-                        results, alerts = live_scan_iteration(
-                            stock_list,
-                            scan_timeframe,
-                            api_provider,
-                            st.session_state.alert_history,
-                            status_callback=update_status
-                        )
+                    if current_bullish:
+                        update_status(f"📊 Found {len(current_bullish)} bullish sectors")
+                        stock_list = get_stocks_from_bullish_sectors(current_bullish)
                         
-                        st.session_state.live_scan_results = results
-                        st.session_state.live_scan_alerts.extend(alerts)
-                        st.session_state.last_scan_time = datetime.now()
-                        st.session_state.scan_iteration += 1
-                        
-                        if alerts:
-                            st.toast(f"🚨 {len(alerts)} new alerts!", icon="🚨")
-                            update_status(f"✅ Scan complete! {len(alerts)} new alerts found")
-                        else:
-                            update_status(f"✅ Scan complete! {len(results)} opportunities found")
-                else:
-                    update_status("⚠️ No bullish sectors found, waiting for next scan...")
+                        if stock_list:
+                            update_status(f"🎯 Scanning {len(stock_list)} stocks from bullish sectors...")
+                            results, alerts = live_scan_iteration(
+                                stock_list,
+                                scan_timeframe,
+                                api_provider,
+                                st.session_state.alert_history,
+                                status_callback=update_status
+                            )
+                            
+                            st.session_state.live_scan_results = results
+                            st.session_state.live_scan_alerts.extend(alerts)
+                            st.session_state.last_scan_time = datetime.now()
+                            st.session_state.scan_iteration += 1
+                            
+                            if alerts:
+                                st.toast(f"🚨 {len(alerts)} new alerts!", icon="🚨")
+                                update_status(f"✅ Scan complete! {len(alerts)} new alerts found")
+                            else:
+                                update_status(f"✅ Scan complete! {len(results)} opportunities found")
+                    else:
+                        update_status("⚠️ No bullish sectors found, waiting for next scan...")
+                except Exception as e:
+                    logging.error(f"Error during scan iteration: {e}")
+                    update_status(f"❌ Scan error: {str(e)}")
                 
                 time_module.sleep(2)
-                st.rerun()
+                try:
+                    st.rerun()
+                except Exception as e:
+                    logging.warning(f"Rerun failed: {e}")
             else:
                 # Auto-refresh every 5 seconds to update countdown
                 time_module.sleep(5)
-                st.rerun()
+                try:
+                    st.rerun()
+                except Exception as e:
+                    logging.warning(f"Rerun failed: {e}")
         
         # Display alerts
         if st.session_state.live_scan_alerts:
