@@ -4723,22 +4723,24 @@ def main():
                             except Exception as e:
                                 logging.warning(f"Error fetching price for {position['symbol']}: {e}")
                                 current_price = position['avg_price']
-                        
-                        current_value = position['quantity'] * current_price
-                        pnl = current_value - position['invested_amount']
-                        pnl_percent = (pnl / position['invested_amount']) * 100 if position['invested_amount'] > 0 else 0
-                        
-                        positions_data.append({
-                            'Symbol': position['symbol'],
-                            'Style': position['trading_style'].capitalize(),
-                            'Qty': position['quantity'],
-                            'Avg Price': f"₹{position['avg_price']:.2f}",
-                            'Current Price': f"₹{current_price:.2f}",
-                            'Invested': f"₹{position['invested_amount']:,.2f}",
-                            'Current Value': f"₹{current_value:,.2f}",
-                            'P&L': f"₹{pnl:,.2f}",
-                            'P&L %': f"{pnl_percent:+.2f}%"
-                        })
+                            
+                            # Calculate P&L for this position
+                            current_value = position['quantity'] * current_price
+                            pnl = current_value - position['invested_amount']
+                            pnl_percent = (pnl / position['invested_amount']) * 100 if position['invested_amount'] > 0 else 0
+                            
+                            # Append this position to the list
+                            positions_data.append({
+                                'Symbol': position['symbol'],
+                                'Style': position['trading_style'].capitalize(),
+                                'Qty': position['quantity'],
+                                'Avg Price': f"₹{position['avg_price']:.2f}",
+                                'Current Price': f"₹{current_price:.2f}",
+                                'Invested': f"₹{position['invested_amount']:,.2f}",
+                                'Current Value': f"₹{current_value:,.2f}",
+                                'P&L': f"₹{pnl:,.2f}",
+                                'P&L %': f"{pnl_percent:+.2f}%"
+                            })
                     
                     positions_df = pd.DataFrame(positions_data)
                     
