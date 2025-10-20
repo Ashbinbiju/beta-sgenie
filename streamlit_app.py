@@ -102,12 +102,21 @@ SCAN_CONFIG = {
 # Live scanner configuration
 LIVE_SCAN_CONFIG = {
     "scan_interval": 120,  # Scan every 2 minutes
-    "stocks_per_batch": 10,  # Analyze 10 stocks per batch
-    "batch_delay": 5,  # 5 seconds between batches
+    "stocks_per_batch": 3,  # Reduced to 3 stocks per batch to respect rate limits
+    "batch_delay": 2,  # 2 seconds between batches (allows 3 req/sec limit)
     "min_sector_change": 0.5,  # Minimum sector change % to consider bullish
     "min_sector_advance_ratio": 60,  # Minimum advance ratio (60%)
     "cooldown_period": 300,  # 5 minutes cooldown for same stock alert
     "alert_score_threshold": 65,  # Minimum score to trigger alert
+}
+
+# SmartAPI Rate Limiting (from official documentation)
+# getCandleData: 3 req/sec, 180 req/min, 5000 req/hour
+SMARTAPI_RATE_LIMITS = {
+    "requests_per_second": 3,
+    "requests_per_minute": 180,
+    "requests_per_hour": 5000,
+    "min_delay_between_requests": 0.35  # ~333ms to stay under 3 req/sec
 }
 
 # Auto-update configuration
@@ -128,6 +137,27 @@ TELEGRAM_CONFIG = {
     "alert_threshold": 75,  # Minimum score for individual alerts
     "max_alerts_per_scan": 5,  # Maximum number of individual stock alerts per scan
 }
+
+# Simple Rate Limiter for SmartAPI
+class SimpleRateLimiter:
+    """Simple rate limiter to respect SmartAPI limits"""
+    def __init__(self, min_delay=0.35):
+        self.min_delay = min_delay
+        self.last_call_time = 0
+    
+    def wait_if_needed(self):
+        """Wait if needed to respect rate limits"""
+        current_time = time_module.time()
+        time_since_last = current_time - self.last_call_time
+        
+        if time_since_last < self.min_delay:
+            sleep_time = self.min_delay - time_since_last
+            time_module.sleep(sleep_time)
+        
+        self.last_call_time = time_module.time()
+
+# Global rate limiter instance
+_smartapi_rate_limiter = SimpleRateLimiter(SMARTAPI_RATE_LIMITS['min_delay_between_requests'])
 
 def send_telegram_message(message, parse_mode="HTML"):
     """Send message to Telegram"""
@@ -581,14 +611,15 @@ def live_scan_iteration(stock_list, timeframe, api_provider, alert_history, stat
                             if status_callback:
                                 status_callback(f"🚨 ALERT: {symbol} - Score: {result['Score']}")
                 
-                # Small delay between stocks
-                time_module.sleep(1)
+                # Delay between stocks to respect rate limits (already handled by rate limiter)
+                # But add small buffer for safety
+                time_module.sleep(0.5)
                 
             except Exception as e:
                 logging.error(f"Error analyzing {symbol}: {e}")
                 continue
         
-        # Delay between batches
+        # Delay between batches to ensure we don't exceed limits
         if batch_idx + LIVE_SCAN_CONFIG['stocks_per_batch'] < len(stock_list):
             if status_callback:
                 status_callback(f"⏸️ Waiting {LIVE_SCAN_CONFIG['batch_delay']}s before next batch...")
@@ -1802,7 +1833,7 @@ def _fetch_data_dhan(symbol, period="1y", interval="1d"):
         
 @retry_with_exponential_backoff(max_retries=5, base_delay=3)
 def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
-    """Fetches stock data from SmartAPI."""
+    """Fetches stock data from SmartAPI with proper rate limiting and date ranges."""
     if "-EQ" not in symbol:
         symbol = f"{symbol.split('.')[0]}-EQ"
     
@@ -1810,11 +1841,8 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     if not smart_api:
         raise ValueError("SmartAPI session unavailable")
     
-    # Fix: Use proper current date (not future date)
+    # Use proper current date
     end_date = datetime.now().replace(microsecond=0)
-    period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 1}
-    days = period_map.get(period, 365)
-    start_date = (end_date - timedelta(days=days)).replace(microsecond=0)
     
     interval_map = {
         "1d": "ONE_DAY", 
@@ -1824,6 +1852,26 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
         "5m": "FIVE_MINUTE"
     }
     api_interval = interval_map.get(interval, "ONE_DAY")
+    
+    # SmartAPI Official Max Days per Interval (from documentation)
+    max_days_map = {
+        "FIVE_MINUTE": 100,      # 5 min
+        "FIFTEEN_MINUTE": 200,   # 15 min
+        "THIRTY_MINUTE": 200,    # 30 min
+        "ONE_HOUR": 400,         # 1 hour
+        "ONE_DAY": 2000          # 1 day
+    }
+    
+    # Get max allowed days for this interval
+    max_allowed_days = max_days_map.get(api_interval, 365)
+    
+    # Calculate days requested
+    period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 1}
+    requested_days = period_map.get(period, 365)
+    
+    # Enforce SmartAPI limits
+    days = min(requested_days, max_allowed_days)
+    start_date = (end_date - timedelta(days=days)).replace(microsecond=0)
     
     symbol_token_map = load_symbol_token_map()
     symboltoken = symbol_token_map.get(symbol)
@@ -1841,6 +1889,9 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     }
     
     logging.info(f"[SmartAPI] Requesting {symbol}: {api_interval} from {request_params['fromdate']} to {request_params['todate']}")
+    
+    # Apply rate limiting before making the API call
+    _smartapi_rate_limiter.wait_if_needed()
     
     try:
         historical_data = smart_api.getCandleData(request_params)
