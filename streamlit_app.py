@@ -2774,58 +2774,6 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
     }
 
 # ============================================================================
-# BACKTESTING
-# ============================================================================
-
-def backtest_strategy(data, symbol, trading_style='swing', timeframe='1d', initial_capital=30000, contrarian_mode=False):
-    """Backtest strategy with realistic costs"""
-    results = {"total_return": 0, "annual_return": 0, "sharpe_ratio": 0, "max_drawdown": 0, "trades": 0, "win_rate": 0, "trades_list": [], "equity_curve": []}
-    if len(data) < 200: return results
-    
-    BROKERAGE, STT, SLIPPAGE = 0.0003, 0.001, 0.0005
-    cash, position, entry_price, qty, trades, returns = initial_capital, None, 0, 0, [], []
-    
-    for i in range(200, len(data)):
-        sliced = data.iloc[:i+1]
-        try:
-            rec = generate_recommendation(sliced, symbol, trading_style, timeframe, cash, contrarian_mode)
-            current_price, current_date = data['Close'].iloc[i], data.index[i]
-            
-            if position and rec['signal'] in ['Sell', 'Strong Sell']:
-                exit_price = current_price * (1 - BROKERAGE - STT - SLIPPAGE)
-                pnl = (exit_price - entry_price) * qty
-                cash += (current_price * qty * (1 - BROKERAGE - STT))
-                returns.append(pnl / (entry_price * qty))
-                trades.append({"entry_date": entry_date, "exit_date": current_date, "pnl": pnl})
-                position = None
-            
-            if not position and rec['signal'] in ['Buy', 'Strong Buy']:
-                entry_price, entry_date = current_price * (1 + BROKERAGE + SLIPPAGE), current_date
-                qty = rec['position_size']
-                cash -= qty * current_price * (1 + BROKERAGE)
-                position = "Long"
-            
-            equity = cash + (qty * current_price if position else 0)
-            results['equity_curve'].append((current_date, equity))
-        except Exception: continue
-    
-    if trades:
-        results['trades'] = len(trades)
-        results['total_return'] = ((cash + (qty * data['Close'].iloc[-1] if position else 0) - initial_capital) / initial_capital) * 100
-        results['win_rate'] = len([t for t in trades if t['pnl'] > 0]) / len(trades) * 100
-        if returns:
-            periods = {'5m': 252*75, '15m': 252*25, '1h': 252*6, '1d': 252}.get(timeframe, 252)
-            results['sharpe_ratio'] = (np.mean(returns) / (np.std(returns) + 1e-9)) * np.sqrt(periods)
-            results['annual_return'] = np.mean(returns) * periods * 100
-    
-    if results['equity_curve']:
-        equity_df = pd.DataFrame(results['equity_curve'], columns=['Date', 'Equity'])
-        equity_df['Peak'] = equity_df['Equity'].cummax()
-        equity_df['DD'] = (equity_df['Equity'] - equity_df['Peak']) / equity_df['Peak']
-        results['max_drawdown'] = equity_df['DD'].min() * 100
-    
-    return results
-
 # ============================================================================
 # BATCH ANALYSIS
 # ============================================================================
@@ -3817,7 +3765,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "📊 Backtest", "💰 Paper Trading", "📜 History", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", " Paper Trading", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -4428,24 +4376,8 @@ def main():
             st.info("ℹ️ No results yet from the scanner. Waiting for first scan to complete...")
 
 
-    with tab5:
-        if st.button("📊 Run Backtest"):
-            with st.spinner("Backtesting..."):
-                try:
-                    data = fetch_stock_data_cached(symbol, period="2y", interval=timeframe, api_provider=api_provider)
-                    if not data.empty:
-                        results = backtest_strategy(data, symbol, 'swing' if trading_style == "Swing Trading" else 'intraday', timeframe, account_size, contrarian_mode)
-                        st.success("✅ Backtest complete")
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Total Return", f"{results['total_return']:.2f}%")
-                        col2.metric("Annual Return", f"{results['annual_return']:.2f}%")
-                        col3.metric("Sharpe Ratio", f"{results['sharpe_ratio']:.2f}")
-                        col4.metric("Max Drawdown", f"{results['max_drawdown']:.2f}%")
-                    else: st.warning("Insufficient data for backtest")
-                except Exception as e: st.error(f"❌ Backtest error: {e}")
-
     # --- PAPER TRADING TAB ---
-    with tab6:
+    with tab5:
         st.markdown("### 💰 Paper Trading - Practice Without Risk")
         
         if not supabase:
@@ -4868,16 +4800,8 @@ def main():
                             else:
                                 st.error(message)
 
-    # --- HISTORY & MARKET DASHBOARD TABS (UNCHANGED) ---
-    with tab7:
-        try:
-            conn = sqlite3.connect('stock_picks.db')
-            history = pd.read_sql_query("SELECT * FROM picks ORDER BY date DESC LIMIT 100", conn)
-            conn.close()
-            st.dataframe(history, use_container_width=True)
-        except Exception as e: st.error(f"❌ Database error: {e}")
-        
-    with tab8:
+    # --- MARKET DASHBOARD TAB ---
+    with tab6:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
