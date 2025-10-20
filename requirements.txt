@@ -17,6 +17,8 @@ supabase
 python-dotenv
 pyotp
 chromedriver-py
+lightgbm 
+scikit-learn
 selenium
 ratelimit
 webdriver-manager
