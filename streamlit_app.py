@@ -3056,6 +3056,86 @@ def save_picks(results_df, trading_style):
 # PAPER TRADING FUNCTIONS
 # ============================================================================
 
+def calculate_brokerage_charges(trade_value, action, trading_style, exchange='NSE'):
+    """
+    Calculate realistic brokerage and charges for paper trading
+    Based on typical Indian discount broker charges (like Zerodha, Angel One)
+    
+    Returns: dict with total_charges and breakup
+    """
+    charges = {
+        'total_charges': 0,
+        'trade_value': trade_value,
+        'breakup': []
+    }
+    
+    # 1. Brokerage (₹20 per order or 0.03% for intraday, ₹0 for delivery in most discount brokers)
+    if trading_style.lower() == 'intraday':
+        brokerage = min(20, trade_value * 0.0003)  # ₹20 or 0.03%, whichever is lower
+    else:  # delivery/swing
+        brokerage = 0  # Most discount brokers offer ₹0 brokerage for delivery
+    
+    charges['breakup'].append({
+        'name': 'Brokerage',
+        'amount': brokerage,
+        'percentage': (brokerage / trade_value * 100) if trade_value > 0 else 0
+    })
+    
+    # 2. STT (Securities Transaction Tax)
+    # Delivery BUY/SELL: 0.1% on both sides
+    # Intraday SELL only: 0.025%
+    if trading_style.lower() == 'intraday':
+        stt = trade_value * 0.00025 if action == 'SELL' else 0
+    else:  # delivery
+        stt = trade_value * 0.001  # 0.1% on both buy and sell
+    
+    charges['breakup'].append({
+        'name': 'STT (Securities Transaction Tax)',
+        'amount': stt,
+        'percentage': (stt / trade_value * 100) if trade_value > 0 else 0
+    })
+    
+    # 3. Exchange Transaction Charges
+    # NSE: 0.00325% for equity
+    exchange_charges = trade_value * 0.0000325
+    charges['breakup'].append({
+        'name': 'Exchange Transaction Charges',
+        'amount': exchange_charges,
+        'percentage': 0.00325
+    })
+    
+    # 4. SEBI Charges (₹10 per crore)
+    sebi_charges = (trade_value / 10000000) * 10
+    charges['breakup'].append({
+        'name': 'SEBI Charges',
+        'amount': sebi_charges,
+        'percentage': 0.0001
+    })
+    
+    # 5. Stamp Duty
+    # 0.015% on buy side only (delivery and intraday)
+    stamp_duty = trade_value * 0.00015 if action == 'BUY' else 0
+    charges['breakup'].append({
+        'name': 'Stamp Duty',
+        'amount': stamp_duty,
+        'percentage': 0.015 if action == 'BUY' else 0
+    })
+    
+    # 6. GST (18% on brokerage + transaction charges)
+    taxable_amount = brokerage + exchange_charges + sebi_charges
+    gst = taxable_amount * 0.18
+    charges['breakup'].append({
+        'name': 'GST (18%)',
+        'amount': gst,
+        'percentage': (gst / trade_value * 100) if trade_value > 0 else 0
+    })
+    
+    # Calculate total
+    charges['total_charges'] = sum(item['amount'] for item in charges['breakup'])
+    charges['total_percentage'] = (charges['total_charges'] / trade_value * 100) if trade_value > 0 else 0
+    
+    return charges
+
 def get_paper_account(user_id='default'):
     """Get paper trading account details"""
     if not supabase:
@@ -3100,7 +3180,12 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
         return False, "Supabase not configured"
     
     try:
-        total_amount = quantity * price
+        trade_value = quantity * price
+        
+        # Calculate brokerage and charges
+        charges = calculate_brokerage_charges(trade_value, action, trading_style)
+        total_charges = charges['total_charges']
+        total_amount = trade_value + total_charges  # Total cost including charges
         
         # Get current account
         account = get_paper_account(user_id)
@@ -3108,9 +3193,9 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
             return False, "Account not found"
         
         if action == 'BUY':
-            # Check if enough cash
+            # Check if enough cash (including charges)
             if account['cash_balance'] < total_amount:
-                return False, f"Insufficient funds. Need ₹{total_amount:.2f}, have ₹{account['cash_balance']:.2f}"
+                return False, f"Insufficient funds. Need ₹{total_amount:.2f} (₹{trade_value:.2f} + ₹{total_charges:.2f} charges), have ₹{account['cash_balance']:.2f}"
             
             # Update or insert portfolio
             existing = supabase.table('paper_portfolio').select('*').eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
@@ -3169,10 +3254,12 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
             if position['quantity'] < quantity:
                 return False, f"Insufficient shares. Have {position['quantity']}, trying to sell {quantity}"
             
-            # Calculate P&L
+            # Calculate P&L (net of charges)
             avg_buy_price = position['avg_price']
-            pnl = (price - avg_buy_price) * quantity
-            pnl_percent = ((price - avg_buy_price) / avg_buy_price) * 100
+            sell_proceeds = trade_value - total_charges  # Deduct charges from proceeds
+            cost_basis = avg_buy_price * quantity
+            pnl = sell_proceeds - cost_basis
+            pnl_percent = (pnl / cost_basis) * 100
             
             # Update or remove position
             new_qty = position['quantity'] - quantity
@@ -3187,18 +3274,19 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
                     'invested_amount': new_invested
                 }).eq('user_id', user_id).eq('symbol', symbol).eq('trading_style', trading_style).execute()
             
-            # Add cash
-            new_balance = account['cash_balance'] + total_amount
+            # Add cash (proceeds after charges)
+            new_balance = account['cash_balance'] + sell_proceeds
             supabase.table('paper_account').update({'cash_balance': new_balance}).eq('user_id', user_id).execute()
             
-            # Record trade
+            # Record trade with charges
             supabase.table('paper_trades').insert({
                 'user_id': user_id,
                 'symbol': symbol,
                 'action': action,
                 'quantity': quantity,
                 'price': price,
-                'total_amount': total_amount,
+                'total_amount': sell_proceeds,  # Net proceeds
+                'charges': total_charges,
                 'trading_style': trading_style,
                 'pnl': pnl,
                 'pnl_percent': pnl_percent,
@@ -3206,7 +3294,7 @@ def execute_paper_trade(symbol, action, quantity, price, trading_style, notes=''
             }).execute()
             
             pnl_emoji = "🟢" if pnl > 0 else "🔴" if pnl < 0 else "⚪"
-            return True, f"✅ Sold {quantity} shares of {symbol} at ₹{price:.2f}\n{pnl_emoji} P&L: ₹{pnl:.2f} ({pnl_percent:+.2f}%)"
+            return True, f"✅ Sold {quantity} shares of {symbol} at ₹{price:.2f}\n{pnl_emoji} P&L: ₹{pnl:.2f} ({pnl_percent:+.2f}%)\n💰 Net proceeds: ₹{sell_proceeds:.2f} (after ₹{total_charges:.2f} charges)"
         
         return False, "Invalid action"
         
@@ -4510,17 +4598,43 @@ def main():
                     trade_price = st.number_input("Price (₹)", min_value=0.01, value=float(suggested_price), step=0.05, format="%.2f")
                     trade_notes = st.text_input("Notes (optional)", key="paper_trade_notes")
                 
-                total_cost = trade_quantity * trade_price
-                st.info(f"💰 Total: ₹{total_cost:,.2f}")
+                # Calculate and display charges
+                trade_value = trade_quantity * trade_price
+                charges_breakdown = calculate_brokerage_charges(trade_value, trade_action, trade_style.lower())
+                total_charges = charges_breakdown['total_charges']
+                total_with_charges = trade_value + total_charges if trade_action == 'BUY' else trade_value - total_charges
+                
+                # Display cost breakdown
+                with st.expander(f"💰 Cost Breakdown (Click to expand)", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Trade Value:** ₹{trade_value:,.2f}")
+                        st.markdown(f"**Total Charges:** ₹{total_charges:.2f} ({charges_breakdown['total_percentage']:.3f}%)")
+                        if trade_action == 'BUY':
+                            st.markdown(f"**Total Debit:** ₹{total_with_charges:,.2f}")
+                        else:
+                            st.markdown(f"**Net Credit:** ₹{total_with_charges:,.2f}")
+                    
+                    with col2:
+                        st.caption("**Charges Breakup:**")
+                        for item in charges_breakdown['breakup']:
+                            if item['amount'] > 0:
+                                st.caption(f"• {item['name']}: ₹{item['amount']:.2f}")
+                
+                # Summary box
+                if trade_action == 'BUY':
+                    st.info(f"💰 **Total Cost:** ₹{total_with_charges:,.2f} (₹{trade_value:,.2f} + ₹{total_charges:.2f} charges)")
+                else:
+                    st.info(f"💰 **Net Proceeds:** ₹{total_with_charges:,.2f} (₹{trade_value:,.2f} - ₹{total_charges:.2f} charges)")
                 
                 # Validation checks before execution
                 can_execute = True
                 error_message = None
                 
                 if trade_action == "BUY":
-                    if total_cost > account['cash_balance']:
+                    if total_with_charges > account['cash_balance']:
                         can_execute = False
-                        error_message = f"⚠️ Insufficient funds! Need ₹{total_cost:,.2f}, have ₹{account['cash_balance']:,.2f}"
+                        error_message = f"⚠️ Insufficient funds! Need ₹{total_with_charges:,.2f}, have ₹{account['cash_balance']:,.2f}"
                 elif trade_action == "SELL":
                     # Check if position exists
                     existing_position = None
