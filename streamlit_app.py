@@ -3802,7 +3802,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "💰 Paper Trading", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "💰 Paper Trading", "🤖 AI Insights", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
@@ -4837,8 +4837,409 @@ def main():
                             else:
                                 st.error(message)
 
-    # --- MARKET DASHBOARD TAB ---
+    # --- AI INSIGHTS TAB ---
     with tab6:
+        st.markdown("### 🤖 AI-Powered Stock Insights")
+        st.caption("AI predictions combine machine learning with technical analysis for smarter recommendations")
+        
+        # Check if AI modules are available
+        try:
+            from ai_features import FeatureEngineer
+            from ai_model import StockDirectionModel
+            import os
+            
+            AI_AVAILABLE = True
+        except ImportError:
+            AI_AVAILABLE = False
+        
+        if not AI_AVAILABLE:
+            st.warning("⚠️ **AI Module Not Configured**")
+            st.info("""
+            To enable AI Insights:
+            1. Install dependencies: `pip install lightgbm scikit-learn`
+            2. Setup Supabase tables using `AI_SUPABASE_SCHEMA.sql`
+            3. Train your first model (see `AI_IMPLEMENTATION_GUIDE.md`)
+            
+            Files needed:
+            - `ai_features.py` - Feature extraction
+            - `ai_model.py` - ML model
+            - Trained model file: `models/stock_direction_v1.0.0.pkl`
+            """)
+        else:
+            # AI module is available
+            tabs_ai = st.tabs(["📊 AI Predictions", "🎯 Single Stock Analysis", "⚙️ Model Info"])
+            
+            # Tab 1: AI Predictions (from Supabase)
+            with tabs_ai[0]:
+                st.markdown("#### 📊 Latest AI Predictions")
+                
+                if not supabase:
+                    st.warning("Supabase not configured. AI predictions require database storage.")
+                else:
+                    # Filters
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        signal_filter = st.multiselect(
+                            "Signal", 
+                            ['BUY', 'HOLD', 'SELL'],
+                            default=['BUY']
+                        )
+                    with col2:
+                        min_confidence = st.slider("Min Confidence", 0.0, 1.0, 0.6, 0.05)
+                    with col3:
+                        limit = st.number_input("Show Top", 10, 100, 20, 10)
+                    
+                    try:
+                        # Fetch latest AI predictions
+                        query = supabase.table('ai_predictions')\
+                            .select('*')\
+                            .in_('final_signal', signal_filter)\
+                            .gte('ml_confidence', min_confidence)\
+                            .order('created_at', desc=True)\
+                            .limit(limit)
+                        
+                        result = query.execute()
+                        
+                        if result.data:
+                            df_predictions = pd.DataFrame(result.data)
+                            
+                            # Display summary metrics
+                            col1, col2, col3, col4 = st.columns(4)
+                            col1.metric("Total Predictions", len(df_predictions))
+                            col2.metric("Avg ML Score", f"{df_predictions['ml_score'].mean():.2f}")
+                            col3.metric("Avg Confidence", f"{df_predictions['ml_confidence'].mean():.2%}")
+                            
+                            if 'prediction_correct' in df_predictions.columns:
+                                correct = df_predictions['prediction_correct'].sum()
+                                total = df_predictions['prediction_correct'].notna().sum()
+                                accuracy = (correct / total * 100) if total > 0 else 0
+                                col4.metric("Accuracy", f"{accuracy:.1f}%")
+                            else:
+                                col4.metric("Accuracy", "N/A")
+                            
+                            st.divider()
+                            
+                            # Display predictions table
+                            display_cols = ['symbol', 'final_signal', 'final_score', 'ml_confidence', 
+                                          'predicted_return', 'risk_reward_ratio', 'created_at']
+                            
+                            # Filter columns that exist
+                            display_cols = [col for col in display_cols if col in df_predictions.columns]
+                            
+                            # Format the dataframe
+                            df_display = df_predictions[display_cols].copy()
+                            
+                            if 'final_score' in df_display.columns:
+                                df_display['final_score'] = df_display['final_score'].round(1)
+                            if 'ml_confidence' in df_display.columns:
+                                df_display['ml_confidence'] = df_display['ml_confidence'].apply(lambda x: f"{x:.1%}")
+                            if 'predicted_return' in df_display.columns:
+                                df_display['predicted_return'] = df_display['predicted_return'].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
+                            if 'risk_reward_ratio' in df_display.columns:
+                                df_display['risk_reward_ratio'] = df_display['risk_reward_ratio'].round(2)
+                            if 'created_at' in df_display.columns:
+                                df_display['created_at'] = pd.to_datetime(df_display['created_at']).dt.strftime('%Y-%m-%d %H:%M')
+                            
+                            st.dataframe(
+                                df_display,
+                                use_container_width=True,
+                                height=400
+                            )
+                            
+                            # Explainability section
+                            st.markdown("#### 🔍 Prediction Details")
+                            selected_symbol = st.selectbox(
+                                "Select stock to see AI reasoning:",
+                                df_predictions['symbol'].unique()
+                            )
+                            
+                            if selected_symbol:
+                                pred = df_predictions[df_predictions['symbol'] == selected_symbol].iloc[0]
+                                
+                                col1, col2, col3 = st.columns(3)
+                                col1.metric("ML Direction", pred.get('ml_direction', 'N/A'))
+                                col2.metric("ML Score", f"{pred.get('ml_score', 0):.2f}")
+                                col3.metric("Confidence", f"{pred.get('ml_confidence', 0):.1%}")
+                                
+                                # Show reasons if available
+                                if 'reasons' in pred and pred['reasons']:
+                                    st.markdown("**📋 AI Reasoning:**")
+                                    reasons = pred['reasons']
+                                    
+                                    if isinstance(reasons, dict):
+                                        # Technical breakdown
+                                        if 'technical_score' in reasons:
+                                            st.markdown(f"- **Technical Score**: {reasons.get('technical_score', 0):.1f}/100")
+                                        if 'ai_score' in reasons:
+                                            st.markdown(f"- **AI Score**: {reasons.get('ai_score', 0):.1f}/100")
+                                        if 'sentiment_score' in reasons and reasons.get('sentiment_score'):
+                                            st.markdown(f"- **Sentiment**: {reasons.get('sentiment_score', 0):.2f}")
+                                
+                                # Show top features if available
+                                if 'top_features' in pred and pred['top_features']:
+                                    st.markdown("**📊 Top Contributing Features:**")
+                                    top_features = pred['top_features']
+                                    
+                                    if isinstance(top_features, list):
+                                        for feat in top_features[:5]:
+                                            if isinstance(feat, dict):
+                                                st.markdown(f"- **{feat.get('feature', 'N/A')}**: {feat.get('value', 0):.2f} (importance: {feat.get('importance', 0):.0f})")
+                        else:
+                            st.info("📭 No AI predictions found matching your filters.")
+                            st.caption("Predictions are generated when you run AI analysis or daily scheduled jobs.")
+                    
+                    except Exception as e:
+                        st.error(f"Error loading AI predictions: {e}")
+                        st.caption("Make sure ai_predictions table exists in Supabase.")
+            
+            # Tab 2: Single Stock AI Analysis
+            with tabs_ai[1]:
+                st.markdown("#### 🎯 AI Analysis for Single Stock")
+                
+                analyze_symbol = st.selectbox(
+                    "Select stock for AI analysis:",
+                    stock_list,
+                    key="ai_stock_select"
+                )
+                
+                if st.button("🤖 Run AI Analysis", type="primary"):
+                    with st.spinner(f"Running AI analysis for {analyze_symbol}..."):
+                        try:
+                            # Fetch data
+                            df = fetch_stock_data_cached(
+                                analyze_symbol, 
+                                interval=timeframe, 
+                                api_provider=api_provider
+                            )
+                            
+                            if df.empty or len(df) < 50:
+                                st.error("Insufficient data for AI analysis (need 50+ candles)")
+                            else:
+                                # Extract features
+                                engineer = FeatureEngineer()
+                                features = engineer.extract_features(df, analyze_symbol)
+                                
+                                if not features:
+                                    st.error("Failed to extract features")
+                                else:
+                                    # Check if model exists
+                                    model_path = 'models/stock_direction_v1.0.0.pkl'
+                                    
+                                    if not os.path.exists(model_path):
+                                        st.warning("⚠️ **Model not found**")
+                                        st.info(f"""
+                                        No trained model found at `{model_path}`
+                                        
+                                        To create a model:
+                                        1. Collect training data (100+ stocks, 6+ months)
+                                        2. Train model using `ai_model.py`
+                                        3. Save to `models/` directory
+                                        
+                                        See `AI_IMPLEMENTATION_GUIDE.md` for details.
+                                        """)
+                                    else:
+                                        # Load model and predict
+                                        model = StockDirectionModel()
+                                        model.load_model(model_path)
+                                        
+                                        prediction = model.predict(features)
+                                        
+                                        # Also get technical analysis
+                                        tech_rec = generate_recommendation(
+                                            df, analyze_symbol, 
+                                            'swing' if trading_style == "Swing Trading" else 'intraday',
+                                            timeframe, account_size, contrarian_mode
+                                        )
+                                        
+                                        # Display results
+                                        st.success("✅ AI Analysis Complete!")
+                                        
+                                        # Main metrics
+                                        col1, col2, col3 = st.columns(3)
+                                        
+                                        with col1:
+                                            st.markdown("##### 🤖 AI Prediction")
+                                            st.metric("Direction", prediction['ml_direction'])
+                                            st.metric("Confidence", f"{prediction['ml_confidence']:.1%}")
+                                            st.metric("ML Score", f"{prediction['ml_score']:.2f}")
+                                        
+                                        with col2:
+                                            st.markdown("##### 📊 Technical Analysis")
+                                            st.metric("Signal", tech_rec['signal'])
+                                            st.metric("Score", f"{tech_rec['score']:.1f}/100")
+                                            st.metric("Regime", tech_rec['regime'])
+                                        
+                                        with col3:
+                                            # Fusion score (weighted average)
+                                            tech_normalized = tech_rec['score'] / 100
+                                            fusion_score = (
+                                                0.5 * tech_normalized + 
+                                                0.3 * prediction['ml_score'] +
+                                                0.2 * 0.5  # Placeholder for sentiment
+                                            ) * 100
+                                            
+                                            st.markdown("##### 🎯 Fusion Score")
+                                            st.metric("Combined", f"{fusion_score:.1f}/100")
+                                            
+                                            if fusion_score >= 70:
+                                                final_signal = "BUY"
+                                                signal_color = "🟢"
+                                            elif fusion_score >= 40:
+                                                final_signal = "HOLD"
+                                                signal_color = "🟡"
+                                            else:
+                                                final_signal = "SELL"
+                                                signal_color = "🔴"
+                                            
+                                            st.metric("Signal", f"{signal_color} {final_signal}")
+                                        
+                                        st.divider()
+                                        
+                                        # Probability distribution
+                                        st.markdown("#### 📊 AI Probability Distribution")
+                                        probs = prediction['probabilities']
+                                        
+                                        prob_df = pd.DataFrame({
+                                            'Direction': ['DOWN', 'FLAT', 'UP'],
+                                            'Probability': [probs['DOWN'], probs['FLAT'], probs['UP']]
+                                        })
+                                        
+                                        # Simple bar chart
+                                        col1, col2, col3 = st.columns(3)
+                                        col1.metric("DOWN", f"{probs['DOWN']:.1%}", delta=None)
+                                        col2.metric("FLAT", f"{probs['FLAT']:.1%}", delta=None)
+                                        col3.metric("UP", f"{probs['UP']:.1%}", delta=None)
+                                        
+                                        # Top features
+                                        st.markdown("#### 🔬 Top Contributing Features")
+                                        if 'top_features' in prediction and prediction['top_features']:
+                                            for i, feat in enumerate(prediction['top_features'][:5], 1):
+                                                st.markdown(f"{i}. **{feat['feature']}**: {feat['value']:.2f} (importance: {feat['importance']:.0f})")
+                                        
+                                        # Save to Supabase option
+                                        if supabase:
+                                            if st.button("💾 Save AI Prediction to Database"):
+                                                try:
+                                                    pred_record = {
+                                                        'symbol': analyze_symbol,
+                                                        'ml_score': float(prediction['ml_score']),
+                                                        'ml_direction': prediction['ml_direction'],
+                                                        'ml_confidence': float(prediction['ml_confidence']),
+                                                        'technical_score': float(tech_rec['score']),
+                                                        'technical_signal': tech_rec['signal'],
+                                                        'final_score': float(fusion_score),
+                                                        'final_signal': final_signal,
+                                                        'reasons': {
+                                                            'technical_score': tech_rec['score'],
+                                                            'ai_score': prediction['ml_score'] * 100,
+                                                            'fusion_score': fusion_score
+                                                        },
+                                                        'top_features': prediction.get('top_features', []),
+                                                        'probabilities': prediction['probabilities'],
+                                                        'model_version': prediction.get('model_version', 'v1.0.0')
+                                                    }
+                                                    
+                                                    supabase.table('ai_predictions').insert(pred_record).execute()
+                                                    st.success("✅ Prediction saved to database!")
+                                                except Exception as e:
+                                                    st.error(f"Error saving: {e}")
+                        
+                        except Exception as e:
+                            st.error(f"❌ AI Analysis failed: {e}")
+                            logging.error(f"AI analysis error for {analyze_symbol}: {e}")
+            
+            # Tab 3: Model Information
+            with tabs_ai[2]:
+                st.markdown("#### ⚙️ AI Model Information")
+                
+                if not supabase:
+                    st.warning("Supabase not configured. Model metadata requires database.")
+                else:
+                    try:
+                        # Fetch active models
+                        result = supabase.table('model_metadata')\
+                            .select('*')\
+                            .eq('status', 'active')\
+                            .order('trained_at', desc=True)\
+                            .execute()
+                        
+                        if result.data:
+                            models_df = pd.DataFrame(result.data)
+                            
+                            st.markdown("##### 📦 Active Models")
+                            
+                            for idx, model in models_df.iterrows():
+                                with st.expander(f"🤖 {model['model_version']} - {model['model_type']}", expanded=(idx==0)):
+                                    col1, col2, col3 = st.columns(3)
+                                    
+                                    col1.metric("Model Type", model['model_type'].upper())
+                                    col2.metric("Status", model['status'].upper())
+                                    col3.metric("Production", "✅" if model.get('is_production') else "❌")
+                                    
+                                    st.markdown(f"**Trained:** {model.get('trained_at', 'N/A')}")
+                                    
+                                    # Training metrics
+                                    if model.get('train_accuracy'):
+                                        st.markdown("##### 📊 Training Metrics")
+                                        col1, col2 = st.columns(2)
+                                        col1.metric("Train Accuracy", f"{model.get('train_accuracy', 0)*100:.1f}%")
+                                        col2.metric("Val Accuracy", f"{model.get('val_accuracy', 0)*100:.1f}%")
+                                    
+                                    # Backtest metrics
+                                    if model.get('backtest_sharpe'):
+                                        st.markdown("##### 📈 Backtest Performance")
+                                        col1, col2, col3, col4 = st.columns(4)
+                                        col1.metric("Sharpe", f"{model.get('backtest_sharpe', 0):.2f}")
+                                        col2.metric("Win Rate", f"{model.get('backtest_win_rate', 0):.1f}%")
+                                        col3.metric("Avg Return", f"{model.get('backtest_avg_return', 0):.2f}%")
+                                        col4.metric("Max DD", f"{model.get('backtest_max_drawdown', 0):.1f}%")
+                                    
+                                    # Live performance
+                                    if model.get('live_predictions_count', 0) > 0:
+                                        st.markdown("##### 🔴 Live Performance")
+                                        col1, col2, col3 = st.columns(3)
+                                        col1.metric("Predictions", model.get('live_predictions_count', 0))
+                                        col2.metric("Correct", model.get('live_correct_predictions', 0))
+                                        col3.metric("Accuracy", f"{model.get('live_accuracy', 0):.1f}%")
+                                    
+                                    # Feature importance
+                                    if model.get('feature_importance'):
+                                        st.markdown("##### 🎯 Top Features")
+                                        importance = model['feature_importance']
+                                        if isinstance(importance, dict):
+                                            top_5 = list(importance.items())[:5]
+                                            for feat, imp in top_5:
+                                                st.markdown(f"- **{feat}**: {imp:.0f}")
+                                    
+                                    # Notes
+                                    if model.get('notes'):
+                                        st.markdown(f"**Notes:** {model['notes']}")
+                        else:
+                            st.info("📭 No active models found in database.")
+                            st.markdown("""
+                            To train your first model:
+                            1. See `AI_IMPLEMENTATION_GUIDE.md`
+                            2. Run training script
+                            3. Model metadata will appear here automatically
+                            """)
+                    
+                    except Exception as e:
+                        st.error(f"Error loading model metadata: {e}")
+                
+                # Model files on disk
+                st.markdown("##### 💾 Local Model Files")
+                if os.path.exists('models'):
+                    model_files = [f for f in os.listdir('models') if f.endswith('.pkl')]
+                    if model_files:
+                        for mf in model_files:
+                            st.markdown(f"- `{mf}`")
+                    else:
+                        st.caption("No model files found in `models/` directory")
+                else:
+                    st.caption("`models/` directory not found")
+
+    # --- MARKET DASHBOARD TAB ---
+    with tab7:
         st.subheader("🌍 Market Overview")
         
         # Real-time Index Scanner
