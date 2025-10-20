@@ -4257,6 +4257,8 @@ def main():
         
         # Display alerts section with proper spacing
         st.markdown("")  # Add spacing
+        
+        # Always show results section if we have data (whether scanner is active or not)
         if st.session_state.live_scan_alerts:
             st.markdown("### 🚨 Recent Alerts")
             alerts_df = pd.DataFrame(st.session_state.live_scan_alerts[-10:])  # Last 10 alerts
@@ -4271,54 +4273,71 @@ def main():
             
             styled_alerts = alerts_df.style.apply(highlight_alerts, axis=1)
             st.dataframe(styled_alerts, use_container_width=True, height=300)
+            st.markdown("")  # Add spacing
         
         st.divider()
         
-        # Display all results
-        if st.session_state.live_scan_results:
+        # Display all results - ALWAYS show if we have results
+        if st.session_state.live_scan_results and len(st.session_state.live_scan_results) > 0:
             st.markdown("### 📊 Current Scan Results")
             
-            results_df = pd.DataFrame(st.session_state.live_scan_results)
-            
-            # Filter and sort
-            results_df = results_df[results_df['Signal'].str.contains('Buy', na=False)]
-            results_df = results_df.sort_values('Score', ascending=False).head(20)
-            
-            if not results_df.empty:
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total Opportunities", len(results_df))
-                col2.metric("Avg Score", f"{results_df['Score'].mean():.1f}")
-                col3.metric("Strong Buys", len(results_df[results_df['Signal'] == 'Strong Buy']))
+            try:
+                results_df = pd.DataFrame(st.session_state.live_scan_results)
                 
-                # Style the results
-                def color_score(val):
-                    if val >= 75:
-                        return 'background-color: #90EE90; font-weight: bold'
-                    elif val >= 70:
-                        return 'background-color: #FFFACD'
-                    elif val >= 65:
-                        return 'background-color: #E0E0E0'
-                    return ''
+                # Show total results found first
+                st.info(f"📊 Found **{len(results_df)}** total opportunities in last scan")
                 
-                styled_results = results_df.style.applymap(color_score, subset=['Score'])
-                st.dataframe(styled_results, use_container_width=True, height=500)
+                # Filter for buy signals only
+                buy_signals = results_df[results_df['Signal'].str.contains('Buy', na=False)]
                 
-                # Download button
-                csv = results_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Results",
-                    data=csv,
-                    file_name=f"live_scan_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("ℹ️ No buy signals in current scan")
-            
-            # Display scan stats
-            if st.session_state.last_scan_time:
-                st.caption(f"Last scan: {st.session_state.last_scan_time.strftime('%H:%M:%S')} | "
-                          f"Iteration: #{st.session_state.scan_iteration} | "
-                          f"Total alerts: {len(st.session_state.live_scan_alerts)}")
+                if not buy_signals.empty:
+                    # Sort by score
+                    buy_signals = buy_signals.sort_values('Score', ascending=False)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Buy Signals", len(buy_signals))
+                    col2.metric("Avg Score", f"{buy_signals['Score'].mean():.1f}")
+                    col3.metric("Strong Buys", len(buy_signals[buy_signals['Signal'] == 'Strong Buy']))
+                    
+                    st.markdown("")  # Add spacing
+                    
+                    # Display top 20 results
+                    display_df = buy_signals.head(20)
+                    
+                    # Style the results
+                    def color_score(val):
+                        if val >= 75:
+                            return 'background-color: #90EE90; font-weight: bold'
+                        elif val >= 70:
+                            return 'background-color: #FFFACD'
+                        elif val >= 65:
+                            return 'background-color: #E0E0E0'
+                        return ''
+                    
+                    styled_results = display_df.style.applymap(color_score, subset=['Score'])
+                    st.dataframe(styled_results, use_container_width=True, height=500)
+                    
+                    # Download button
+                    csv = buy_signals.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download All Results",
+                        data=csv,
+                        file_name=f"live_scan_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("ℹ️ No buy signals in current scan - all stocks show Hold/Sell signals")
+                
+                # Display scan stats
+                if st.session_state.last_scan_time:
+                    st.caption(f"📅 Last scan: {st.session_state.last_scan_time.strftime('%H:%M:%S')} | "
+                              f"🔄 Iteration: #{st.session_state.scan_iteration} | "
+                              f"🚨 Total alerts: {len(st.session_state.live_scan_alerts)}")
+            except Exception as e:
+                st.error(f"Error displaying results: {e}")
+                logging.error(f"Error displaying scan results: {e}")
+        elif st.session_state.get('scan_iteration', 0) > 0:
+            st.info("ℹ️ No results yet from the scanner. Waiting for first scan to complete...")
 
 
     with tab5:
