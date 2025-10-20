@@ -4388,15 +4388,46 @@ def main():
                 if portfolio:
                     for position in portfolio:
                         try:
-                            # Fetch current price
-                            current_data = fetch_stock_data_cached(position['symbol'], period="1d", interval="1d", api_provider=api_provider)
-                            if not current_data.empty:
-                                current_price = current_data['Close'].iloc[-1]
-                                position_value = position['quantity'] * current_price
-                                position_pnl = position_value - position['invested_amount']
-                                portfolio_value += position_value
-                                portfolio_pnl += position_pnl
-                        except:
+                            # Try to fetch current price with multiple attempts
+                            current_price = None
+                            
+                            # Try daily data first
+                            try:
+                                current_data = fetch_stock_data_cached(
+                                    position['symbol'], 
+                                    period="5d", 
+                                    interval="1d", 
+                                    api_provider=api_provider
+                                )
+                                if not current_data.empty and 'Close' in current_data.columns:
+                                    current_price = float(current_data['Close'].iloc[-1])
+                            except:
+                                pass
+                            
+                            # Try intraday if daily failed
+                            if current_price is None or current_price <= 0:
+                                try:
+                                    current_data = fetch_stock_data_cached(
+                                        position['symbol'], 
+                                        period="1d", 
+                                        interval="5m", 
+                                        api_provider=api_provider
+                                    )
+                                    if not current_data.empty and 'Close' in current_data.columns:
+                                        current_price = float(current_data['Close'].iloc[-1])
+                                except:
+                                    pass
+                            
+                            # Use average price as fallback
+                            if current_price is None or current_price <= 0:
+                                current_price = position['avg_price']
+                            
+                            position_value = position['quantity'] * current_price
+                            position_pnl = position_value - position['invested_amount']
+                            portfolio_value += position_value
+                            portfolio_pnl += position_pnl
+                        except Exception as e:
+                            logging.warning(f"Error calculating portfolio value for {position['symbol']}: {e}")
                             # If fetch fails, use invested amount
                             portfolio_value += position['invested_amount']
                 
@@ -4541,22 +4572,63 @@ def main():
                 
                 st.divider()
                 
-                # Current positions
+                # Current positions with refresh button
                 st.markdown("#### 📊 Current Positions")
+                
+                # Add refresh button for positions
+                col_refresh1, col_refresh2 = st.columns([4, 1])
+                with col_refresh1:
+                    st.caption("Live prices are fetched automatically. Click refresh to update now.")
+                with col_refresh2:
+                    if st.button("🔄 Refresh Prices", use_container_width=True, key="refresh_positions"):
+                        # Clear cache to force fresh data fetch
+                        st.cache_data.clear()
+                        st.rerun()
                 
                 if portfolio:
                     positions_data = []
                     
-                    for position in portfolio:
-                        try:
-                            # Fetch current price
-                            current_data = fetch_stock_data_cached(position['symbol'], period="1d", interval="1d", api_provider=api_provider)
-                            if not current_data.empty:
-                                current_price = current_data['Close'].iloc[-1]
-                            else:
+                    # Show fetching status
+                    with st.spinner("Fetching current prices..."):
+                        for position in portfolio:
+                            try:
+                                # Try multiple methods to fetch current price
+                                current_price = None
+                                
+                                # Method 1: Try 1 day data
+                                try:
+                                    current_data = fetch_stock_data_cached(
+                                        position['symbol'], 
+                                        period="5d", 
+                                        interval="1d", 
+                                        api_provider=api_provider
+                                    )
+                                    if not current_data.empty and 'Close' in current_data.columns:
+                                        current_price = float(current_data['Close'].iloc[-1])
+                                except:
+                                    pass
+                                
+                                # Method 2: Try intraday data if daily failed
+                                if current_price is None or current_price <= 0:
+                                    try:
+                                        current_data = fetch_stock_data_cached(
+                                            position['symbol'], 
+                                            period="1d", 
+                                            interval="5m", 
+                                            api_provider=api_provider
+                                        )
+                                        if not current_data.empty and 'Close' in current_data.columns:
+                                            current_price = float(current_data['Close'].iloc[-1])
+                                    except:
+                                        pass
+                                
+                                # Fallback to average price if all methods fail
+                                if current_price is None or current_price <= 0:
+                                    current_price = position['avg_price']
+                                    
+                            except Exception as e:
+                                logging.warning(f"Error fetching price for {position['symbol']}: {e}")
                                 current_price = position['avg_price']
-                        except:
-                            current_price = position['avg_price']
                         
                         current_value = position['quantity'] * current_price
                         pnl = current_value - position['invested_amount']
