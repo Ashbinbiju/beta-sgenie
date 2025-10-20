@@ -579,8 +579,10 @@ def live_scan_iteration(stock_list, timeframe, api_provider, alert_history, stat
         for symbol in batch:
             try:
                 processed += 1
-                if status_callback and processed % 5 == 0:
-                    status_callback(f"⏳ Analyzed {processed}/{total_stocks} stocks... ({len(results)} opportunities found)")
+                # Show current stock being analyzed
+                if status_callback:
+                    if processed % 5 == 0 or processed <= 3:
+                        status_callback(f"⏳ Analyzing {symbol}... ({processed}/{total_stocks} | {len(results)} opportunities)")
                 
                 # Check if stock is in cooldown
                 last_alert_time = alert_history.get(symbol, 0)
@@ -4071,14 +4073,35 @@ def main():
                         delta=f"{sector['advance_ratio']:.0f}% advancing"
                     )
         
-        # Expandable detailed view
+        # Expandable detailed view with stocks list
         if bullish_sectors:
-            with st.expander(f"📋 View All Bullish Sectors ({len(bullish_sectors)})"):
+            # Get stock list from bullish sectors
+            stock_list_from_sectors = get_stocks_from_bullish_sectors(bullish_sectors)
+            
+            with st.expander(f"📋 View All Bullish Sectors & Stocks ({len(bullish_sectors)} sectors, {len(stock_list_from_sectors)} stocks)"):
                 for sector in bullish_sectors:
-                    st.write(f"• **{sector['sector']}**: {sector['change']:+.2f}% | "
+                    st.markdown(f"**• {sector['sector']}**: {sector['change']:+.2f}% | "
                             f"{sector['advancing']}/{sector['total']} advancing ({sector['advance_ratio']:.1f}%)")
+                
+                st.markdown("")
+                st.markdown(f"**📊 {len(stock_list_from_sectors)} Stocks to be scanned:**")
+                
+                # Display stocks in columns for better readability
+                stocks_per_col = 15
+                num_cols = min(4, (len(stock_list_from_sectors) + stocks_per_col - 1) // stocks_per_col)
+                stock_cols = st.columns(num_cols)
+                
+                for idx, stock in enumerate(stock_list_from_sectors):
+                    col_idx = idx % num_cols
+                    with stock_cols[col_idx]:
+                        st.caption(f"• {stock}")
         else:
             st.warning("⚠️ No bullish sectors found at the moment")
+        
+        # Show quick summary info
+        if bullish_sectors:
+            stock_list_summary = get_stocks_from_bullish_sectors(bullish_sectors)
+            st.info(f"📊 **Ready to scan {len(stock_list_summary)} stocks** from {len(bullish_sectors)} bullish sector{'s' if len(bullish_sectors) > 1 else ''}")
         
         st.markdown("")  # Add spacing
         st.divider()
@@ -4119,7 +4142,9 @@ def main():
                     stock_list = get_stocks_from_bullish_sectors(bullish_sectors)
                     
                     if stock_list:
-                        update_status(f"📊 Found {len(stock_list)} stocks from {len(bullish_sectors)} bullish sectors")
+                        # Show detailed info about what we're scanning
+                        sector_names = [s['sector'] for s in bullish_sectors]
+                        update_status(f"📊 Found {len(stock_list)} stocks from {len(bullish_sectors)} bullish sectors: {', '.join(sector_names[:3])}{'...' if len(sector_names) > 3 else ''}")
                         results, alerts = live_scan_iteration(
                             stock_list[:50],  # Limit to 50 stocks for manual scan
                             scan_timeframe,
