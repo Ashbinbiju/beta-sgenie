@@ -316,10 +316,34 @@ def get_changelog(local_commit, remote_commit):
         return []
 
 def pull_github_updates():
-    """Pull latest changes from GitHub"""
+    """Pull latest changes from GitHub with automatic stash handling"""
     try:
         # Get the directory of the current script dynamically
         repo_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Check if there are local changes
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        has_changes = bool(status_result.stdout.strip())
+        
+        if has_changes:
+            # Stash local changes before pulling
+            logging.info("Local changes detected, stashing before pull...")
+            stash_result = subprocess.run(
+                ["git", "stash", "push", "-u", "-m", "Auto-stash before update"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if stash_result.returncode != 0:
+                logging.warning(f"Stash warning: {stash_result.stderr}")
         
         # Pull latest changes
         result = subprocess.run(
@@ -335,6 +359,19 @@ def pull_github_updates():
         
         if success:
             logging.info(f"Successfully pulled updates: {message}")
+            if has_changes:
+                # Try to reapply stashed changes
+                pop_result = subprocess.run(
+                    ["git", "stash", "pop"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if pop_result.returncode == 0:
+                    logging.info("Reapplied stashed changes")
+                else:
+                    logging.warning(f"Could not reapply stash: {pop_result.stderr}")
         else:
             logging.error(f"Failed to pull updates: {message}")
         
