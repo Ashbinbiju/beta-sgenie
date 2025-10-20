@@ -21,7 +21,3 @@ selenium
 ratelimit
 webdriver-manager
 dhanhq
-
-# AI/ML dependencies
-lightgbm>=4.0.0
-scikit-learn>=1.3.0
