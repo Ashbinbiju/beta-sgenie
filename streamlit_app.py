@@ -3802,7 +3802,7 @@ def main():
     if 'scan_results' not in st.session_state: st.session_state.scan_results = None
     if 'scan_params' not in st.session_state: st.session_state.scan_params = {}
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", " Paper Trading", "🌍 Market Dashboard"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Analysis", "🔍 Scanner", "🎯 Technical Screener", "🔄 Live Intraday", "💰 Paper Trading", "🌍 Market Dashboard"])
 
 
     # --- ANALYSIS TAB ---
