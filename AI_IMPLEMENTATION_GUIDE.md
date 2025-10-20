@@ -384,17 +384,310 @@ with tab_ai_insights:
 
 ---
 
+## 🧪 Backtesting Framework
+
+The `ai_backtest.py` module provides comprehensive performance validation using walk-forward testing methodology.
+
+### Quick Start
+
+```python
+from ai_backtest import AIBacktester
+import pandas as pd
+
+# Load predictions and price data
+predictions_df = pd.read_sql("SELECT * FROM ai_predictions WHERE ts >= '2024-01-01'", supabase_conn)
+price_data = load_historical_prices(['SBIN', 'RELIANCE', 'TCS'])
+
+# Initialize backtester
+backtester = AIBacktester(
+    initial_capital=100000,
+    commission_rate=0.0003,   # 0.03% brokerage
+    slippage_rate=0.0005,     # 0.05% market impact
+    position_sizing='confidence'  # Scale by ML confidence
+)
+
+# Run backtest
+results = backtester.backtest_predictions(
+    predictions_df=predictions_df,
+    price_data=price_data,
+    start_date='2024-01-01',
+    end_date='2024-12-31'
+)
+
+# Display results
+backtester.print_report(results)
+
+# Save to database
+backtester.save_results_to_supabase(results, model_id='model-123')
+```
+
+### Position Sizing Strategies
+
+**1. Fixed Size** (Conservative)
+```python
+AIBacktester(position_sizing='fixed', default_position_size=10000)
+# Every trade uses ₹10,000
+```
+
+**2. Equal Weight** (Balanced)
+```python
+AIBacktester(position_sizing='equal_weight', max_positions=10)
+# Splits capital equally: ₹100k / 10 = ₹10k per position
+```
+
+**3. Confidence-Based** (Aggressive)
+```python
+AIBacktester(position_sizing='confidence')
+# High confidence (90%) = ₹15k
+# Medium confidence (70%) = ₹10k
+# Low confidence (60%) = ₹7.5k
+```
+
+### Performance Metrics Explained
+
+#### Returns Metrics
+- **Total Return**: Overall profit/loss percentage
+- **Annualized Return**: CAGR equivalent
+- **Monthly Return**: Average per month
+
+#### Risk Metrics
+- **Sharpe Ratio**: Risk-adjusted returns (target: >1.5)
+  - `< 1.0`: Poor risk-adjusted performance
+  - `1.0-2.0`: Acceptable
+  - `> 2.0`: Excellent
+  
+- **Sortino Ratio**: Downside risk focus (target: >2.0)
+- **Max Drawdown**: Largest peak-to-trough decline (target: <20%)
+- **Volatility**: Annualized return std dev
+
+#### Trading Metrics
+- **Win Rate**: % of profitable trades (target: >55%)
+- **Profit Factor**: Gross profit / Gross loss (target: >1.5)
+- **Expectancy**: Average ₹ per trade (target: >₹200)
+- **Avg Win/Loss**: Size of typical winner vs loser
+
+#### Additional Metrics
+- **Recovery Factor**: Total return / Max drawdown
+- **Calmar Ratio**: Return / Max drawdown
+- **Consecutive Wins/Losses**: Longest streaks
+- **Total Trades**: Sample size for statistical validity
+
+### Interpreting Results
+
+#### 🟢 Good Model Performance
+```
+✅ Sharpe Ratio > 1.5
+✅ Win Rate > 55%
+✅ Profit Factor > 1.5
+✅ Max Drawdown < 20%
+✅ Total Trades > 100
+```
+**Action**: Ready for paper trading
+
+#### 🟡 Marginal Performance
+```
+⚠️ Sharpe Ratio 0.8-1.5
+⚠️ Win Rate 50-55%
+⚠️ Profit Factor 1.2-1.5
+⚠️ Max Drawdown 20-30%
+```
+**Action**: Tune hyperparameters or add features
+
+#### 🔴 Poor Performance
+```
+❌ Sharpe Ratio < 0.8
+❌ Win Rate < 50%
+❌ Profit Factor < 1.2
+❌ Max Drawdown > 30%
+```
+**Action**: Major model revision needed
+
+### Trading Simulation Details
+
+#### Entry Logic
+- **BUY** signal + available capital → Enter long position
+- Max 10 concurrent positions
+- Skip if capital insufficient
+
+#### Exit Logic
+- **SELL** signal → Close position immediately
+- **10-day holding period** → Force exit (prevent indefinite holds)
+- Track P&L per trade
+
+#### Transaction Costs
+```python
+# Realistic Indian market costs
+commission = 0.03%        # Discount broker
+slippage = 0.05%          # Market impact
+stt = 0.10%              # Securities Transaction Tax
+total_cost = ~0.18% per round trip
+```
+
+### Example Outputs
+
+#### Sample Report
+```
+================================================================
+                     BACKTEST REPORT                           
+================================================================
+
+CONFIGURATION
+  Period: 2024-01-01 to 2024-12-31
+  Initial Capital: ₹100,000
+  Position Sizing: confidence
+  Commission: 0.03% | Slippage: 0.05% | STT: 0.10%
+
+RETURNS
+  Total Return: 24.8% (₹24,800)
+  Annualized Return: 26.3%
+  Monthly Return: 2.1%
+  CAGR: 25.1%
+
+RISK METRICS
+  Sharpe Ratio: 2.15
+  Sortino Ratio: 3.42
+  Max Drawdown: -12.5%
+  Volatility: 18.2%
+  Recovery Factor: 1.98
+
+TRADING METRICS
+  Total Trades: 127
+  Win Rate: 58.3%
+  Profit Factor: 1.85
+  Avg Win: ₹1,450 (4.2%)
+  Avg Loss: -₹875 (-2.8%)
+  Expectancy: ₹195 per trade
+```
+
+#### Top Trades
+```
+   Symbol  Entry Date   Exit Date    P&L    Return  Confidence
+0  RELIANCE  2024-03-15  2024-03-22  ₹2,340   6.8%     92%
+1  TCS       2024-06-10  2024-06-18  ₹1,890   5.4%     88%
+2  INFY      2024-08-05  2024-08-12  ₹1,650   5.1%     85%
+```
+
+### Backtesting Best Practices
+
+#### 1. Data Requirements
+```python
+# Minimum requirements
+MIN_STOCKS = 20           # Diversification
+MIN_HISTORY_DAYS = 252    # 1 year
+MIN_PREDICTIONS = 100     # Statistical validity
+```
+
+#### 2. Walk-Forward Validation
+```python
+# Train on past → Test on future
+# Prevents look-ahead bias
+train_period = '2023-01-01 to 2023-12-31'
+test_period = '2024-01-01 to 2024-06-30'
+```
+
+#### 3. Out-of-Sample Testing
+```python
+# Never backtest on training data
+# Use completely unseen time periods
+# Retrain quarterly with rolling window
+```
+
+#### 4. Reality Checks
+```python
+# If results seem too good:
+if sharpe_ratio > 3.0 or win_rate > 70%:
+    # Check for data leakage
+    # Verify no future information in features
+    # Test on different time periods
+```
+
+### Advanced Usage
+
+#### Compare Strategies
+```python
+strategies = {
+    'Fixed': AIBacktester(position_sizing='fixed'),
+    'Confidence': AIBacktester(position_sizing='confidence'),
+    'Equal': AIBacktester(position_sizing='equal_weight')
+}
+
+for name, bt in strategies.items():
+    results = bt.backtest_predictions(predictions_df, price_data)
+    print(f"{name}: Sharpe={results['metrics']['sharpe_ratio']:.2f}")
+```
+
+#### Confidence Analysis
+```python
+# Group trades by confidence level
+trades_df = pd.DataFrame(results['trade_log'])
+trades_df['confidence_bucket'] = pd.cut(
+    trades_df['confidence'], 
+    bins=[0, 0.7, 0.8, 0.9, 1.0]
+)
+performance_by_confidence = trades_df.groupby('confidence_bucket')['pnl'].mean()
+```
+
+#### Parameter Optimization
+```python
+# Grid search for best parameters
+for max_pos in [5, 10, 15]:
+    for pos_size in [5000, 10000, 15000]:
+        bt = AIBacktester(
+            max_positions=max_pos,
+            default_position_size=pos_size
+        )
+        results = bt.backtest_predictions(predictions_df, price_data)
+        # Log metrics for comparison
+```
+
+### Troubleshooting
+
+**Q: Zero trades executed**
+```python
+# Check:
+1. Do predictions have 'BUY'/'SELL' signals?
+2. Is price_data available for all symbols?
+3. Is date range aligned between predictions and prices?
+
+# Debug:
+print(predictions_df['final_signal'].value_counts())
+print(price_data.keys())
+```
+
+**Q: Unrealistic results**
+```python
+# Common issues:
+1. Look-ahead bias: Future data in features
+2. Survivorship bias: Only successful stocks
+3. Missing transaction costs
+4. Overfitting on in-sample data
+
+# Solution: Use walk-forward + out-of-sample testing
+```
+
+**Q: High drawdown**
+```python
+# Reduce risk:
+backtester = AIBacktester(
+    max_positions=5,              # Less exposure
+    default_position_size=5000,   # Smaller positions
+    position_sizing='fixed'       # Conservative sizing
+)
+```
+
+---
+
 ## 📚 Next Steps
 
-### Phase 1 (Current) ✅
+### Phase 1 ✅
 - [x] Database schema
 - [x] Feature engineering
 - [x] LightGBM baseline model
 
-### Phase 2 (Next 2-3 weeks)
-- [ ] Backtesting framework
+### Phase 2 (Current) 🔄
+- [x] Backtesting framework
+- [x] Streamlit UI integration
 - [ ] Sentiment integration
-- [ ] Streamlit UI integration
 - [ ] Daily inference scheduler
 
 ### Phase 3 (1-2 months)
