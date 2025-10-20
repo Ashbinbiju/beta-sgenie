@@ -4788,15 +4788,33 @@ def main():
                     trades_data = []
                     
                     for trade in trades:
+                        # Get charges (default to 0 if not present in old trades)
+                        charges = trade.get('charges', 0)
+                        
+                        # Format display based on action
+                        if trade['action'] == 'BUY':
+                            total_display = f"₹{trade['total_amount']:,.2f}"
+                            pnl_display = '-'
+                            pnl_pct_display = '-'
+                            charges_display = f"₹{charges:.2f}" if charges > 0 else '₹0.00'
+                        else:  # SELL
+                            total_display = f"₹{trade['total_amount']:,.2f}"
+                            pnl = trade.get('pnl', 0)
+                            pnl_pct = trade.get('pnl_percent', 0)
+                            pnl_display = f"₹{pnl:,.2f}"
+                            pnl_pct_display = f"{pnl_pct:+.2f}%"
+                            charges_display = f"₹{charges:.2f}" if charges > 0 else '₹0.00'
+                        
                         trades_data.append({
                             'Time': datetime.fromisoformat(trade['timestamp'].replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M'),
                             'Symbol': trade['symbol'],
                             'Action': trade['action'],
                             'Qty': trade['quantity'],
                             'Price': f"₹{trade['price']:.2f}",
-                            'Total': f"₹{trade['total_amount']:,.2f}",
-                            'P&L': f"₹{trade.get('pnl', 0):,.2f}" if trade['action'] == 'SELL' else '-',
-                            'P&L %': f"{trade.get('pnl_percent', 0):+.2f}%" if trade['action'] == 'SELL' else '-',
+                            'Total': total_display,
+                            'Charges': charges_display,
+                            'P&L': pnl_display,
+                            'P&L %': pnl_pct_display,
                             'Style': trade['trading_style'].capitalize()
                         })
                     
