@@ -1724,17 +1724,16 @@ def display_stock_news(symbol, max_news=5):
                     if item.get('Details'):
                         # Remove HTML tags for cleaner display
                         import re
+                        import html
                         details = item.get('Details', '')
                         # Simple HTML tag removal (basic)
                         clean_details = re.sub('<[^<]+?>', '', details)
-                        clean_details = clean_details.replace('&nbsp;', ' ').replace('&amp;', '&')
-                        clean_details = clean_details.replace('&lt;', '<').replace('&gt;', '>')
-                        clean_details = clean_details.replace('&quot;', '"').strip()
+                        clean_details = html.unescape(clean_details).strip()
                         
                         if clean_details and len(clean_details) > 10:
                             st.markdown("**📄 Full Article:**")
-                            # Display with proper formatting in a container
-                            st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:5px; border-left:3px solid {color};'>{clean_details}</div>", unsafe_allow_html=True)
+                            # Use blockquote style for the article
+                            st.markdown(f"> {clean_details}")
         else:
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
