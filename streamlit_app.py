@@ -1561,6 +1561,100 @@ def calculate_index_alignment_score(trend_data, signal_direction):
     return score_adjustment
 
 # ============================================================================
+# NEWS FETCHING
+# ============================================================================
+
+def get_security_id_from_symbol(symbol):
+    """Map trading symbol to SecurityID for StockEdge API"""
+    # Remove -EQ suffix if present
+    clean_symbol = symbol.replace('-EQ', '').strip()
+    
+    # Common stock symbol to SecurityID mapping (partial list)
+    # This would ideally be in a database or loaded from a file
+    symbol_to_id = {
+        'RELIANCE': 6689, 'TCS': 6690, 'HDFCBANK': 6691, 'INFY': 6692,
+        'ICICIBANK': 6693, 'HINDUNILVR': 6694, 'ITC': 5535, 'SBIN': 6695,
+        'BHARTIARTL': 6696, 'KOTAKBANK': 6697, 'LT': 6698, 'AXISBANK': 6699,
+        'ASIANPAINT': 6700, 'MARUTI': 6701, 'SUNPHARMA': 6702, 'TITAN': 6703,
+        'ULTRACEMCO': 6704, 'NESTLEIND': 6705, 'BAJFINANCE': 6706, 'WIPRO': 5199,
+        'TATASTEEL': 6707, 'HCLTECH': 6708, 'POWERGRID': 6709, 'NTPC': 7760,
+        'ONGC': 6710, 'COALINDIA': 6711, 'M&M': 6712, 'TECHM': 6713,
+        'TATAMOTORS': 6714, 'INDUSINDBK': 6715, 'ADANIGREEN': 6716, 'DRREDDY': 6717,
+        'JSWSTEEL': 6718, 'BRITANNIA': 6719, 'CIPLA': 5128, 'DIVISLAB': 6720,
+        'EICHERMOT': 6721, 'HEROMOTOCO': 6722, 'BAJAJFINSV': 6723, 'SHREECEM': 6724,
+        'GRASIM': 6725, 'APOLLOHOSP': 6726, 'BPCL': 6727, 'HINDALCO': 6728,
+        'ADANIPORTS': 6729, 'TATACONSUM': 6730, 'UPL': 7381, 'SIEMENS': 4902,
+        'DLF': 6012, 'BIOCON': 6434, 'LUPIN': 6247, 'MARICO': 5699,
+        'VOLTAS': 5838, 'SYMPHONY': 5835, 'MPHASIS': 6350, 'CYIENT': 5462,
+        'COFORGE': 7260, 'MASTEK': 7850, 'TRENT': 8185, 'REDINGTON': 8349,
+        'NMDC': 7232, 'MOIL': 6889, 'BEML': 5965, 'NCC': 8254,
+        'DLF': 6012, 'SOBHA': 7542, 'OMAXE': 8004, 'NHPC': 8183,
+        'SJVN': 4901, 'CESC': 6870, 'NAVA': 7731, 'THERMAX': 5528,
+        'KOLTEPATIL': 4901, 'BANKBARODA': 6731  # Add more as needed
+    }
+    
+    return symbol_to_id.get(clean_symbol)
+
+def fetch_stock_news(symbol, security_id=None, page=1, page_size=10):
+    """Fetch latest news for a stock from StockEdge API"""
+    try:
+        # If security_id not provided, try to get it from symbol
+        if security_id is None:
+            security_id = get_security_id_from_symbol(symbol)
+            if security_id is None:
+                logging.warning(f"No SecurityID mapping found for {symbol}")
+                return None
+        
+        url = f"https://api.stockedge.com/Api/SecurityDashboardApi/GetNewsitemsForSecurity/{security_id}?page={page}&pageSize={page_size}&lang=en"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        news_data = response.json()
+        
+        if news_data and isinstance(news_data, list):
+            return news_data
+        return None
+        
+    except requests.exceptions.Timeout:
+        logging.error(f"Timeout fetching news for {symbol}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching news for {symbol}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected error fetching news for {symbol}: {e}")
+        return None
+
+def display_stock_news(symbol, max_news=5):
+    """Display news for a stock in Streamlit"""
+    with st.spinner(f"📰 Fetching latest news for {symbol}..."):
+        news = fetch_stock_news(symbol, page_size=max_news)
+        
+        if news:
+            st.markdown(f"#### 📰 Latest News for {symbol}")
+            st.caption(f"Found {len(news)} recent news item(s)")
+            
+            for i, item in enumerate(news[:max_news], 1):
+                with st.expander(f"📌 {item.get('SecurityName', symbol)} - {item.get('SectorName', 'N/A')}", expanded=(i==1)):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**Company:** {item.get('SecurityName', 'N/A')}")
+                        st.write(f"**Sector:** {item.get('SectorName', 'N/A')}")
+                        st.write(f"**Industry:** {item.get('IndustryName', 'N/A')}")
+                    
+                    with col2:
+                        st.write(f"**Symbol:** {item.get('Symbol', 'N/A')}")
+                        if item.get('Exchange'):
+                            st.write(f"**Exchange:** {item.get('Exchange')}")
+                    
+                    if i < len(news):
+                        st.divider()
+        else:
+            st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
+
+# ============================================================================
 # API & DATA FETCHING (MODIFIED FOR MULTI-API)
 # ============================================================================
 
@@ -3899,6 +3993,10 @@ def main():
                         st.markdown("---")
                         fig = display_enhanced_chart(rec, data)
                         st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Display latest news
+                        st.markdown("---")
+                        display_stock_news(symbol, max_news=5)
                             
                     else: st.warning("No data available for the selected stock.")
                 except Exception as e: st.error(f"❌ Error: {str(e)}")
