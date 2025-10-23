@@ -1627,6 +1627,41 @@ def fetch_stock_news(symbol, security_id=None, page=1, page_size=10):
         logging.error(f"Unexpected error fetching news for {symbol}: {e}")
         return None
 
+def analyze_news_sentiment(text):
+    """Analyze news sentiment based on keywords - returns (sentiment, emoji, color)"""
+    if not text:
+        return "Neutral", "⚪", "#808080"
+    
+    text_lower = text.lower()
+    
+    # Positive keywords
+    positive_words = [
+        'profit', 'gain', 'up', 'high', 'growth', 'surge', 'jump', 'rally', 
+        'boost', 'strong', 'positive', 'beat', 'exceed', 'record', 'success',
+        'bullish', 'upgrade', 'outperform', 'buy', 'breakout', 'momentum',
+        'dividend', 'bonus', 'expansion', 'innovation', 'award', 'partnership'
+    ]
+    
+    # Negative keywords
+    negative_words = [
+        'loss', 'fall', 'down', 'low', 'decline', 'drop', 'crash', 'bearish',
+        'weak', 'negative', 'miss', 'underperform', 'sell', 'downgrade', 
+        'lawsuit', 'fraud', 'scandal', 'bankruptcy', 'debt', 'warning',
+        'concern', 'risk', 'plunge', 'slump', 'cut', 'layoff', 'deficit'
+    ]
+    
+    # Count positive and negative words
+    positive_count = sum(1 for word in positive_words if word in text_lower)
+    negative_count = sum(1 for word in negative_words if word in text_lower)
+    
+    # Determine sentiment
+    if positive_count > negative_count:
+        return "Positive", "🟢", "#28a745"
+    elif negative_count > positive_count:
+        return "Negative", "🔴", "#dc3545"
+    else:
+        return "Neutral", "⚪", "#6c757d"
+
 def display_stock_news(symbol, max_news=5):
     """Display news for a stock in Streamlit"""
     with st.spinner(f"📰 Fetching latest news for {symbol}..."):
@@ -1657,8 +1692,16 @@ def display_stock_news(symbol, max_news=5):
                 if time_str and time_str != "12:00 am":
                     date_time_display += f" at {time_str}"
                 
-                # Create expander with headline
-                with st.expander(f"📌 {headline}", expanded=(i==1)):
+                # Analyze sentiment
+                full_text = f"{headline} {item.get('Caption', '')} {item.get('Details', '')}"
+                sentiment, emoji, color = analyze_news_sentiment(full_text)
+                
+                # Create expander with headline and sentiment
+                with st.expander(f"{emoji} {headline}", expanded=(i==1)):
+                    # Show sentiment badge
+                    st.markdown(f"<span style='background-color:{color}; color:white; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:bold;'>{sentiment}</span>", unsafe_allow_html=True)
+                    st.write("")  # spacing
+                    
                     # Show date and category
                     col1, col2 = st.columns([2, 1])
                     
@@ -1684,15 +1727,14 @@ def display_stock_news(symbol, max_news=5):
                         details = item.get('Details', '')
                         # Simple HTML tag removal (basic)
                         clean_details = re.sub('<[^<]+?>', '', details)
-                        clean_details = clean_details.replace('&nbsp;', ' ').strip()
+                        clean_details = clean_details.replace('&nbsp;', ' ').replace('&amp;', '&')
+                        clean_details = clean_details.replace('&lt;', '<').replace('&gt;', '>')
+                        clean_details = clean_details.replace('&quot;', '"').strip()
                         
                         if clean_details and len(clean_details) > 10:
                             st.markdown("**📄 Full Article:**")
-                            # Use text area for long content or markdown for shorter
-                            if len(clean_details) > 500:
-                                st.text_area("", clean_details, height=200, key=f"news_{i}_{item.get('ID', i)}", label_visibility="collapsed")
-                            else:
-                                st.markdown(f"> {clean_details}")
+                            # Display with proper formatting in a container
+                            st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:5px; border-left:3px solid {color};'>{clean_details}</div>", unsafe_allow_html=True)
         else:
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
