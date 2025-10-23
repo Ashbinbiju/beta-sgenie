@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import time as time_module
 import requests
+import re
 import io
 import random
 import warnings
@@ -1636,21 +1637,58 @@ def display_stock_news(symbol, max_news=5):
             st.caption(f"Found {len(news)} recent news item(s)")
             
             for i, item in enumerate(news[:max_news], 1):
-                with st.expander(f"📌 {item.get('SecurityName', symbol)} - {item.get('SectorName', 'N/A')}", expanded=(i==1)):
-                    col1, col2 = st.columns([3, 1])
+                # Parse date and format it nicely
+                try:
+                    date_str = item.get('Date', '')
+                    if date_str:
+                        date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                        formatted_date = date_obj.strftime('%d %b %Y')
+                    else:
+                        formatted_date = 'N/A'
+                except:
+                    formatted_date = item.get('Date', 'N/A')
+                
+                # Get time
+                time_str = item.get('Time', '')
+                
+                # Create headline with date and time
+                headline = item.get('Description', 'No headline')
+                date_time_display = f"{formatted_date}"
+                if time_str and time_str != "12:00 am":
+                    date_time_display += f" at {time_str}"
+                
+                # Create expander with headline
+                with st.expander(f"📌 {headline}", expanded=(i==1)):
+                    # Show date and category
+                    col1, col2 = st.columns([2, 1])
                     
                     with col1:
-                        st.write(f"**Company:** {item.get('SecurityName', 'N/A')}")
-                        st.write(f"**Sector:** {item.get('SectorName', 'N/A')}")
-                        st.write(f"**Industry:** {item.get('IndustryName', 'N/A')}")
+                        st.caption(f"🗓️ {date_time_display}")
+                        if item.get('SubSectionName'):
+                            st.caption(f"📁 Category: {item.get('SubSectionName')}")
                     
                     with col2:
-                        st.write(f"**Symbol:** {item.get('Symbol', 'N/A')}")
-                        if item.get('Exchange'):
-                            st.write(f"**Exchange:** {item.get('Exchange')}")
+                        st.caption(f"🏢 Sector: {item.get('SectorName', 'N/A')}")
+                        st.caption(f"🏭 Industry: {item.get('IndustryName', 'N/A')}")
                     
-                    if i < len(news):
-                        st.divider()
+                    st.divider()
+                    
+                    # Show caption if available (summary)
+                    if item.get('Caption'):
+                        st.info(f"**Summary:** {item.get('Caption')}")
+                    
+                    # Show full details if available
+                    if item.get('Details'):
+                        # Remove HTML tags for cleaner display
+                        import re
+                        details = item.get('Details', '')
+                        # Simple HTML tag removal (basic)
+                        clean_details = re.sub('<[^<]+?>', '', details)
+                        clean_details = clean_details.replace('&nbsp;', ' ').strip()
+                        
+                        if clean_details and len(clean_details) > 10:
+                            with st.expander("📄 Read Full Article", expanded=False):
+                                st.write(clean_details)
         else:
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
