@@ -1687,8 +1687,12 @@ def display_stock_news(symbol, max_news=5):
                         clean_details = clean_details.replace('&nbsp;', ' ').strip()
                         
                         if clean_details and len(clean_details) > 10:
-                            with st.expander("📄 Read Full Article", expanded=False):
-                                st.write(clean_details)
+                            st.markdown("**📄 Full Article:**")
+                            # Use text area for long content or markdown for shorter
+                            if len(clean_details) > 500:
+                                st.text_area("", clean_details, height=200, key=f"news_{i}_{item.get('ID', i)}", label_visibility="collapsed")
+                            else:
+                                st.markdown(f"> {clean_details}")
         else:
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
