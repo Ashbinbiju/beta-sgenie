@@ -1,12 +1,5 @@
 .streamlit/secrets.toml
 
-# SQLite cache databases
-stock_data_cache/
-*.db
-*.db-shm
-*.db-wal
-stock_picks.db
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
