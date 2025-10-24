@@ -5306,25 +5306,13 @@ def main():
         selected_sectors = st.sidebar.multiselect("Select Sectors", ["All"] + list(SECTORS.keys()), default=["All"])
         stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
     
-    # Initialize selected stock in session state if not exists
-    if 'selected_stock' not in st.session_state and stock_list:
-        st.session_state.selected_stock = stock_list[0] if stock_list else "SBIN-EQ"
-    
-    # Get the index for the current selection
-    try:
-        current_index = stock_list.index(st.session_state.selected_stock) if st.session_state.get('selected_stock') in stock_list else 0
-    except (ValueError, AttributeError):
-        current_index = 0
-    
+    # Use the selectbox with a key - Streamlit handles the state automatically
     symbol = st.sidebar.selectbox(
         "Select Stock", 
         stock_list if stock_list else ["SBIN-EQ"], 
-        index=current_index,
+        index=0,
         key="stock_selector"
     )
-    
-    # Update session state with new selection
-    st.session_state.selected_stock = symbol
     
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, value=30000, step=5000)
 
@@ -5542,7 +5530,7 @@ def main():
                                 "Select Technical Analysis Timeframe:",
                                 options=['1min', '3min', '5min', '10min', '15min', '30min', 'hour', 'day'],
                                 index=4,  # Default to 15min
-                                key="tech_timeframe"
+                                key=f"tech_timeframe_{symbol}"
                             )
                             display_technical_analysis(symbol, tech_timeframe)
                         
@@ -5555,7 +5543,7 @@ def main():
                                 "Select Chart Timeframe:",
                                 options=['1min', '3min', '5min', '10min', '15min', '30min', 'hour', 'day'],
                                 index=6,  # Default to hour
-                                key="candle_timeframe"
+                                key=f"candle_timeframe_{symbol}"
                             )
                             display_candlestick_chart(symbol, candle_timeframe)
                             
