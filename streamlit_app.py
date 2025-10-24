@@ -2697,6 +2697,217 @@ def display_stock_news(symbol, max_news=5):
 #  FUNDAMENTALS & TECHNICAL ANALYSIS
 # ============================================================================
 
+def get_comprehensive_analysis(symbol, timeframe='15min'):
+    """
+    Comprehensive stock analysis combining Zerodha fundamentals and Streak technicals
+    Returns a detailed analysis suitable for both swing and intraday trading
+    
+    Args:
+        symbol: Stock symbol (e.g., 'JKPAPER-EQ')
+        timeframe: Analysis timeframe for technical data
+    
+    Returns:
+        dict with analysis results and trading recommendation
+    """
+    analysis = {
+        'symbol': symbol,
+        'timeframe': timeframe,
+        'fundamental_score': 0,
+        'technical_score': 0,
+        'overall_score': 0,
+        'signals': [],
+        'warnings': [],
+        'strengths': [],
+        'weaknesses': [],
+        'recommendation': 'NEUTRAL',
+        'confidence': 0
+    }
+    
+    try:
+        # 1. FUNDAMENTAL ANALYSIS (for swing trading focus)
+        financials = fetch_financials(symbol)
+        if financials:
+            # Revenue Growth
+            if 'Summary' in financials:
+                summary = financials['Summary']
+                years = sorted([k for k in summary.keys() if str(k).isdigit()], key=lambda x: int(x), reverse=True)
+                if len(years) >= 2:
+                    latest = summary[years[0]].get('Revenue', 0)
+                    previous = summary[years[1]].get('Revenue', 0)
+                    if previous > 0:
+                        growth = ((latest - previous) / previous) * 100
+                        if growth > 15:
+                            analysis['fundamental_score'] += 20
+                            analysis['strengths'].append(f"Strong revenue growth: {growth:.1f}%")
+                        elif growth > 0:
+                            analysis['fundamental_score'] += 10
+                            analysis['strengths'].append(f"Positive revenue growth: {growth:.1f}%")
+                        else:
+                            analysis['weaknesses'].append(f"Revenue decline: {growth:.1f}%")
+            
+            # Profitability Ratios
+            if 'Financial Ratios' in financials:
+                ratios = financials['Financial Ratios']
+                latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
+                ratio_data = ratios[latest_year]
+                
+                # OPM (Operating Profit Margin)
+                opm = ratio_data.get('Operating Profit Margin (OPM)', 0)
+                if opm > 15:
+                    analysis['fundamental_score'] += 15
+                    analysis['strengths'].append(f"Excellent OPM: {opm:.2f}%")
+                elif opm > 10:
+                    analysis['fundamental_score'] += 10
+                    analysis['strengths'].append(f"Good OPM: {opm:.2f}%")
+                elif opm < 5:
+                    analysis['weaknesses'].append(f"Low OPM: {opm:.2f}%")
+                
+                # NPM (Net Profit Margin)
+                npm = ratio_data.get('Net Profit Margin', 0)
+                if npm > 10:
+                    analysis['fundamental_score'] += 15
+                    analysis['strengths'].append(f"Strong NPM: {npm:.2f}%")
+                elif npm > 5:
+                    analysis['fundamental_score'] += 10
+                elif npm < 0:
+                    analysis['fundamental_score'] -= 20
+                    analysis['warnings'].append(f"Negative NPM: {npm:.2f}%")
+        
+        # 2. SHAREHOLDING PATTERN
+        shareholdings = fetch_shareholding_pattern(symbol)
+        if shareholdings:
+            latest_quarter = list(shareholdings.keys())[0]
+            latest_data = shareholdings[latest_quarter]
+            
+            # Promoter holding
+            promoter = latest_data.get('Promoter', 0)
+            if promoter > 50:
+                analysis['fundamental_score'] += 10
+                analysis['strengths'].append(f"Strong promoter holding: {promoter:.1f}%")
+            elif promoter < 25:
+                analysis['warnings'].append(f"Low promoter holding: {promoter:.1f}%")
+            
+            # Pledge
+            pledge = latest_data.get('Pledge', 0)
+            if pledge > 50:
+                analysis['fundamental_score'] -= 15
+                analysis['warnings'].append(f"High promoter pledge: {pledge:.1f}%")
+            elif pledge > 25:
+                analysis['warnings'].append(f"Moderate promoter pledge: {pledge:.1f}%")
+            
+            # FII holding (institutional interest)
+            fii = latest_data.get('FII', 0)
+            if fii > 15:
+                analysis['fundamental_score'] += 10
+                analysis['strengths'].append(f"Good FII holding: {fii:.1f}%")
+        
+        # 3. TECHNICAL ANALYSIS (for intraday and timing)
+        tech_data = fetch_technical_analysis(symbol, timeframe)
+        if tech_data and tech_data.get('status') == 1:
+            state = tech_data.get('state', 0)
+            
+            # Overall technical signal
+            if state == 1:
+                analysis['technical_score'] += 30
+                analysis['signals'].append("Bullish technical trend")
+            elif state == -1:
+                analysis['technical_score'] -= 30
+                analysis['signals'].append("Bearish technical trend")
+            
+            # RSI
+            rsi = tech_data.get('rsi', 50)
+            if 30 <= rsi <= 40:
+                analysis['technical_score'] += 15
+                analysis['signals'].append(f"RSI oversold zone: {rsi:.1f} - Good entry")
+            elif 60 <= rsi <= 70:
+                analysis['signals'].append(f"RSI strong: {rsi:.1f}")
+            elif rsi > 75:
+                analysis['technical_score'] -= 10
+                analysis['warnings'].append(f"RSI overbought: {rsi:.1f}")
+            elif rsi < 25:
+                analysis['warnings'].append(f"RSI extremely oversold: {rsi:.1f}")
+            
+            # MACD
+            macd = tech_data.get('macd', 0)
+            if macd > 0:
+                analysis['technical_score'] += 10
+                analysis['signals'].append("Positive MACD momentum")
+            
+            # ADX (Trend Strength)
+            adx = tech_data.get('adx', 0)
+            if adx > 25:
+                analysis['technical_score'] += 10
+                analysis['signals'].append(f"Strong trend: ADX {adx:.1f}")
+            elif adx < 20:
+                analysis['warnings'].append(f"Weak trend: ADX {adx:.1f}")
+            
+            # Win rate
+            win_pct = tech_data.get('win_pct', 0)
+            if win_pct > 0.6:
+                analysis['technical_score'] += 15
+                analysis['strengths'].append(f"High win rate: {win_pct*100:.1f}%")
+        
+        # 4. SUPPORT & RESISTANCE (for entry/exit levels)
+        sr_data = fetch_support_resistance(symbol)
+        if sr_data:
+            current_price = sr_data.get('close', 0)
+            pivot = sr_data.get('pp', 0)
+            r1 = sr_data.get('r1', 0)
+            s1 = sr_data.get('s1', 0)
+            
+            if current_price > 0 and pivot > 0:
+                # Check if price is near support (good buy zone)
+                if s1 > 0 and abs(current_price - s1) / s1 < 0.02:  # Within 2% of S1
+                    analysis['technical_score'] += 15
+                    analysis['signals'].append(f"Near support S1: ₹{s1:.2f} - Good entry zone")
+                
+                # Check if price is above pivot (bullish)
+                if current_price > pivot:
+                    analysis['technical_score'] += 10
+                    analysis['signals'].append(f"Above pivot: ₹{pivot:.2f}")
+                
+                # Check if price is near resistance (profit booking zone)
+                if r1 > 0 and abs(current_price - r1) / r1 < 0.02:  # Within 2% of R1
+                    analysis['warnings'].append(f"Near resistance R1: ₹{r1:.2f} - Consider profit booking")
+        
+        # 5. CALCULATE OVERALL SCORE AND RECOMMENDATION
+        # Normalize scores to 0-100 scale
+        fund_normalized = min(100, max(0, analysis['fundamental_score']))
+        tech_normalized = min(100, max(-50, analysis['technical_score'] + 50))  # Shift range to positive
+        
+        # Weight: 40% fundamentals, 60% technicals (for swing)
+        # For intraday, you'd want 20% fundamentals, 80% technicals
+        if timeframe in ['1min', '3min', '5min', '10min']:
+            # Intraday - focus on technicals
+            analysis['overall_score'] = (fund_normalized * 0.2 + tech_normalized * 0.8)
+        else:
+            # Swing - balanced approach
+            analysis['overall_score'] = (fund_normalized * 0.4 + tech_normalized * 0.6)
+        
+        # Determine recommendation
+        score = analysis['overall_score']
+        if score >= 70:
+            analysis['recommendation'] = 'STRONG BUY'
+            analysis['confidence'] = min(95, score)
+        elif score >= 60:
+            analysis['recommendation'] = 'BUY'
+            analysis['confidence'] = score
+        elif score >= 50:
+            analysis['recommendation'] = 'HOLD'
+            analysis['confidence'] = 50
+        elif score >= 40:
+            analysis['recommendation'] = 'NEUTRAL'
+            analysis['confidence'] = 40
+        else:
+            analysis['recommendation'] = 'AVOID'
+            analysis['confidence'] = max(20, 100 - score)
+        
+    except Exception as e:
+        logging.error(f"Error in comprehensive analysis for {symbol}: {e}")
+        analysis['warnings'].append(f"Analysis error: {str(e)}")
+    
+    return analysis
+
 def fetch_shareholding_pattern(symbol):
     """Fetch shareholding pattern from Zerodha"""
     try:
@@ -3199,6 +3410,107 @@ def display_candlestick_chart(symbol, timeframe='hour'):
         
     else:
         st.info("📈 Candlestick chart data not available")
+
+def display_comprehensive_analysis(symbol, timeframe='15min'):
+    """Display comprehensive Zerodha-based analysis for swing and intraday trading"""
+    analysis = get_comprehensive_analysis(symbol, timeframe)
+    
+    if analysis:
+        st.markdown("#### 🎯 Comprehensive Trading Analysis")
+        
+        # Top level recommendation
+        rec = analysis['recommendation']
+        score = analysis['overall_score']
+        conf = analysis['confidence']
+        
+        # Color based on recommendation
+        if rec in ['STRONG BUY', 'BUY']:
+            rec_color = "green"
+            rec_emoji = "🚀"
+        elif rec == 'HOLD':
+            rec_color = "orange"
+            rec_emoji = "⏸️"
+        elif rec == 'NEUTRAL':
+            rec_color = "gray"
+            rec_emoji = "⚪"
+        else:
+            rec_color = "red"
+            rec_emoji = "⛔"
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"### {rec_emoji} <span style='color:{rec_color};'>{rec}</span>", unsafe_allow_html=True)
+        with col2:
+            st.metric("Overall Score", f"{score:.1f}/100")
+        with col3:
+            st.metric("Confidence", f"{conf:.1f}%")
+        
+        # Trading mode indicator
+        if timeframe in ['1min', '3min', '5min', '10min']:
+            st.info("📊 **Intraday Mode** - Focus on technical indicators (80% weight)")
+        else:
+            st.info("📈 **Swing Trading Mode** - Balanced fundamentals + technicals (40%/60% weight)")
+        
+        # Detailed breakdown
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### ✅ Strengths")
+            if analysis['strengths']:
+                for strength in analysis['strengths']:
+                    st.success(f"• {strength}")
+            else:
+                st.info("No major strengths identified")
+            
+            st.markdown("### 📊 Trading Signals")
+            if analysis['signals']:
+                for signal in analysis['signals']:
+                    st.info(f"• {signal}")
+            else:
+                st.info("No strong signals")
+        
+        with col2:
+            st.markdown("### ⚠️ Weaknesses & Risks")
+            if analysis['weaknesses']:
+                for weakness in analysis['weaknesses']:
+                    st.error(f"• {weakness}")
+            else:
+                st.success("No major weaknesses identified")
+            
+            st.markdown("### 🚨 Warnings")
+            if analysis['warnings']:
+                for warning in analysis['warnings']:
+                    st.warning(f"• {warning}")
+            else:
+                st.success("No warnings")
+        
+        # Score breakdown
+        with st.expander("📊 Score Breakdown"):
+            st.write(f"**Fundamental Score:** {analysis['fundamental_score']}")
+            st.write(f"**Technical Score:** {analysis['technical_score']}")
+            st.write(f"**Timeframe:** {timeframe}")
+            
+            # Weight explanation
+            if timeframe in ['1min', '3min', '5min', '10min']:
+                st.write("**Weighting:** 20% Fundamentals + 80% Technicals (Intraday)")
+            else:
+                st.write("**Weighting:** 40% Fundamentals + 60% Technicals (Swing)")
+        
+        # Trading suggestion
+        st.markdown("---")
+        st.markdown("### 💡 Trading Suggestion")
+        if rec == 'STRONG BUY':
+            st.success(f"✅ Strong buy opportunity with {conf:.0f}% confidence. Consider entering with proper stop loss.")
+        elif rec == 'BUY':
+            st.success(f"✅ Buy opportunity with {conf:.0f}% confidence. Good risk-reward setup.")
+        elif rec == 'HOLD':
+            st.info("⏸️ Hold current positions. Wait for clearer signals before entering new trades.")
+        elif rec == 'NEUTRAL':
+            st.info("⚪ Neutral stance. Not enough conviction for trade entry.")
+        else:
+            st.warning("⛔ Avoid trading this stock. Risk factors outweigh potential rewards.")
+    else:
+        st.error("Unable to generate comprehensive analysis")
 
 # ============================================================================
 # API & DATA FETCHING (MODIFIED FOR MULTI-API)
@@ -5557,13 +5869,31 @@ def main():
                         st.markdown("### 📊 Comprehensive Stock Analysis")
                         
                         # Create tabs for different analyses
-                        analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
+                        analysis_tab0, analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
+                            "🎯 Smart Analysis",
                             "📊 Shareholding Pattern",
                             "💰 Financial Summary",
                             "🔍 Technical Indicators",
                             "🎯 Support & Resistance",
                             "📈 Candlestick Chart"
                         ])
+                        
+                        with analysis_tab0:
+                            # Smart comprehensive analysis - uses all Zerodha data
+                            st.markdown("**Select Trading Mode:**")
+                            analysis_mode = st.radio(
+                                "Mode",
+                                options=['Swing Trading (15min+)', 'Intraday Trading (5min)'],
+                                horizontal=True,
+                                key=f"analysis_mode_{symbol}"
+                            )
+                            
+                            if 'Intraday' in analysis_mode:
+                                smart_timeframe = '5min'
+                            else:
+                                smart_timeframe = '15min'
+                            
+                            display_comprehensive_analysis(symbol, smart_timeframe)
                         
                         with analysis_tab1:
                             display_shareholding_pattern(symbol)
