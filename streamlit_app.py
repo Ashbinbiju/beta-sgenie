@@ -2694,6 +2694,466 @@ def display_stock_news(symbol, max_news=5):
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
 # ============================================================================
+#  FUNDAMENTALS & TECHNICAL ANALYSIS
+# ============================================================================
+
+def fetch_shareholding_pattern(symbol):
+    """Fetch shareholding pattern from Zerodha"""
+    try:
+        # Remove -EQ suffix and convert to base symbol
+        base_symbol = symbol.replace('-EQ', '').strip()
+        url = f"https://zerodha.com/markets/stocks/NSE/{base_symbol}/shareholdings/"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': f'https://zerodha.com/markets/stocks/NSE/{base_symbol}/',
+            'Origin': 'https://zerodha.com'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        if data and 'Shareholdings' in data:
+            import json
+            shareholdings = json.loads(data['Shareholdings'])
+            return shareholdings
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error fetching shareholding for {symbol}: {e}")
+        return None
+
+def fetch_financials(symbol):
+    """Fetch financial data from Zerodha"""
+    try:
+        # Remove -EQ suffix and convert to base symbol
+        base_symbol = symbol.replace('-EQ', '').strip()
+        url = f"https://zerodha.com/markets/stocks/NSE/{base_symbol}/financials/"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': f'https://zerodha.com/markets/stocks/NSE/{base_symbol}/',
+            'Origin': 'https://zerodha.com'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        if data:
+            import json
+            result = {}
+            for key, value in data.items():
+                if value:
+                    try:
+                        result[key] = json.loads(value)
+                    except:
+                        result[key] = value
+            return result
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error fetching financials for {symbol}: {e}")
+        return None
+
+def fetch_technical_analysis(symbol, timeframe='15min'):
+    """Fetch technical analysis from Streak"""
+    try:
+        # Remove -EQ suffix and convert to base symbol
+        base_symbol = symbol.replace('-EQ', '').strip()
+        url = f"https://technicalwidget.streak.tech/api/streak_tech_analysis/?timeFrame={timeframe}&stock=NSE:{base_symbol}&user_id="
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error fetching technical analysis for {symbol}: {e}")
+        return None
+
+def fetch_support_resistance(symbol, timeframe='5min'):
+    """Fetch support and resistance levels from Streak
+    
+    Args:
+        symbol: Stock symbol (e.g., 'JKPAPER-EQ')
+        timeframe: Timeframe for analysis (default: '5min')
+    """
+    try:
+        # Remove -EQ suffix and convert to base symbol
+        base_symbol = symbol.replace('-EQ', '').strip()
+        url = "https://mo.streak.tech/api/sr_analysis_multi/"
+        
+        # Correct payload format
+        payload = {
+            "time_frame": timeframe,
+            "stocks": [f"NSE_{base_symbol}"],
+            "user_broker_id": "ZMS"
+        }
+        
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        if data and 'data' in data and f"NSE_{base_symbol}" in data['data']:
+            return data['data'][f"NSE_{base_symbol}"]
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error fetching support/resistance for {symbol}: {e}")
+        return None
+
+def fetch_candle_data(symbol, timeframe='hour'):
+    """Fetch candlestick data from Streak
+    
+    Supported timeframes: 1min, 3min, 5min, 10min, 15min, 30min, hour, day
+    Returns: List of [timestamp, open, high, low, close, volume]
+    """
+    try:
+        # Remove -EQ suffix and convert to base symbol
+        base_symbol = symbol.replace('-EQ', '').strip()
+        url = f"https://technicalwidget.streak.tech/api/candles/?stock=NSE:{base_symbol}&timeFrame={timeframe}&user_id="
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error fetching candle data for {symbol}: {e}")
+        return None
+
+def display_shareholding_pattern(symbol):
+    """Display shareholding pattern in Streamlit"""
+    shareholdings = fetch_shareholding_pattern(symbol)
+    
+    if shareholdings:
+        st.markdown("#### 📊 Shareholding Pattern")
+        
+        # Get latest quarter data
+        latest_quarter = list(shareholdings.keys())[0]
+        latest_data = shareholdings[latest_quarter]
+        
+        # Create a bar chart of shareholding
+        import pandas as pd
+        
+        shareholding_df = pd.DataFrame({
+            'Category': ['Promoter', 'FII', 'DII', 'Retail < 2L', 'Others'],
+            'Percentage': [
+                latest_data.get('Promoter', 0),
+                latest_data.get('FII', 0),
+                latest_data.get('DII', 0),
+                latest_data.get('Retail < 2L', 0),
+                latest_data.get('Others', 0)
+            ]
+        })
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.bar_chart(shareholding_df.set_index('Category'))
+        
+        with col2:
+            st.metric("Latest Quarter", f"Q{latest_quarter[4:6]}-{latest_quarter[:4]}")
+            st.metric("Promoter Holding", f"{latest_data.get('Promoter', 0):.2f}%")
+            st.metric("Pledge", f"{latest_data.get('Pledge', 0):.2f}%")
+            st.metric("No. of Shareholders", f"{latest_data.get('No. of Shareholders', 0):,}")
+        
+        # Show trend for last 5 quarters
+        st.markdown("**📈 Quarterly Trend:**")
+        quarters_list = list(shareholdings.keys())[:5]
+        trend_data = []
+        
+        for quarter in quarters_list:
+            qdata = shareholdings[quarter]
+            trend_data.append({
+                'Quarter': f"Q{quarter[4:6]}-{quarter[:4]}",
+                'Promoter': qdata.get('Promoter', 0),
+                'FII': qdata.get('FII', 0),
+                'DII': qdata.get('DII', 0)
+            })
+        
+        trend_df = pd.DataFrame(trend_data)
+        st.dataframe(trend_df, use_container_width=True)
+    else:
+        st.info("📊 Shareholding data not available")
+
+def display_financials(symbol):
+    """Display financial data in Streamlit"""
+    financials = fetch_financials(symbol)
+    
+    if financials:
+        st.markdown("#### 💰 Financial Summary")
+        
+        # Profit & Loss - Yearly
+        if 'Profit & Loss' in financials and 'yearly' in financials['Profit & Loss']:
+            yearly_pl = financials['Profit & Loss']['yearly']
+            
+            # Latest year metrics
+            latest_year = [y for y in yearly_pl.keys() if y != 'TTM'][0]
+            latest_data = yearly_pl[latest_year]
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Revenue", f"₹{latest_data.get('Sales', 0):.0f} Cr")
+            with col2:
+                st.metric("Operating Profit", f"₹{latest_data.get('Operating Profit', 0):.0f} Cr")
+            with col3:
+                st.metric("Net Profit", f"₹{latest_data.get('Net Profit', 0):.0f} Cr")
+            with col4:
+                opm = (latest_data.get('Operating Profit', 0) / latest_data.get('Sales', 1)) * 100 if latest_data.get('Sales', 0) > 0 else 0
+                st.metric("OPM", f"{opm:.2f}%")
+        
+        # Financial Ratios
+        if 'Financial Ratios' in financials:
+            st.markdown("**📊 Key Ratios:**")
+            ratios = financials['Financial Ratios']
+            latest_year = list(ratios.keys())[0]
+            ratio_data = ratios[latest_year]
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("EPS", f"₹{ratio_data.get('Earnings Per Share (EPS)', 0):.2f}")
+            with col2:
+                st.metric("NPM", f"{ratio_data.get('Net Profit Margin', 0):.2f}%")
+            with col3:
+                st.metric("EV/EBITDA", f"{ratio_data.get('EV/EBITDA', 0):.2f}")
+        
+        # Balance Sheet Summary
+        if 'Balance Sheet' in financials:
+            st.markdown("**🏦 Balance Sheet (Latest):**")
+            bs = financials['Balance Sheet']
+            latest_year = list(bs.keys())[0]
+            bs_data = bs[latest_year]
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Assets", f"₹{bs_data.get('Total Assets', 0):.0f} Cr")
+            with col2:
+                st.metric("Current Assets", f"₹{bs_data.get('Current Assets', 0):.0f} Cr")
+            with col3:
+                st.metric("Current Liabilities", f"₹{bs_data.get('Current Liabilities', 0):.0f} Cr")
+    else:
+        st.info("💰 Financial data not available")
+
+def display_technical_analysis(symbol, timeframe='15min'):
+    """Display technical analysis in Streamlit"""
+    tech_data = fetch_technical_analysis(symbol, timeframe)
+    
+    if tech_data and tech_data.get('status') == 1:
+        st.markdown("#### 🔍 Technical Analysis")
+        
+        # Overall signal
+        state = tech_data.get('state', 0)
+        if state == 1:
+            signal_text = "🟢 BULLISH"
+            signal_color = "green"
+        elif state == -1:
+            signal_text = "🔴 BEARISH"
+            signal_color = "red"
+        else:
+            signal_text = "⚪ NEUTRAL"
+            signal_color = "gray"
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"**Overall Signal:** <span style='color:{signal_color}; font-size:20px; font-weight:bold;'>{signal_text}</span>", unsafe_allow_html=True)
+        with col2:
+            st.metric("Win Rate", f"{tech_data.get('win_pct', 0)*100:.1f}%")
+        with col3:
+            st.metric("Total Signals", tech_data.get('signals', 0))
+        
+        st.markdown("**📊 Key Indicators:**")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("RSI", f"{tech_data.get('rsi', 0):.2f}")
+            st.metric("MACD", f"{tech_data.get('macd', 0):.4f}")
+        
+        with col2:
+            st.metric("ADX", f"{tech_data.get('adx', 0):.2f}")
+            st.metric("CCI", f"{tech_data.get('cci', 0):.2f}")
+        
+        with col3:
+            st.metric("Stochastic K", f"{tech_data.get('stochastic_k', 0):.2f}")
+            st.metric("Williams %R", f"{tech_data.get('willR', 0):.2f}")
+        
+        with col4:
+            st.metric("Momentum", f"{tech_data.get('momentum', 0):.2f}")
+            st.metric("Ultimate Osc", f"{tech_data.get('ult_osc', 0):.2f}")
+        
+        # Moving Averages
+        st.markdown("**📈 Moving Averages:**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.caption("**Simple Moving Averages (SMA):**")
+            st.write(f"• SMA5: {tech_data.get('sma5', 0):.2f}")
+            st.write(f"• SMA10: {tech_data.get('sma10', 0):.2f}")
+            st.write(f"• SMA20: {tech_data.get('sma20', 0):.2f}")
+            st.write(f"• SMA50: {tech_data.get('sma50', 0):.2f}")
+        
+        with col2:
+            st.caption("**Exponential Moving Averages (EMA):**")
+            st.write(f"• EMA5: {tech_data.get('ema5', 0):.2f}")
+            st.write(f"• EMA10: {tech_data.get('ema10', 0):.2f}")
+            st.write(f"• EMA20: {tech_data.get('ema20', 0):.2f}")
+            st.write(f"• EMA50: {tech_data.get('ema50', 0):.2f}")
+    else:
+        st.info("🔍 Technical analysis not available")
+
+def display_support_resistance(symbol):
+    """Display support and resistance levels in Streamlit"""
+    sr_data = fetch_support_resistance(symbol)
+    
+    if sr_data:
+        st.markdown("#### 🎯 Support & Resistance Levels")
+        
+        current_price = sr_data.get('close', 0)
+        pivot = sr_data.get('pp', 0)
+        
+        # Create three columns for display
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**🔴 Resistance Levels:**")
+            st.metric("R3", f"₹{sr_data.get('r3', 0):.2f}", delta=f"+{((sr_data.get('r3', 0) - current_price) / current_price * 100):.2f}%")
+            st.metric("R2", f"₹{sr_data.get('r2', 0):.2f}", delta=f"+{((sr_data.get('r2', 0) - current_price) / current_price * 100):.2f}%")
+            st.metric("R1", f"₹{sr_data.get('r1', 0):.2f}", delta=f"+{((sr_data.get('r1', 0) - current_price) / current_price * 100):.2f}%")
+        
+        with col2:
+            st.markdown("**⚪ Pivot & Current:**")
+            st.metric("Pivot Point", f"₹{pivot:.2f}")
+            st.metric("Current Price", f"₹{current_price:.2f}", 
+                     delta="Above Pivot" if current_price > pivot else "Below Pivot")
+            
+            # Trading suggestion
+            if current_price < sr_data.get('s1', 0):
+                signal = "🟢 Near Strong Support"
+            elif current_price > sr_data.get('r1', 0):
+                signal = "🔴 Near Strong Resistance"
+            elif current_price < pivot:
+                signal = "⚠️ Below Pivot - Bearish Zone"
+            else:
+                signal = "✅ Above Pivot - Bullish Zone"
+            st.info(signal)
+        
+        with col3:
+            st.markdown("**🟢 Support Levels:**")
+            st.metric("S1", f"₹{sr_data.get('s1', 0):.2f}", delta=f"{((sr_data.get('s1', 0) - current_price) / current_price * 100):.2f}%")
+            st.metric("S2", f"₹{sr_data.get('s2', 0):.2f}", delta=f"{((sr_data.get('s2', 0) - current_price) / current_price * 100):.2f}%")
+            st.metric("S3", f"₹{sr_data.get('s3', 0):.2f}", delta=f"{((sr_data.get('s3', 0) - current_price) / current_price * 100):.2f}%")
+        
+        # Visual representation
+        st.markdown("**📊 Price Level Chart:**")
+        import pandas as pd
+        levels_df = pd.DataFrame({
+            'Level': ['R3', 'R2', 'R1', 'Pivot', 'Current', 'S1', 'S2', 'S3'],
+            'Price': [
+                sr_data.get('r3', 0),
+                sr_data.get('r2', 0),
+                sr_data.get('r1', 0),
+                pivot,
+                current_price,
+                sr_data.get('s1', 0),
+                sr_data.get('s2', 0),
+                sr_data.get('s3', 0)
+            ]
+        })
+        st.bar_chart(levels_df.set_index('Level'))
+        
+    else:
+        st.info("🎯 Support & Resistance data not available")
+
+def display_candlestick_chart(symbol, timeframe='hour'):
+    """Display candlestick chart from Streak data"""
+    candle_data = fetch_candle_data(symbol, timeframe)
+    
+    if candle_data and len(candle_data) > 0:
+        st.markdown(f"#### 📈 Candlestick Chart ({timeframe})")
+        
+        import pandas as pd
+        import plotly.graph_objects as go
+        from datetime import datetime
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(candle_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # Create candlestick chart
+        fig = go.Figure(data=[go.Candlestick(
+            x=df['timestamp'],
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name='Price'
+        )])
+        
+        # Add volume bar chart
+        fig.add_trace(go.Bar(
+            x=df['timestamp'],
+            y=df['volume'],
+            name='Volume',
+            yaxis='y2',
+            opacity=0.3,
+            marker=dict(color='rgba(0,100,200,0.5)')
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title=f"{symbol} - {timeframe.upper()} Chart",
+            yaxis_title='Price (₹)',
+            yaxis2=dict(
+                title='Volume',
+                overlaying='y',
+                side='right',
+                showgrid=False
+            ),
+            xaxis_title='Time',
+            height=600,
+            hovermode='x unified',
+            xaxis_rangeslider_visible=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Show latest candle stats
+        latest = df.iloc[-1]
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric("Open", f"₹{latest['open']:.2f}")
+        with col2:
+            st.metric("High", f"₹{latest['high']:.2f}")
+        with col3:
+            st.metric("Low", f"₹{latest['low']:.2f}")
+        with col4:
+            change = ((latest['close'] - latest['open']) / latest['open'] * 100)
+            st.metric("Close", f"₹{latest['close']:.2f}", delta=f"{change:+.2f}%")
+        with col5:
+            st.metric("Volume", f"{latest['volume']:,.0f}")
+        
+    else:
+        st.info("📈 Candlestick chart data not available")
+
+# ============================================================================
 # API & DATA FETCHING (MODIFIED FOR MULTI-API)
 # ============================================================================
 
@@ -5036,6 +5496,48 @@ def main():
                         # Display latest news
                         st.markdown("---")
                         display_stock_news(symbol, max_news=5)
+                        
+                        # Display Fundamentals & Technicals
+                        st.markdown("---")
+                        st.markdown("### 📊 Comprehensive Stock Analysis")
+                        
+                        # Create tabs for different analyses
+                        analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
+                            "📊 Shareholding Pattern",
+                            "💰 Financial Summary",
+                            "🔍 Technical Indicators",
+                            "🎯 Support & Resistance",
+                            "📈 Candlestick Chart"
+                        ])
+                        
+                        with analysis_tab1:
+                            display_shareholding_pattern(symbol)
+                        
+                        with analysis_tab2:
+                            display_financials(symbol)
+                        
+                        with analysis_tab3:
+                            # Timeframe selection for technical analysis
+                            tech_timeframe = st.selectbox(
+                                "Select Technical Analysis Timeframe:",
+                                options=['1min', '3min', '5min', '10min', '15min', '30min', 'hour', 'day'],
+                                index=4,  # Default to 15min
+                                key="tech_timeframe"
+                            )
+                            display_technical_analysis(symbol, tech_timeframe)
+                        
+                        with analysis_tab4:
+                            display_support_resistance(symbol)
+                        
+                        with analysis_tab5:
+                            # Timeframe selection for candlestick chart
+                            candle_timeframe = st.selectbox(
+                                "Select Chart Timeframe:",
+                                options=['1min', '3min', '5min', '10min', '15min', '30min', 'hour', 'day'],
+                                index=6,  # Default to hour
+                                key="candle_timeframe"
+                            )
+                            display_candlestick_chart(symbol, candle_timeframe)
                             
                     else: st.warning("No data available for the selected stock.")
                 except Exception as e: st.error(f"❌ Error: {str(e)}")
