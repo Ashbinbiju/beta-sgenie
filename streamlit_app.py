@@ -2896,25 +2896,51 @@ def display_financials(symbol):
     if financials:
         st.markdown("#### 💰 Financial Summary")
         
-        # Profit & Loss - Yearly
+        # Get data from Summary and Financial Ratios for top metrics
+        revenue = 0
+        operating_profit = 0
+        net_profit = 0
+        opm = 0
+        
+        # Try to get data from Summary first (most reliable for Revenue and Net Profit)
+        if 'Summary' in financials:
+            summary = financials['Summary']
+            latest_year = sorted([k for k in summary.keys() if k.isdigit()], reverse=True)[0] if summary else None
+            if latest_year:
+                revenue = summary[latest_year].get('Revenue', 0)
+                net_profit = summary[latest_year].get('Net Profit', 0)
+        
+        # Get OPM and Operating Profit from Financial Ratios and P&L
+        if 'Financial Ratios' in financials:
+            ratios = financials['Financial Ratios']
+            latest_year = sorted([k for k in ratios.keys() if k.isdigit()], reverse=True)[0] if ratios else None
+            if latest_year:
+                opm = ratios[latest_year].get('Operating Profit Margin (OPM)', 0)
+        
+        # Get Operating Profit from Profit & Loss
         if 'Profit & Loss' in financials and 'yearly' in financials['Profit & Loss']:
             yearly_pl = financials['Profit & Loss']['yearly']
-            
-            # Latest year metrics
-            latest_year = [y for y in yearly_pl.keys() if y != 'TTM'][0]
-            latest_data = yearly_pl[latest_year]
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Revenue", f"₹{latest_data.get('Sales', 0):.0f} Cr")
-            with col2:
-                st.metric("Operating Profit", f"₹{latest_data.get('Operating Profit', 0):.0f} Cr")
-            with col3:
-                st.metric("Net Profit", f"₹{latest_data.get('Net Profit', 0):.0f} Cr")
-            with col4:
-                opm = (latest_data.get('Operating Profit', 0) / latest_data.get('Sales', 1)) * 100 if latest_data.get('Sales', 0) > 0 else 0
-                st.metric("OPM", f"{opm:.2f}%")
+            latest_year = sorted([y for y in yearly_pl.keys() if y.isdigit()], reverse=True)[0] if yearly_pl else None
+            if latest_year:
+                latest_data = yearly_pl[latest_year]
+                operating_profit = latest_data.get('PPOP', 0)  # Pre-Provision Operating Profit
+                # If revenue wasn't in Summary, get Total Income from P&L
+                if revenue == 0:
+                    revenue = latest_data.get('Total Income', 0)
+                if net_profit == 0:
+                    net_profit = latest_data.get('Net Profit', 0)
+        
+        # Display top metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Revenue", f"₹{revenue:.0f} Cr")
+        with col2:
+            st.metric("Operating Profit", f"₹{operating_profit:.0f} Cr")
+        with col3:
+            st.metric("Net Profit", f"₹{net_profit:.0f} Cr")
+        with col4:
+            st.metric("OPM", f"{opm:.2f}%")
         
         # Financial Ratios
         if 'Financial Ratios' in financials:
