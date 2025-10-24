@@ -5319,14 +5319,17 @@ def main():
                 st.markdown(f"**📊 {len(stock_list_from_sectors)} Stocks to be scanned:**")
                 
                 # Display stocks in columns for better readability
-                stocks_per_col = 15
-                num_cols = min(4, (len(stock_list_from_sectors) + stocks_per_col - 1) // stocks_per_col)
-                stock_cols = st.columns(num_cols)
-                
-                for idx, stock in enumerate(stock_list_from_sectors):
-                    col_idx = idx % num_cols
-                    with stock_cols[col_idx]:
-                        st.caption(f"• {stock}")
+                if len(stock_list_from_sectors) > 0:
+                    stocks_per_col = 15
+                    num_cols = min(4, max(1, (len(stock_list_from_sectors) + stocks_per_col - 1) // stocks_per_col))
+                    stock_cols = st.columns(num_cols)
+                    
+                    for idx, stock in enumerate(stock_list_from_sectors):
+                        col_idx = idx % num_cols
+                        with stock_cols[col_idx]:
+                            st.caption(f"• {stock}")
+                else:
+                    st.info("No stocks available in the selected sectors.")
         else:
             st.warning("⚠️ No bullish sectors found at the moment")
         
