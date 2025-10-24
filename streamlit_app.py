@@ -6586,37 +6586,141 @@ def main():
                         st.markdown("---")
                         display_stock_news(symbol, max_news=5)
                         
-                        # Display Fundamentals & Technicals
+                        # Display Unified Analysis
                         st.markdown("---")
-                        st.markdown("### 📊 Comprehensive Stock Analysis")
+                        st.markdown("### 🎯 Unified Analysis - All Data Sources Combined")
+                        st.caption("Combining Fundamentals (Zerodha) + Technicals (Streak) + News Sentiment + Market Context")
                         
-                        # Show Zerodha-enhanced analysis summary at top
-                        if 'zerodha_analysis' in rec and rec['zerodha_analysis']:
-                            za = rec['zerodha_analysis']
-                            st.markdown("---")
-                            st.markdown("### 🎯 AI-Enhanced Analysis (Zerodha + Streak)")
-                            
-                            col1, col2, col3 = st.columns(3)
+                        # Get unified analysis data
+                        unified = rec.get('unified_analysis', rec.get('zerodha_analysis', {}))
+                        
+                        if unified:
+                            # TOP LEVEL METRICS
+                            col1, col2, col3, col4 = st.columns(4)
                             with col1:
-                                st.metric("Zerodha Score", f"{za.get('overall_score', 0):.0f}/100")
+                                score_color = "inverse" if unified.get('overall_score', 0) >= 70 else "normal"
+                                st.metric("Overall Score", f"{unified.get('overall_score', 0):.0f}/100", 
+                                         delta=f"{unified.get('signal', 'N/A')}")
                             with col2:
-                                st.metric("Confidence", f"{za.get('confidence', 0):.0f}%")
+                                conf_color = "inverse" if unified.get('confidence', 0) >= 70 else "normal"
+                                st.metric("Confidence", f"{unified.get('confidence', 0)}%")
                             with col3:
-                                rec_emoji = "🚀" if za.get('recommendation') in ['STRONG BUY', 'BUY'] else "⚠️"
-                                st.metric("Analysis Result", f"{rec_emoji} {za.get('recommendation', 'N/A')}")
+                                market_ctx = unified.get('market_context', {})
+                                market_health = market_ctx.get('health', 0)
+                                st.metric("Market Health", f"{market_health:.0f}/100",
+                                         delta=market_ctx.get('signal', 'Unknown'))
+                            with col4:
+                                news_summary = unified.get('news_summary', {})
+                                news_sentiment = news_summary.get('sentiment_score', 0)
+                                if news_summary.get('available'):
+                                    st.metric("News Sentiment", f"{news_sentiment:.0f}/100",
+                                             delta=f"{news_summary.get('count', 0)} items")
+                                else:
+                                    st.metric("News Sentiment", "N/A", delta="No data")
                             
-                            # Quick insights
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if za.get('strengths'):
-                                    st.success(f"**Strength:** {za['strengths'][0]}")
-                                if za.get('signals'):
-                                    st.info(f"**Signal:** {za['signals'][0]}")
-                            with col2:
-                                if za.get('warnings'):
-                                    st.warning(f"**Warning:** {za['warnings'][0]}")
-                                if za.get('weaknesses'):
-                                    st.error(f"**Risk:** {za['weaknesses'][0]}")
+                            # COMPONENT SCORES BREAKDOWN
+                            st.markdown("#### 📊 Component Scores Breakdown")
+                            scores = unified.get('scores', {})
+                            
+                            # Create progress bars for each component
+                            for component, score in scores.items():
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    component_name = component.replace('_', ' ').title()
+                                    st.progress(score / 100, text=component_name)
+                                with col2:
+                                    st.write(f"**{score:.0f}/100**")
+                            
+                            # SWOT ANALYSIS
+                            st.markdown("#### 💡 SWOT Analysis")
+                            swot_col1, swot_col2 = st.columns(2)
+                            
+                            with swot_col1:
+                                # Strengths
+                                st.markdown("**💪 Strengths**")
+                                strengths = unified.get('strengths', [])
+                                if strengths:
+                                    for s in strengths[:5]:  # Show top 5
+                                        st.success(f"✓ {s}", icon="✅")
+                                else:
+                                    st.info("No major strengths identified")
+                                
+                                st.markdown("")  # Spacing
+                                
+                                # Opportunities
+                                st.markdown("**🎯 Opportunities**")
+                                opportunities = unified.get('opportunities', [])
+                                if opportunities:
+                                    for o in opportunities[:5]:  # Show top 5
+                                        st.info(f"→ {o}", icon="🎯")
+                                else:
+                                    st.info("No specific opportunities identified")
+                            
+                            with swot_col2:
+                                # Weaknesses
+                                st.markdown("**📉 Weaknesses**")
+                                weaknesses = unified.get('weaknesses', [])
+                                if weaknesses:
+                                    for w in weaknesses[:5]:  # Show top 5
+                                        st.warning(f"⚠ {w}", icon="⚠️")
+                                else:
+                                    st.info("No major weaknesses identified")
+                                
+                                st.markdown("")  # Spacing
+                                
+                                # Threats
+                                st.markdown("**🚨 Threats**")
+                                threats = unified.get('threats', [])
+                                if threats:
+                                    for t in threats[:5]:  # Show top 5
+                                        st.error(f"✖ {t}", icon="🚨")
+                                else:
+                                    st.success("No critical threats identified")
+                            
+                            # TRADING SIGNALS & WARNINGS
+                            st.markdown("#### 📡 Trading Signals & Warnings")
+                            sig_col1, sig_col2 = st.columns(2)
+                            
+                            with sig_col1:
+                                st.markdown("**📈 Signals**")
+                                signals = unified.get('signals', [])
+                                if signals:
+                                    for sig in signals[:6]:  # Show top 6
+                                        st.info(f"• {sig}")
+                                else:
+                                    st.info("No specific signals")
+                            
+                            with sig_col2:
+                                st.markdown("**⚠️ Warnings**")
+                                warnings = unified.get('warnings', [])
+                                if warnings:
+                                    for warn in warnings[:6]:  # Show top 6
+                                        st.warning(f"• {warn}")
+                                else:
+                                    st.success("No warnings")
+                            
+                            # TECHNICAL LEVELS
+                            st.markdown("#### 🎯 Key Technical Levels")
+                            levels = unified.get('technical_levels', {})
+                            if levels and levels.get('current_price', 0) > 0:
+                                level_col1, level_col2, level_col3 = st.columns(3)
+                                
+                                with level_col1:
+                                    st.markdown("**🔴 Resistance**")
+                                    for i, r in enumerate(levels.get('resistance', []), 1):
+                                        if r > 0:
+                                            st.write(f"R{i}: ₹{r:.2f}")
+                                
+                                with level_col2:
+                                    st.markdown("**📍 Current & Pivot**")
+                                    st.metric("Current", f"₹{levels.get('current_price', 0):.2f}")
+                                    st.write(f"Pivot: ₹{levels.get('pivot', 0):.2f}")
+                                
+                                with level_col3:
+                                    st.markdown("**🟢 Support**")
+                                    for i, s in enumerate(levels.get('support', []), 1):
+                                        if s > 0:
+                                            st.write(f"S{i}: ₹{s:.2f}")
                         
                         # Create tabs for different analyses
                         analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
