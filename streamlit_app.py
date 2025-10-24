@@ -2905,30 +2905,34 @@ def display_financials(symbol):
         # Try to get data from Summary first (most reliable for Revenue and Net Profit)
         if 'Summary' in financials:
             summary = financials['Summary']
-            latest_year = sorted([k for k in summary.keys() if k.isdigit()], reverse=True)[0] if summary else None
-            if latest_year:
+            if summary and len(summary) > 0:
+                # Get the latest year (highest year number), convert to int for proper comparison
+                latest_year = max([k for k in summary.keys() if str(k).isdigit()], key=lambda x: int(x))
                 revenue = summary[latest_year].get('Revenue', 0)
                 net_profit = summary[latest_year].get('Net Profit', 0)
         
-        # Get OPM and Operating Profit from Financial Ratios and P&L
+        # Get OPM from Financial Ratios
         if 'Financial Ratios' in financials:
             ratios = financials['Financial Ratios']
-            latest_year = sorted([k for k in ratios.keys() if k.isdigit()], reverse=True)[0] if ratios else None
-            if latest_year:
+            if ratios and len(ratios) > 0:
+                latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
                 opm = ratios[latest_year].get('Operating Profit Margin (OPM)', 0)
         
         # Get Operating Profit from Profit & Loss
         if 'Profit & Loss' in financials and 'yearly' in financials['Profit & Loss']:
             yearly_pl = financials['Profit & Loss']['yearly']
-            latest_year = sorted([y for y in yearly_pl.keys() if y.isdigit()], reverse=True)[0] if yearly_pl else None
-            if latest_year:
-                latest_data = yearly_pl[latest_year]
-                operating_profit = latest_data.get('PPOP', 0)  # Pre-Provision Operating Profit
-                # If revenue wasn't in Summary, get Total Income from P&L
-                if revenue == 0:
-                    revenue = latest_data.get('Total Income', 0)
-                if net_profit == 0:
-                    net_profit = latest_data.get('Net Profit', 0)
+            if yearly_pl and len(yearly_pl) > 0:
+                # Get latest year excluding TTM, convert to int for proper comparison
+                years = [y for y in yearly_pl.keys() if y != 'TTM' and str(y).isdigit()]
+                if years:
+                    latest_year = max(years, key=lambda x: int(x))
+                    latest_data = yearly_pl[latest_year]
+                    operating_profit = latest_data.get('PPOP', 0)  # Pre-Provision Operating Profit
+                    # If revenue wasn't in Summary, get Total Income from P&L
+                    if revenue == 0:
+                        revenue = latest_data.get('Total Income', 0)
+                    if net_profit == 0:
+                        net_profit = latest_data.get('Net Profit', 0)
         
         # Display top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -2946,33 +2950,35 @@ def display_financials(symbol):
         if 'Financial Ratios' in financials:
             st.markdown("**📊 Key Ratios:**")
             ratios = financials['Financial Ratios']
-            latest_year = list(ratios.keys())[0]
-            ratio_data = ratios[latest_year]
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("EPS", f"₹{ratio_data.get('Earnings Per Share (EPS)', 0):.2f}")
-            with col2:
-                st.metric("NPM", f"{ratio_data.get('Net Profit Margin', 0):.2f}%")
-            with col3:
-                st.metric("EV/EBITDA", f"{ratio_data.get('EV/EBITDA', 0):.2f}")
+            if ratios and len(ratios) > 0:
+                latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
+                ratio_data = ratios[latest_year]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("EPS", f"₹{ratio_data.get('Earnings Per Share (EPS)', 0):.2f}")
+                with col2:
+                    st.metric("NPM", f"{ratio_data.get('Net Profit Margin', 0):.2f}%")
+                with col3:
+                    st.metric("EV/EBITDA", f"{ratio_data.get('EV/EBITDA', 0):.2f}")
         
         # Balance Sheet Summary
         if 'Balance Sheet' in financials:
             st.markdown("**🏦 Balance Sheet (Latest):**")
             bs = financials['Balance Sheet']
-            latest_year = list(bs.keys())[0]
-            bs_data = bs[latest_year]
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Total Assets", f"₹{bs_data.get('Total Assets', 0):.0f} Cr")
-            with col2:
-                st.metric("Current Assets", f"₹{bs_data.get('Current Assets', 0):.0f} Cr")
-            with col3:
-                st.metric("Current Liabilities", f"₹{bs_data.get('Current Liabilities', 0):.0f} Cr")
+            if bs and len(bs) > 0:
+                latest_year = max([k for k in bs.keys() if str(k).isdigit()], key=lambda x: int(x))
+                bs_data = bs[latest_year]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Total Assets", f"₹{bs_data.get('Total Assets', 0):.0f} Cr")
+                with col2:
+                    st.metric("Current Assets", f"₹{bs_data.get('Current Assets', 0):.0f} Cr")
+                with col3:
+                    st.metric("Current Liabilities", f"₹{bs_data.get('Current Liabilities', 0):.0f} Cr")
     else:
         st.info("💰 Financial data not available")
 
