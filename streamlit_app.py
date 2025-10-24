@@ -4707,18 +4707,19 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
 # ============================================================================
 
 def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000, contrarian_mode=False):
-    """Generate unified recommendations with COMPLETE MARKET CONTEXT"""
+    """Generate unified recommendations with  fundamentals + technical analysis"""
+    
+    # Calculate technical indicators
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
         regime = detect_swing_regime(df)
-        score = calculate_swing_score(df, symbol, timeframe, contrarian_mode)
         position = calculate_swing_position(df, account_size)
     else:
         df = calculate_intraday_indicators(data, timeframe)
         regime = detect_intraday_regime(df)
-        score = calculate_intraday_score(df, symbol, timeframe, contrarian_mode)
         position = calculate_intraday_position(df, account_size)
     
+    # Get market context
     market_health, market_signal, market_factors = calculate_market_health_score()
     index_trends = get_index_trend_for_timeframe(timeframe)
     index_context, industry_context = None, None
@@ -4732,25 +4733,74 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
     industry_data = get_industry_performance(symbol)
     if industry_data:
         industry_context = industry_data
-
+    
+    # Get Zerodha comprehensive analysis
+    zerodha_timeframe = '5min' if trading_style == 'intraday' else '15min'
+    zerodha_analysis = get_comprehensive_analysis(symbol, zerodha_timeframe)
+    
+    # Combine scores: 60% Zerodha analysis + 40% technical indicators
+    zerodha_score = zerodha_analysis.get('overall_score', 50)
+    
+    # Calculate basic technical score
+    close = df['Close'].iloc[-1]
+    tech_score = 0
+    
+    if trading_style == 'swing':
+        # Swing technical scoring
+        if close > df['EMA_200'].iloc[-1]: tech_score += 20
+        if df['MACD'].iloc[-1] > df['MACD_Signal'].iloc[-1]: tech_score += 20
+        rsi = df['RSI'].iloc[-1]
+        if 40 <= rsi <= 60: tech_score += 20
+        elif 30 <= rsi <= 40: tech_score += 30  # Oversold - good entry
+        elif 60 <= rsi <= 70: tech_score += 10
+        if df['ADX'].iloc[-1] > 25: tech_score += 20  # Strong trend
+        if df['Volume'].iloc[-1] > df['Volume'].rolling(20).mean().iloc[-1]: tech_score += 10
+    else:
+        # Intraday technical scoring
+        if close > df['VWAP'].iloc[-1]: tech_score += 25
+        if df['EMA_Bullish'].iloc[-1]: tech_score += 25
+        if df['OR_Breakout_Long'].iloc[-1]: tech_score += 25
+        rsi = df['RSI'].iloc[-1]
+        if 40 <= rsi <= 60: tech_score += 15
+        elif 30 <= rsi <= 40: tech_score += 25
+        if df['Volume'].iloc[-1] > df['Volume'].rolling(10).mean().iloc[-1]: tech_score += 10
+    
+    # Combined score
+    score = int(zerodha_score * 0.6 + tech_score * 0.4)
+    
+    # Adjust score based on market health
+    if market_health < 30:
+        score = int(score * 0.7)  # Reduce score in bad market
+    elif market_health > 70:
+        score = int(score * 1.1)  # Boost score in good market
+    
+    score = min(100, max(0, score))  # Clamp to 0-100
+    
+    # Determine signal
     if score >= 75: signal = "Strong Buy"
     elif score >= 60: signal = "Buy"
     elif score <= 25: signal = "Strong Sell"
     elif score <= 40: signal = "Sell"
     else: signal = "Hold"
     
-    # Build reason
+    # Build comprehensive reason from Zerodha analysis
     reasons = []
-    close = df['Close'].iloc[-1]
+    
+    # Add Zerodha insights
+    if zerodha_analysis.get('signals'):
+        reasons.extend(zerodha_analysis['signals'][:2])  # Top 2 signals
+    
+    if zerodha_analysis.get('strengths'):
+        reasons.append(zerodha_analysis['strengths'][0])  # Top strength
+    
+    if zerodha_analysis.get('warnings'):
+        reasons.append(f"⚠️ {zerodha_analysis['warnings'][0]}")  # Top warning
+    
+    # Add key technical indicators
     if trading_style == 'swing':
         reasons.append("Above 200 EMA" if close > df['EMA_200'].iloc[-1] else "Below 200 EMA")
-        reasons.append("MACD bullish" if df['MACD'].iloc[-1] > df['MACD_Signal'].iloc[-1] else "MACD bearish")
-        if df['RSI'].iloc[-1] < df['RSI_Oversold'].iloc[-1]: reasons.append("RSI oversold")
-        elif df['RSI'].iloc[-1] > df['RSI_Overbought'].iloc[-1]: reasons.append("RSI overbought")
     else:
         reasons.append("Above VWAP" if close > df['VWAP'].iloc[-1] else "Below VWAP")
-        reasons.append("EMA bullish" if df['EMA_Bullish'].iloc[-1] else "EMA bearish")
-        if df['OR_Breakout_Long'].iloc[-1]: reasons.append("OR breakout")
     
     reasons.append(f"Market: {market_signal}")
     
@@ -4759,7 +4809,9 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         "score": score, "signal": signal, "regime": regime, "reason": ", ".join(reasons),
         "index_context": index_context, "industry_context": industry_context,
         "market_health": market_health, "market_signal": market_signal, "market_factors": market_factors,
-        "contrarian_mode": contrarian_mode, "processed_data": df, **position
+        "contrarian_mode": contrarian_mode, "processed_data": df,
+        "zerodha_analysis": zerodha_analysis,  # Include full Zerodha analysis
+        **position
     }
 
 # ============================================================================
@@ -5868,32 +5920,42 @@ def main():
                         st.markdown("---")
                         st.markdown("### 📊 Comprehensive Stock Analysis")
                         
+                        # Show Zerodha-enhanced analysis summary at top
+                        if 'zerodha_analysis' in rec and rec['zerodha_analysis']:
+                            za = rec['zerodha_analysis']
+                            st.markdown("---")
+                            st.markdown("### 🎯 AI-Enhanced Analysis (Zerodha + Streak)")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Zerodha Score", f"{za.get('overall_score', 0):.0f}/100")
+                            with col2:
+                                st.metric("Confidence", f"{za.get('confidence', 0):.0f}%")
+                            with col3:
+                                rec_emoji = "🚀" if za.get('recommendation') in ['STRONG BUY', 'BUY'] else "⚠️"
+                                st.metric("Analysis Result", f"{rec_emoji} {za.get('recommendation', 'N/A')}")
+                            
+                            # Quick insights
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if za.get('strengths'):
+                                    st.success(f"**Strength:** {za['strengths'][0]}")
+                                if za.get('signals'):
+                                    st.info(f"**Signal:** {za['signals'][0]}")
+                            with col2:
+                                if za.get('warnings'):
+                                    st.warning(f"**Warning:** {za['warnings'][0]}")
+                                if za.get('weaknesses'):
+                                    st.error(f"**Risk:** {za['weaknesses'][0]}")
+                        
                         # Create tabs for different analyses
-                        analysis_tab0, analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
-                            "🎯 Smart Analysis",
+                        analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4, analysis_tab5 = st.tabs([
                             "📊 Shareholding Pattern",
                             "💰 Financial Summary",
                             "🔍 Technical Indicators",
                             "🎯 Support & Resistance",
                             "📈 Candlestick Chart"
                         ])
-                        
-                        with analysis_tab0:
-                            # Smart comprehensive analysis - uses all Zerodha data
-                            st.markdown("**Select Trading Mode:**")
-                            analysis_mode = st.radio(
-                                "Mode",
-                                options=['Swing Trading (15min+)', 'Intraday Trading (5min)'],
-                                horizontal=True,
-                                key=f"analysis_mode_{symbol}"
-                            )
-                            
-                            if 'Intraday' in analysis_mode:
-                                smart_timeframe = '5min'
-                            else:
-                                smart_timeframe = '15min'
-                            
-                            display_comprehensive_analysis(symbol, smart_timeframe)
                         
                         with analysis_tab1:
                             display_shareholding_pattern(symbol)
