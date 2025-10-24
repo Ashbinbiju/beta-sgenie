@@ -2866,9 +2866,20 @@ def get_comprehensive_analysis(symbol, timeframe='15min'):
                     analysis['technical_score'] += 10
                     analysis['signals'].append(f"Above pivot: ₹{pivot:.2f}")
                 
-                # Check if price is near resistance (profit booking zone)
+                # Check if price is near resistance (profit booking zone) - PENALIZE BUY signals
                 if r1 > 0 and abs(current_price - r1) / r1 < 0.02:  # Within 2% of R1
+                    analysis['technical_score'] -= 25  # Strong penalty for being near resistance
                     analysis['warnings'].append(f"Near resistance R1: ₹{r1:.2f} - Consider profit booking")
+                
+                # Check if price is near R2 or R3 (even stronger resistance) - MAJOR PENALTY
+                r2 = sr_data.get('r2', 0)
+                r3 = sr_data.get('r3', 0)
+                if r2 > 0 and abs(current_price - r2) / r2 < 0.02:
+                    analysis['technical_score'] -= 35
+                    analysis['warnings'].append(f"Near major resistance R2: ₹{r2:.2f} - High risk zone")
+                elif r3 > 0 and abs(current_price - r3) / r3 < 0.02:
+                    analysis['technical_score'] -= 45
+                    analysis['warnings'].append(f"Near extreme resistance R3: ₹{r3:.2f} - Avoid buying")
         
         # 5. CALCULATE OVERALL SCORE AND RECOMMENDATION
         # Normalize scores to 0-100 scale
@@ -2886,12 +2897,23 @@ def get_comprehensive_analysis(symbol, timeframe='15min'):
         
         # Determine recommendation
         score = analysis['overall_score']
-        if score >= 70:
+        
+        # Additional logic: If near resistance, cap at BUY (never STRONG BUY)
+        near_resistance = any('Near resistance' in w or 'Near major resistance' in w or 'Near extreme resistance' in w 
+                             for w in analysis['warnings'])
+        
+        if score >= 70 and not near_resistance:
             analysis['recommendation'] = 'STRONG BUY'
             analysis['confidence'] = min(95, score)
         elif score >= 60:
-            analysis['recommendation'] = 'BUY'
-            analysis['confidence'] = score
+            # If near resistance, downgrade to HOLD regardless of score
+            if near_resistance:
+                analysis['recommendation'] = 'HOLD'
+                analysis['confidence'] = 50
+                analysis['warnings'].insert(0, "⚠️ Score suggests BUY but near resistance - downgraded to HOLD")
+            else:
+                analysis['recommendation'] = 'BUY'
+                analysis['confidence'] = score
         elif score >= 50:
             analysis['recommendation'] = 'HOLD'
             analysis['confidence'] = 50
