@@ -2694,241 +2694,869 @@ def display_stock_news(symbol, max_news=5):
             st.info(f"ℹ️ No news found for {symbol}. News might not be available for this stock.")
 
 # ============================================================================
-#  FUNDAMENTALS & TECHNICAL ANALYSIS
+#  UNIFIED ANALYSIS ENGINE
+# ============================================================================
+
+class UnifiedAnalysisEngine:
+    """
+    Comprehensive analysis engine that combines all data sources:
+    - Zerodha: Shareholding Pattern, Financials (5 sections)
+    - Streak: Technical Analysis, Support/Resistance, Candlestick
+    - News: Sentiment analysis
+    - Market: Health score, breadth, sector performance
+    
+    Provides unified scoring for both SWING and INTRADAY trading
+    """
+    
+    def __init__(self, symbol, trading_style='swing', timeframe='1d', account_size=30000):
+        """
+        Initialize analysis engine
+        
+        Args:
+            symbol: Stock symbol (e.g., 'JKPAPER-EQ')
+            trading_style: 'swing' or 'intraday'
+            timeframe: Data timeframe (e.g., '1d', '15min', '5min')
+            account_size: Trading capital for position sizing
+        """
+        self.symbol = symbol
+        self.trading_style = trading_style.lower()
+        self.timeframe = timeframe
+        self.account_size = account_size
+        
+        # Data containers
+        self.financials = None
+        self.shareholdings = None
+        self.technical_data = None
+        self.sr_data = None
+        self.news_data = None
+        self.market_health_data = None
+        
+        # Score components
+        self.fundamental_score = 0
+        self.technical_score = 0
+        self.sr_score = 0
+        self.news_score = 0
+        self.market_alignment_score = 0
+        
+        # Insights
+        self.strengths = []
+        self.weaknesses = []
+        self.opportunities = []
+        self.threats = []
+        self.signals = []
+        self.warnings = []
+        
+    def fetch_all_data(self):
+        """Fetch data from all sources"""
+        logging.info(f"[UnifiedEngine] Fetching data for {self.symbol}...")
+        
+        # Zerodha data
+        self.financials = fetch_financials(self.symbol)
+        self.shareholdings = fetch_shareholding_pattern(self.symbol)
+        
+        # Streak data
+        tech_timeframe = '5min' if self.trading_style == 'intraday' else '15min'
+        self.technical_data = fetch_technical_analysis(self.symbol, tech_timeframe)
+        self.sr_data = fetch_support_resistance(self.symbol)
+        
+        # News data
+        self.news_data = fetch_stock_news(self.symbol, page_size=5)
+        
+        # Market context
+        self.market_health_data = calculate_market_health_score()
+        
+    def calculate_fundamental_score(self):
+        """Calculate fundamental score (0-100)"""
+        score = 0
+        max_score = 100
+        
+        if not self.financials:
+            logging.warning(f"[UnifiedEngine] No financials for {self.symbol}")
+            return 50  # Neutral if no data
+        
+        # 1. REVENUE GROWTH (0-25 points)
+        if 'Summary' in self.financials:
+            summary = self.financials['Summary']
+            years = sorted([k for k in summary.keys() if str(k).isdigit()], key=lambda x: int(x), reverse=True)
+            
+            if len(years) >= 2:
+                latest = summary[years[0]].get('Revenue', 0)
+                previous = summary[years[1]].get('Revenue', 0)
+                
+                if previous > 0:
+                    growth = ((latest - previous) / previous) * 100
+                    
+                    if growth > 25:
+                        score += 25
+                        self.strengths.append(f"Exceptional revenue growth: {growth:.1f}%")
+                    elif growth > 15:
+                        score += 20
+                        self.strengths.append(f"Strong revenue growth: {growth:.1f}%")
+                    elif growth > 5:
+                        score += 15
+                        self.opportunities.append(f"Moderate revenue growth: {growth:.1f}%")
+                    elif growth > 0:
+                        score += 10
+                    elif growth > -10:
+                        score += 5
+                        self.weaknesses.append(f"Revenue decline: {growth:.1f}%")
+                    else:
+                        self.threats.append(f"Severe revenue decline: {growth:.1f}%")
+        
+        # 2. PROFITABILITY RATIOS (0-35 points)
+        if 'Financial Ratios' in self.financials:
+            ratios = self.financials['Financial Ratios']
+            latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
+            ratio_data = ratios[latest_year]
+            
+            # Operating Profit Margin (0-20 points)
+            opm = ratio_data.get('Operating Profit Margin (OPM)', 0)
+            if opm > 20:
+                score += 20
+                self.strengths.append(f"Excellent OPM: {opm:.2f}%")
+            elif opm > 15:
+                score += 17
+                self.strengths.append(f"Strong OPM: {opm:.2f}%")
+            elif opm > 10:
+                score += 13
+                self.opportunities.append(f"Good OPM: {opm:.2f}%")
+            elif opm > 5:
+                score += 8
+            elif opm > 0:
+                score += 4
+            else:
+                self.weaknesses.append(f"Negative OPM: {opm:.2f}%")
+            
+            # Net Profit Margin (0-15 points)
+            npm = ratio_data.get('Net Profit Margin', 0)
+            if npm > 15:
+                score += 15
+                self.strengths.append(f"Excellent NPM: {npm:.2f}%")
+            elif npm > 10:
+                score += 12
+                self.strengths.append(f"Strong NPM: {npm:.2f}%")
+            elif npm > 5:
+                score += 8
+            elif npm > 0:
+                score += 4
+            else:
+                score -= 5
+                self.threats.append(f"Negative NPM: {npm:.2f}%")
+        
+        # 3. SHAREHOLDING PATTERN (0-25 points)
+        if self.shareholdings:
+            latest_quarter = list(self.shareholdings.keys())[0]
+            latest_data = self.shareholdings[latest_quarter]
+            
+            # Promoter holding (0-12 points)
+            promoter = latest_data.get('Promoter', 0)
+            if promoter > 60:
+                score += 12
+                self.strengths.append(f"Very high promoter holding: {promoter:.1f}%")
+            elif promoter > 50:
+                score += 10
+                self.strengths.append(f"High promoter holding: {promoter:.1f}%")
+            elif promoter > 35:
+                score += 7
+            elif promoter > 25:
+                score += 4
+            else:
+                score += 2
+                self.weaknesses.append(f"Low promoter holding: {promoter:.1f}%")
+            
+            # Pledge (0-8 points deduction/addition)
+            pledge = latest_data.get('Pledge', 0)
+            if pledge == 0:
+                score += 8
+                self.strengths.append("Zero promoter pledge")
+            elif pledge < 10:
+                score += 5
+            elif pledge < 25:
+                score += 2
+            elif pledge < 50:
+                score -= 5
+                self.warnings.append(f"Moderate promoter pledge: {pledge:.1f}%")
+            elif pledge < 75:
+                score -= 10
+                self.threats.append(f"High promoter pledge: {pledge:.1f}%")
+            else:
+                score -= 15
+                self.threats.append(f"CRITICAL: Very high pledge: {pledge:.1f}%")
+            
+            # FII/DII holding (0-5 points)
+            fii = latest_data.get('FII', 0)
+            dii = latest_data.get('DII', 0)
+            institutional = fii + dii
+            
+            if institutional > 30:
+                score += 5
+                self.strengths.append(f"Strong institutional interest: {institutional:.1f}%")
+            elif institutional > 20:
+                score += 3
+            elif institutional > 10:
+                score += 1
+        
+        # 4. FINANCIAL HEALTH (0-15 points)
+        if 'Financial Ratios' in self.financials:
+            ratios = self.financials['Financial Ratios']
+            latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
+            ratio_data = ratios[latest_year]
+            
+            # ROE (0-8 points)
+            roe = ratio_data.get('Return on Equity (ROE)', 0)
+            if roe > 20:
+                score += 8
+                self.strengths.append(f"High ROE: {roe:.2f}%")
+            elif roe > 15:
+                score += 6
+            elif roe > 10:
+                score += 4
+            elif roe > 0:
+                score += 2
+            
+            # Debt to Equity (0-7 points)
+            de_ratio = ratio_data.get('Debt to Equity', 0)
+            if de_ratio < 0.5:
+                score += 7
+                self.strengths.append(f"Low debt: D/E {de_ratio:.2f}")
+            elif de_ratio < 1.0:
+                score += 5
+            elif de_ratio < 2.0:
+                score += 2
+            else:
+                self.weaknesses.append(f"High debt: D/E {de_ratio:.2f}")
+        
+        self.fundamental_score = min(100, max(0, score))
+        logging.info(f"[UnifiedEngine] Fundamental score: {self.fundamental_score:.0f}/100")
+        return self.fundamental_score
+    
+    def calculate_technical_score(self):
+        """Calculate technical score (0-100)"""
+        score = 0
+        
+        if not self.technical_data or self.technical_data.get('status') != 1:
+            logging.warning(f"[UnifiedEngine] No technical data for {self.symbol}")
+            return 50  # Neutral if no data
+        
+        # 1. OVERALL TREND STATE (0-30 points)
+        state = self.technical_data.get('state', 0)
+        if state == 1:
+            score += 30
+            self.signals.append("📈 Bullish technical trend")
+        elif state == -1:
+            score -= 15
+            self.warnings.append("📉 Bearish technical trend")
+        else:
+            score += 10
+            self.signals.append("➡️ Sideways trend")
+        
+        # 2. RSI (0-25 points)
+        rsi = self.technical_data.get('rsi', 50)
+        if 30 <= rsi <= 40:
+            score += 25
+            self.opportunities.append(f"RSI in oversold zone: {rsi:.1f} - Good entry opportunity")
+        elif 40 < rsi <= 50:
+            score += 20
+            self.signals.append(f"RSI healthy: {rsi:.1f}")
+        elif 50 < rsi <= 60:
+            score += 15
+            self.signals.append(f"RSI positive: {rsi:.1f}")
+        elif 60 < rsi <= 70:
+            score += 10
+            self.warnings.append(f"RSI elevated: {rsi:.1f}")
+        elif rsi > 75:
+            score -= 10
+            self.warnings.append(f"RSI overbought: {rsi:.1f} - Risk of correction")
+        elif rsi < 25:
+            score += 15
+            self.opportunities.append(f"RSI extremely oversold: {rsi:.1f} - Potential reversal")
+        
+        # 3. MACD (0-15 points)
+        macd = self.technical_data.get('macd', 0)
+        if macd > 0:
+            score += 15
+            self.signals.append("✅ Positive MACD momentum")
+        else:
+            score += 5
+            self.signals.append("⏸️ Negative MACD")
+        
+        # 4. ADX - Trend Strength (0-15 points)
+        adx = self.technical_data.get('adx', 0)
+        if adx > 30:
+            score += 15
+            self.strengths.append(f"Very strong trend: ADX {adx:.1f}")
+        elif adx > 25:
+            score += 12
+            self.strengths.append(f"Strong trend: ADX {adx:.1f}")
+        elif adx > 20:
+            score += 8
+        elif adx > 15:
+            score += 4
+        else:
+            self.weaknesses.append(f"Weak trend: ADX {adx:.1f}")
+        
+        # 5. WIN RATE (0-15 points)
+        win_pct = self.technical_data.get('win_pct', 0)
+        if win_pct > 0.7:
+            score += 15
+            self.strengths.append(f"Excellent win rate: {win_pct*100:.1f}%")
+        elif win_pct > 0.6:
+            score += 12
+            self.strengths.append(f"Good win rate: {win_pct*100:.1f}%")
+        elif win_pct > 0.5:
+            score += 8
+        elif win_pct > 0.4:
+            score += 4
+        
+        self.technical_score = min(100, max(0, score + 50))  # Shift to 0-100 range
+        logging.info(f"[UnifiedEngine] Technical score: {self.technical_score:.0f}/100")
+        return self.technical_score
+    
+    def calculate_sr_score(self):
+        """Calculate Support/Resistance score with penalties (0-100)"""
+        score = 50  # Start neutral
+        
+        if not self.sr_data:
+            logging.warning(f"[UnifiedEngine] No S/R data for {self.symbol}")
+            return score
+        
+        current_price = self.sr_data.get('close', 0)
+        pivot = self.sr_data.get('pp', 0)
+        r1 = self.sr_data.get('r1', 0)
+        r2 = self.sr_data.get('r2', 0)
+        r3 = self.sr_data.get('r3', 0)
+        s1 = self.sr_data.get('s1', 0)
+        s2 = self.sr_data.get('s2', 0)
+        s3 = self.sr_data.get('s3', 0)
+        
+        if current_price == 0 or pivot == 0:
+            return score
+        
+        # SUPPORT ZONES (Positive for entries)
+        if s1 > 0:
+            dist_s1 = abs(current_price - s1) / s1
+            if dist_s1 < 0.01:  # Within 1% of S1
+                score += 30
+                self.opportunities.append(f"🎯 Very close to support S1: ₹{s1:.2f} - Excellent entry zone")
+            elif dist_s1 < 0.02:  # Within 2% of S1
+                score += 20
+                self.opportunities.append(f"🎯 Near support S1: ₹{s1:.2f} - Good entry zone")
+        
+        if s2 > 0:
+            dist_s2 = abs(current_price - s2) / s2
+            if dist_s2 < 0.01:
+                score += 25
+                self.opportunities.append(f"🎯 At strong support S2: ₹{s2:.2f}")
+        
+        # PIVOT POINT
+        if current_price > pivot:
+            score += 15
+            self.signals.append(f"✅ Trading above pivot: ₹{pivot:.2f}")
+        else:
+            score -= 10
+            self.warnings.append(f"⚠️ Trading below pivot: ₹{pivot:.2f}")
+        
+        # RESISTANCE ZONES (Negative for entries - CRITICAL)
+        if r1 > 0:
+            dist_r1 = abs(current_price - r1) / r1
+            if dist_r1 < 0.01:  # Within 1% of R1
+                score -= 40
+                self.warnings.append(f"🚨 Very close to resistance R1: ₹{r1:.2f} - HIGH RISK for entries")
+            elif dist_r1 < 0.02:  # Within 2% of R1
+                score -= 30
+                self.warnings.append(f"⚠️ Near resistance R1: ₹{r1:.2f} - Consider profit booking")
+        
+        if r2 > 0:
+            dist_r2 = abs(current_price - r2) / r2
+            if dist_r2 < 0.01:
+                score -= 50
+                self.threats.append(f"🛑 At major resistance R2: ₹{r2:.2f} - Avoid buying")
+            elif dist_r2 < 0.02:
+                score -= 40
+                self.threats.append(f"🚨 Near resistance R2: ₹{r2:.2f} - High risk zone")
+        
+        if r3 > 0:
+            dist_r3 = abs(current_price - r3) / r3
+            if dist_r3 < 0.01:
+                score -= 60
+                self.threats.append(f"🔴 At extreme resistance R3: ₹{r3:.2f} - AVOID BUYING")
+            elif dist_r3 < 0.02:
+                score -= 50
+                self.threats.append(f"🛑 Near R3: ₹{r3:.2f} - Very high risk")
+        
+        self.sr_score = min(100, max(0, score))
+        logging.info(f"[UnifiedEngine] S/R score: {self.sr_score:.0f}/100")
+        return self.sr_score
+    
+    def calculate_news_score(self):
+        """Calculate news sentiment score (0-100)"""
+        if not self.news_data:
+            logging.info(f"[UnifiedEngine] No news data for {self.symbol}")
+            return 50  # Neutral if no news
+        
+        positive_count = 0
+        negative_count = 0
+        neutral_count = 0
+        
+        recent_news_multiplier = 1.0
+        
+        for news_item in self.news_data[:5]:  # Analyze top 5 news items
+            full_text = f"{news_item.get('Description', '')} {news_item.get('Caption', '')} {news_item.get('Details', '')}"
+            sentiment, _, _ = analyze_news_sentiment(full_text)
+            
+            # Check if news is very recent (last 24 hours)
+            try:
+                date_str = news_item.get('Date', '')
+                if date_str:
+                    news_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    hours_ago = (datetime.now(timezone.utc) - news_date).total_seconds() / 3600
+                    if hours_ago < 24:
+                        recent_news_multiplier = 1.5  # 50% more weight for recent news
+            except:
+                pass
+            
+            if sentiment == "Positive":
+                positive_count += 1
+            elif sentiment == "Negative":
+                negative_count += 1
+            else:
+                neutral_count += 1
+        
+        # Calculate score
+        total = len(self.news_data[:5])
+        if total == 0:
+            return 50
+        
+        positive_ratio = (positive_count / total) * 100
+        negative_ratio = (negative_count / total) * 100
+        
+        # Base score calculation
+        if positive_count > negative_count:
+            score = 50 + (positive_ratio / 2)  # 50-100 range
+            if positive_ratio > 60:
+                self.strengths.append(f"🟢 Very positive news sentiment ({positive_ratio:.0f}% positive)")
+            else:
+                self.opportunities.append(f"🟢 Positive news sentiment ({positive_ratio:.0f}% positive)")
+        elif negative_count > positive_count:
+            score = 50 - (negative_ratio / 2)  # 0-50 range
+            if negative_ratio > 60:
+                self.threats.append(f"🔴 Very negative news sentiment ({negative_ratio:.0f}% negative)")
+            else:
+                self.warnings.append(f"🔴 Negative news sentiment ({negative_ratio:.0f}% negative)")
+        else:
+            score = 50
+            self.signals.append("⚪ Neutral news sentiment")
+        
+        # Apply recent news multiplier
+        if recent_news_multiplier > 1.0:
+            score = 50 + (score - 50) * recent_news_multiplier
+            score = min(100, max(0, score))
+        
+        self.news_score = score
+        logging.info(f"[UnifiedEngine] News score: {self.news_score:.0f}/100")
+        return self.news_score
+    
+    def calculate_market_alignment_score(self):
+        """Calculate market/sector alignment score (0-100)"""
+        score = 50  # Start neutral
+        
+        if not self.market_health_data:
+            return score
+        
+        market_health, market_signal, factors = self.market_health_data
+        
+        # Market alignment (±25 points)
+        if market_health > 75:
+            score += 25
+            self.strengths.append(f"📊 Very strong market ({market_signal})")
+        elif market_health > 60:
+            score += 15
+            self.signals.append(f"📊 Strong market ({market_signal})")
+        elif market_health > 40:
+            score += 5
+        elif market_health > 25:
+            score -= 10
+            self.warnings.append(f"📊 Weak market ({market_signal})")
+        else:
+            score -= 25
+            self.threats.append(f"📊 Very weak market ({market_signal})")
+        
+        # Industry alignment (±15 points)
+        industry_data = get_industry_performance(self.symbol)
+        if industry_data:
+            avg_change = industry_data.get('avgChange', 0)
+            advance_ratio = (industry_data.get('advancing', 0) / industry_data.get('total', 1)) * 100
+            
+            if avg_change > 1.5 and advance_ratio > 70:
+                score += 15
+                self.strengths.append(f"🏭 Industry very strong: {avg_change:.1f}% avg gain")
+            elif avg_change > 1.0 and advance_ratio > 60:
+                score += 10
+                self.opportunities.append(f"🏭 Industry performing well: {avg_change:.1f}% avg")
+            elif avg_change < -1.0 or advance_ratio < 30:
+                score -= 15
+                self.weaknesses.append(f"🏭 Industry weak: {avg_change:.1f}% avg")
+            elif avg_change < 0:
+                score -= 5
+                self.warnings.append(f"🏭 Industry declining: {avg_change:.1f}% avg")
+        
+        self.market_alignment_score = min(100, max(0, score))
+        logging.info(f"[UnifiedEngine] Market alignment score: {self.market_alignment_score:.0f}/100")
+        return self.market_alignment_score
+    
+    def calculate_combined_score(self):
+        """Calculate final combined score with proper weighting"""
+        # Weight based on trading style
+        if self.trading_style == 'intraday':
+            weights = {
+                'fundamental': 0.15,
+                'technical': 0.50,
+                'sr': 0.20,
+                'news': 0.10,
+                'market': 0.05
+            }
+        else:  # swing
+            weights = {
+                'fundamental': 0.40,
+                'technical': 0.35,
+                'sr': 0.15,
+                'news': 0.05,
+                'market': 0.05
+            }
+        
+        # Calculate base score
+        base_score = (
+            self.fundamental_score * weights['fundamental'] +
+            self.technical_score * weights['technical'] +
+            self.sr_score * weights['sr'] +
+            self.news_score * weights['news'] +
+            self.market_alignment_score * weights['market']
+        )
+        
+        # Apply market health multiplier
+        market_health, _, _ = self.market_health_data if self.market_health_data else (50, "Unknown", {})
+        
+        if market_health < 20:
+            multiplier = 0.7 if self.trading_style == 'swing' else 0.65
+        elif market_health < 40:
+            multiplier = 0.85 if self.trading_style == 'swing' else 0.80
+        elif market_health < 60:
+            multiplier = 1.0
+        elif market_health < 80:
+            multiplier = 1.05 if self.trading_style == 'swing' else 1.10
+        else:
+            multiplier = 1.10 if self.trading_style == 'swing' else 1.15
+        
+        final_score = base_score * multiplier
+        final_score = min(100, max(0, final_score))
+        
+        logging.info(f"[UnifiedEngine] Combined score: {final_score:.0f}/100 (multiplier: {multiplier:.2f})")
+        return final_score
+    
+    def generate_signal(self, score):
+        """Generate trading signal from score"""
+        if score >= 75:
+            return "STRONG BUY"
+        elif score >= 65:
+            return "BUY"
+        elif score >= 55:
+            return "MODERATE BUY"
+        elif score >= 45:
+            return "HOLD"
+        elif score >= 35:
+            return "MODERATE SELL"
+        elif score >= 25:
+            return "SELL"
+        else:
+            return "STRONG SELL"
+    
+    def apply_safety_overrides(self, signal, score):
+        """Apply safety overrides to prevent dangerous recommendations"""
+        original_signal = signal
+        
+        if not self.sr_data:
+            return signal, score
+        
+        current_price = self.sr_data.get('close', 0)
+        r1 = self.sr_data.get('r1', 0)
+        r2 = self.sr_data.get('r2', 0)
+        r3 = self.sr_data.get('r3', 0)
+        
+        # Resistance zone overrides
+        if r3 > 0 and abs(current_price - r3) / r3 < 0.02:
+            if signal in ["STRONG BUY", "BUY", "MODERATE BUY"]:
+                signal = "HOLD"
+                score = min(score, 50)
+                self.warnings.append("⚠️ Signal downgraded due to proximity to R3")
+        
+        elif r2 > 0 and abs(current_price - r2) / r2 < 0.02:
+            if signal == "STRONG BUY":
+                signal = "BUY"
+                score = min(score, 70)
+                self.warnings.append("⚠️ Signal downgraded from STRONG BUY due to proximity to R2")
+            elif signal == "BUY":
+                signal = "MODERATE BUY"
+                score = min(score, 60)
+                self.warnings.append("⚠️ Signal downgraded due to proximity to R2")
+        
+        elif r1 > 0 and abs(current_price - r1) / r1 < 0.02:
+            if signal == "STRONG BUY":
+                signal = "BUY"
+                score = min(score, 72)
+                self.warnings.append("⚠️ Signal downgraded from STRONG BUY due to proximity to R1")
+        
+        # Promoter pledge override
+        if self.shareholdings:
+            latest_quarter = list(self.shareholdings.keys())[0]
+            pledge = self.shareholdings[latest_quarter].get('Pledge', 0)
+            
+            if pledge > 90:
+                if signal in ["STRONG BUY", "BUY"]:
+                    signal = "HOLD"
+                    score = min(score, 45)
+                    self.threats.append("🚨 CRITICAL: Promoter pledge > 90% - Signal blocked")
+            elif pledge > 75:
+                if signal == "STRONG BUY":
+                    signal = "BUY"
+                    score = min(score, 68)
+                    self.warnings.append("⚠️ High promoter pledge - Signal downgraded")
+        
+        # Market crash override
+        market_health, _, _ = self.market_health_data if self.market_health_data else (50, "Unknown", {})
+        if market_health < 15:
+            if signal in ["STRONG BUY", "BUY", "MODERATE BUY"]:
+                signal = "HOLD"
+                score = min(score, 45)
+                self.threats.append("🚨 Market crash conditions - All buy signals blocked")
+        
+        # News sentiment override
+        if self.news_score < 20 and signal == "STRONG BUY":
+            signal = "BUY"
+            score = min(score, 70)
+            self.warnings.append("⚠️ Very negative news - Signal downgraded")
+        
+        if original_signal != signal:
+            logging.warning(f"[UnifiedEngine] Signal override: {original_signal} → {signal}")
+        
+        return signal, score
+    
+    def calculate_confidence(self):
+        """Calculate confidence in the recommendation (0-100)"""
+        confidence = 0
+        
+        # Data availability (max 30 points)
+        if self.financials: confidence += 10
+        if self.shareholdings: confidence += 5
+        if self.technical_data: confidence += 10
+        if self.sr_data: confidence += 5
+        
+        # Signal alignment (max 40 points)
+        fundamental_bullish = self.fundamental_score > 60
+        technical_bullish = self.technical_score > 60
+        sr_bullish = self.sr_score > 60
+        news_bullish = self.news_score > 60
+        
+        alignments = sum([fundamental_bullish, technical_bullish, sr_bullish, news_bullish])
+        
+        if alignments >= 3:
+            confidence += 30
+        elif alignments == 2:
+            confidence += 20
+        else:
+            confidence += 10
+        
+        # Trend strength (max 15 points)
+        if self.technical_data:
+            adx = self.technical_data.get('adx', 0)
+            if adx > 25:
+                confidence += 15
+            elif adx > 20:
+                confidence += 10
+            else:
+                confidence += 5
+        
+        # News recency (max 15 points)
+        if self.news_data:
+            try:
+                latest_news = self.news_data[0]
+                date_str = latest_news.get('Date', '')
+                if date_str:
+                    news_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    hours_ago = (datetime.now(timezone.utc) - news_date).total_seconds() / 3600
+                    
+                    if hours_ago < 6:
+                        confidence += 15
+                    elif hours_ago < 24:
+                        confidence += 10
+                    elif hours_ago < 72:
+                        confidence += 5
+            except:
+                pass
+        
+        return min(100, confidence)
+    
+    def analyze(self):
+        """
+        Main analysis function - orchestrates all calculations
+        
+        Returns:
+            dict: Comprehensive analysis results
+        """
+        logging.info(f"[UnifiedEngine] Starting analysis for {self.symbol} ({self.trading_style})")
+        
+        # Step 1: Fetch all data
+        self.fetch_all_data()
+        
+        # Step 2: Calculate component scores
+        self.calculate_fundamental_score()
+        self.calculate_technical_score()
+        self.calculate_sr_score()
+        self.calculate_news_score()
+        self.calculate_market_alignment_score()
+        
+        # Step 3: Calculate combined score
+        combined_score = self.calculate_combined_score()
+        
+        # Step 4: Generate signal
+        signal = self.generate_signal(combined_score)
+        
+        # Step 5: Apply safety overrides
+        final_signal, final_score = self.apply_safety_overrides(signal, combined_score)
+        
+        # Step 6: Calculate confidence
+        confidence = self.calculate_confidence()
+        
+        # Step 7: Prepare comprehensive result
+        market_health, market_signal, market_factors = self.market_health_data if self.market_health_data else (50, "Unknown", {})
+        
+        result = {
+            # Meta
+            'symbol': self.symbol,
+            'trading_style': self.trading_style.upper(),
+            'timeframe': self.timeframe,
+            'timestamp': datetime.now(),
+            
+            # Core recommendation
+            'overall_score': round(final_score, 1),
+            'signal': final_signal,
+            'confidence': confidence,
+            
+            # Component scores
+            'scores': {
+                'fundamental': round(self.fundamental_score, 1),
+                'technical': round(self.technical_score, 1),
+                'support_resistance': round(self.sr_score, 1),
+                'news_sentiment': round(self.news_score, 1),
+                'market_alignment': round(self.market_alignment_score, 1)
+            },
+            
+            # SWOT Analysis
+            'strengths': self.strengths,
+            'weaknesses': self.weaknesses,
+            'opportunities': self.opportunities,
+            'threats': self.threats,
+            
+            # Trading signals and warnings
+            'signals': self.signals,
+            'warnings': self.warnings,
+            
+            # Market context
+            'market_context': {
+                'health': market_health,
+                'signal': market_signal,
+                'factors': market_factors
+            },
+            
+            # News summary
+            'news_summary': {
+                'available': self.news_data is not None,
+                'count': len(self.news_data) if self.news_data else 0,
+                'sentiment_score': round(self.news_score, 1)
+            },
+            
+            # Technical levels
+            'technical_levels': {
+                'pivot': self.sr_data.get('pp', 0) if self.sr_data else 0,
+                'support': [
+                    self.sr_data.get('s1', 0) if self.sr_data else 0,
+                    self.sr_data.get('s2', 0) if self.sr_data else 0,
+                    self.sr_data.get('s3', 0) if self.sr_data else 0
+                ],
+                'resistance': [
+                    self.sr_data.get('r1', 0) if self.sr_data else 0,
+                    self.sr_data.get('r2', 0) if self.sr_data else 0,
+                    self.sr_data.get('r3', 0) if self.sr_data else 0
+                ],
+                'current_price': self.sr_data.get('close', 0) if self.sr_data else 0
+            },
+            
+            # Raw data for backward compatibility
+            'financials': self.financials,
+            'shareholdings': self.shareholdings,
+            'technical_data': self.technical_data,
+            'sr_data': self.sr_data,
+            'news_data': self.news_data
+        }
+        
+        logging.info(f"[UnifiedEngine] Analysis complete: {final_signal} ({final_score:.0f}/100, confidence {confidence}%)")
+        return result
+
+# ============================================================================
+#  LEGACY WRAPPER FUNCTIONS (for backward compatibility)
 # ============================================================================
 
 def get_comprehensive_analysis(symbol, timeframe='15min'):
     """
-    Comprehensive stock analysis combining Zerodha fundamentals and Streak technicals
-    Returns a detailed analysis suitable for both swing and intraday trading
+    Legacy wrapper for backward compatibility
+    Now uses UnifiedAnalysisEngine under the hood
     
     Args:
         symbol: Stock symbol (e.g., 'JKPAPER-EQ')
         timeframe: Analysis timeframe for technical data
     
     Returns:
-        dict with analysis results and trading recommendation
+        dict with analysis results and trading recommendation (legacy format)
     """
-    analysis = {
-        'symbol': symbol,
-        'timeframe': timeframe,
-        'fundamental_score': 0,
-        'technical_score': 0,
-        'overall_score': 0,
-        'signals': [],
-        'warnings': [],
-        'strengths': [],
-        'weaknesses': [],
-        'recommendation': 'NEUTRAL',
-        'confidence': 0
-    }
-    
     try:
-        # 1. FUNDAMENTAL ANALYSIS (for swing trading focus)
-        financials = fetch_financials(symbol)
-        if financials:
-            # Revenue Growth
-            if 'Summary' in financials:
-                summary = financials['Summary']
-                years = sorted([k for k in summary.keys() if str(k).isdigit()], key=lambda x: int(x), reverse=True)
-                if len(years) >= 2:
-                    latest = summary[years[0]].get('Revenue', 0)
-                    previous = summary[years[1]].get('Revenue', 0)
-                    if previous > 0:
-                        growth = ((latest - previous) / previous) * 100
-                        if growth > 15:
-                            analysis['fundamental_score'] += 20
-                            analysis['strengths'].append(f"Strong revenue growth: {growth:.1f}%")
-                        elif growth > 0:
-                            analysis['fundamental_score'] += 10
-                            analysis['strengths'].append(f"Positive revenue growth: {growth:.1f}%")
-                        else:
-                            analysis['weaknesses'].append(f"Revenue decline: {growth:.1f}%")
-            
-            # Profitability Ratios
-            if 'Financial Ratios' in financials:
-                ratios = financials['Financial Ratios']
-                latest_year = max([k for k in ratios.keys() if str(k).isdigit()], key=lambda x: int(x))
-                ratio_data = ratios[latest_year]
-                
-                # OPM (Operating Profit Margin)
-                opm = ratio_data.get('Operating Profit Margin (OPM)', 0)
-                if opm > 15:
-                    analysis['fundamental_score'] += 15
-                    analysis['strengths'].append(f"Excellent OPM: {opm:.2f}%")
-                elif opm > 10:
-                    analysis['fundamental_score'] += 10
-                    analysis['strengths'].append(f"Good OPM: {opm:.2f}%")
-                elif opm < 5:
-                    analysis['weaknesses'].append(f"Low OPM: {opm:.2f}%")
-                
-                # NPM (Net Profit Margin)
-                npm = ratio_data.get('Net Profit Margin', 0)
-                if npm > 10:
-                    analysis['fundamental_score'] += 15
-                    analysis['strengths'].append(f"Strong NPM: {npm:.2f}%")
-                elif npm > 5:
-                    analysis['fundamental_score'] += 10
-                elif npm < 0:
-                    analysis['fundamental_score'] -= 20
-                    analysis['warnings'].append(f"Negative NPM: {npm:.2f}%")
+        # Determine trading style from timeframe
+        trading_style = 'intraday' if timeframe in ['1min', '3min', '5min', '10min'] else 'swing'
         
-        # 2. SHAREHOLDING PATTERN
-        shareholdings = fetch_shareholding_pattern(symbol)
-        if shareholdings:
-            latest_quarter = list(shareholdings.keys())[0]
-            latest_data = shareholdings[latest_quarter]
-            
-            # Promoter holding
-            promoter = latest_data.get('Promoter', 0)
-            if promoter > 50:
-                analysis['fundamental_score'] += 10
-                analysis['strengths'].append(f"Strong promoter holding: {promoter:.1f}%")
-            elif promoter < 25:
-                analysis['warnings'].append(f"Low promoter holding: {promoter:.1f}%")
-            
-            # Pledge
-            pledge = latest_data.get('Pledge', 0)
-            if pledge > 50:
-                analysis['fundamental_score'] -= 15
-                analysis['warnings'].append(f"High promoter pledge: {pledge:.1f}%")
-            elif pledge > 25:
-                analysis['warnings'].append(f"Moderate promoter pledge: {pledge:.1f}%")
-            
-            # FII holding (institutional interest)
-            fii = latest_data.get('FII', 0)
-            if fii > 15:
-                analysis['fundamental_score'] += 10
-                analysis['strengths'].append(f"Good FII holding: {fii:.1f}%")
+        # Use new unified engine
+        engine = UnifiedAnalysisEngine(symbol, trading_style, timeframe)
+        result = engine.analyze()
         
-        # 3. TECHNICAL ANALYSIS (for intraday and timing)
-        tech_data = fetch_technical_analysis(symbol, timeframe)
-        if tech_data and tech_data.get('status') == 1:
-            state = tech_data.get('state', 0)
-            
-            # Overall technical signal
-            if state == 1:
-                analysis['technical_score'] += 30
-                analysis['signals'].append("Bullish technical trend")
-            elif state == -1:
-                analysis['technical_score'] -= 30
-                analysis['signals'].append("Bearish technical trend")
-            
-            # RSI
-            rsi = tech_data.get('rsi', 50)
-            if 30 <= rsi <= 40:
-                analysis['technical_score'] += 15
-                analysis['signals'].append(f"RSI oversold zone: {rsi:.1f} - Good entry")
-            elif 60 <= rsi <= 70:
-                analysis['signals'].append(f"RSI strong: {rsi:.1f}")
-            elif rsi > 75:
-                analysis['technical_score'] -= 10
-                analysis['warnings'].append(f"RSI overbought: {rsi:.1f}")
-            elif rsi < 25:
-                analysis['warnings'].append(f"RSI extremely oversold: {rsi:.1f}")
-            
-            # MACD
-            macd = tech_data.get('macd', 0)
-            if macd > 0:
-                analysis['technical_score'] += 10
-                analysis['signals'].append("Positive MACD momentum")
-            
-            # ADX (Trend Strength)
-            adx = tech_data.get('adx', 0)
-            if adx > 25:
-                analysis['technical_score'] += 10
-                analysis['signals'].append(f"Strong trend: ADX {adx:.1f}")
-            elif adx < 20:
-                analysis['warnings'].append(f"Weak trend: ADX {adx:.1f}")
-            
-            # Win rate
-            win_pct = tech_data.get('win_pct', 0)
-            if win_pct > 0.6:
-                analysis['technical_score'] += 15
-                analysis['strengths'].append(f"High win rate: {win_pct*100:.1f}%")
+        # Convert to legacy format for backward compatibility
+        legacy_result = {
+            'symbol': result['symbol'],
+            'timeframe': result['timeframe'],
+            'fundamental_score': result['scores']['fundamental'],
+            'technical_score': result['scores']['technical'],
+            'overall_score': result['overall_score'],
+            'signals': result['signals'],
+            'warnings': result['warnings'],
+            'strengths': result['strengths'],
+            'weaknesses': result.get('weaknesses', []),
+            'recommendation': result['signal'],  # Map signal to recommendation
+            'confidence': result['confidence']
+        }
         
-        # 4. SUPPORT & RESISTANCE (for entry/exit levels)
-        sr_data = fetch_support_resistance(symbol)
-        if sr_data:
-            current_price = sr_data.get('close', 0)
-            pivot = sr_data.get('pp', 0)
-            r1 = sr_data.get('r1', 0)
-            s1 = sr_data.get('s1', 0)
-            
-            if current_price > 0 and pivot > 0:
-                # Check if price is near support (good buy zone)
-                if s1 > 0 and abs(current_price - s1) / s1 < 0.02:  # Within 2% of S1
-                    analysis['technical_score'] += 15
-                    analysis['signals'].append(f"Near support S1: ₹{s1:.2f} - Good entry zone")
-                
-                # Check if price is above pivot (bullish)
-                if current_price > pivot:
-                    analysis['technical_score'] += 10
-                    analysis['signals'].append(f"Above pivot: ₹{pivot:.2f}")
-                
-                # Check if price is near resistance (profit booking zone) - PENALIZE BUY signals
-                if r1 > 0 and abs(current_price - r1) / r1 < 0.02:  # Within 2% of R1
-                    analysis['technical_score'] -= 25  # Strong penalty for being near resistance
-                    analysis['warnings'].append(f"Near resistance R1: ₹{r1:.2f} - Consider profit booking")
-                
-                # Check if price is near R2 or R3 (even stronger resistance) - MAJOR PENALTY
-                r2 = sr_data.get('r2', 0)
-                r3 = sr_data.get('r3', 0)
-                if r2 > 0 and abs(current_price - r2) / r2 < 0.02:
-                    analysis['technical_score'] -= 35
-                    analysis['warnings'].append(f"Near major resistance R2: ₹{r2:.2f} - High risk zone")
-                elif r3 > 0 and abs(current_price - r3) / r3 < 0.02:
-                    analysis['technical_score'] -= 45
-                    analysis['warnings'].append(f"Near extreme resistance R3: ₹{r3:.2f} - Avoid buying")
-        
-        # 5. CALCULATE OVERALL SCORE AND RECOMMENDATION
-        # Normalize scores to 0-100 scale
-        fund_normalized = min(100, max(0, analysis['fundamental_score']))
-        tech_normalized = min(100, max(-50, analysis['technical_score'] + 50))  # Shift range to positive
-        
-        # Weight: 40% fundamentals, 60% technicals (for swing)
-        # For intraday, you'd want 20% fundamentals, 80% technicals
-        if timeframe in ['1min', '3min', '5min', '10min']:
-            # Intraday - focus on technicals
-            analysis['overall_score'] = (fund_normalized * 0.2 + tech_normalized * 0.8)
-        else:
-            # Swing - balanced approach
-            analysis['overall_score'] = (fund_normalized * 0.4 + tech_normalized * 0.6)
-        
-        # Determine recommendation
-        score = analysis['overall_score']
-        
-        # Additional logic: If near resistance, cap at BUY (never STRONG BUY)
-        near_resistance = any('Near resistance' in w or 'Near major resistance' in w or 'Near extreme resistance' in w 
-                             for w in analysis['warnings'])
-        
-        if score >= 70 and not near_resistance:
-            analysis['recommendation'] = 'STRONG BUY'
-            analysis['confidence'] = min(95, score)
-        elif score >= 60:
-            # If near resistance, downgrade to HOLD regardless of score
-            if near_resistance:
-                analysis['recommendation'] = 'HOLD'
-                analysis['confidence'] = 50
-                analysis['warnings'].insert(0, "⚠️ Score suggests BUY but near resistance - downgraded to HOLD")
-            else:
-                analysis['recommendation'] = 'BUY'
-                analysis['confidence'] = score
-        elif score >= 50:
-            analysis['recommendation'] = 'HOLD'
-            analysis['confidence'] = 50
-        elif score >= 40:
-            analysis['recommendation'] = 'NEUTRAL'
-            analysis['confidence'] = 40
-        else:
-            analysis['recommendation'] = 'AVOID'
-            analysis['confidence'] = max(20, 100 - score)
+        return legacy_result
         
     except Exception as e:
         logging.error(f"Error in comprehensive analysis for {symbol}: {e}")
-        analysis['warnings'].append(f"Analysis error: {str(e)}")
-    
-    return analysis
+        return {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'fundamental_score': 0,
+            'technical_score': 0,
+            'overall_score': 0,
+            'signals': [],
+            'warnings': [f"Analysis error: {str(e)}"],
+            'strengths': [],
+            'weaknesses': [],
+            'recommendation': 'NEUTRAL',
+            'confidence': 0
+        }
 
 def fetch_shareholding_pattern(symbol):
     """Fetch shareholding pattern from Zerodha"""
@@ -4725,13 +5353,16 @@ def calculate_intraday_position(df, account_size=30000, risk_pct=0.01):
     }
 
 # ============================================================================
-# UNIFIED RECOMMENDATION (UNCHANGED)
+# UNIFIED RECOMMENDATION (Using UnifiedAnalysisEngine)
 # ============================================================================
 
 def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d', account_size=30000, contrarian_mode=False):
-    """Generate unified recommendations with  fundamentals + technical analysis"""
+    """
+    Generate unified recommendations using the new UnifiedAnalysisEngine
+    Combines fundamentals, technicals, news sentiment, and market context
+    """
     
-    # Calculate technical indicators
+    # Calculate technical indicators for position sizing
     if trading_style == 'swing':
         df = calculate_swing_indicators(data)
         regime = detect_swing_regime(df)
@@ -4741,7 +5372,7 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
         regime = detect_intraday_regime(df)
         position = calculate_intraday_position(df, account_size)
     
-    # Get market context
+    # Get market context (for backward compatibility)
     market_health, market_signal, market_factors = calculate_market_health_score()
     index_trends = get_index_trend_for_timeframe(timeframe)
     index_context, industry_context = None, None
@@ -4756,85 +5387,102 @@ def generate_recommendation(data, symbol, trading_style='swing', timeframe='1d',
     if industry_data:
         industry_context = industry_data
     
-    # Get Zerodha comprehensive analysis
-    zerodha_timeframe = '5min' if trading_style == 'intraday' else '15min'
-    zerodha_analysis = get_comprehensive_analysis(symbol, zerodha_timeframe)
-    
-    # Combine scores: 60% Zerodha analysis + 40% technical indicators
-    zerodha_score = zerodha_analysis.get('overall_score', 50)
-    
-    # Calculate basic technical score
-    close = df['Close'].iloc[-1]
-    tech_score = 0
-    
-    if trading_style == 'swing':
-        # Swing technical scoring
-        if close > df['EMA_200'].iloc[-1]: tech_score += 20
-        if df['MACD'].iloc[-1] > df['MACD_Signal'].iloc[-1]: tech_score += 20
-        rsi = df['RSI'].iloc[-1]
-        if 40 <= rsi <= 60: tech_score += 20
-        elif 30 <= rsi <= 40: tech_score += 30  # Oversold - good entry
-        elif 60 <= rsi <= 70: tech_score += 10
-        if df['ADX'].iloc[-1] > 25: tech_score += 20  # Strong trend
-        if df['Volume'].iloc[-1] > df['Volume'].rolling(20).mean().iloc[-1]: tech_score += 10
-    else:
-        # Intraday technical scoring
-        if close > df['VWAP'].iloc[-1]: tech_score += 25
-        if df['EMA_Bullish'].iloc[-1]: tech_score += 25
-        if df['OR_Breakout_Long'].iloc[-1]: tech_score += 25
-        rsi = df['RSI'].iloc[-1]
-        if 40 <= rsi <= 60: tech_score += 15
-        elif 30 <= rsi <= 40: tech_score += 25
-        if df['Volume'].iloc[-1] > df['Volume'].rolling(10).mean().iloc[-1]: tech_score += 10
-    
-    # Combined score
-    score = int(zerodha_score * 0.6 + tech_score * 0.4)
-    
-    # Adjust score based on market health
-    if market_health < 30:
-        score = int(score * 0.7)  # Reduce score in bad market
-    elif market_health > 70:
-        score = int(score * 1.1)  # Boost score in good market
-    
-    score = min(100, max(0, score))  # Clamp to 0-100
-    
-    # Determine signal
-    if score >= 75: signal = "Strong Buy"
-    elif score >= 60: signal = "Buy"
-    elif score <= 25: signal = "Strong Sell"
-    elif score <= 40: signal = "Sell"
-    else: signal = "Hold"
-    
-    # Build comprehensive reason from Zerodha analysis
-    reasons = []
-    
-    # Add Zerodha insights
-    if zerodha_analysis.get('signals'):
-        reasons.extend(zerodha_analysis['signals'][:2])  # Top 2 signals
-    
-    if zerodha_analysis.get('strengths'):
-        reasons.append(zerodha_analysis['strengths'][0])  # Top strength
-    
-    if zerodha_analysis.get('warnings'):
-        reasons.append(f"⚠️ {zerodha_analysis['warnings'][0]}")  # Top warning
-    
-    # Add key technical indicators
-    if trading_style == 'swing':
-        reasons.append("Above 200 EMA" if close > df['EMA_200'].iloc[-1] else "Below 200 EMA")
-    else:
-        reasons.append("Above VWAP" if close > df['VWAP'].iloc[-1] else "Below VWAP")
-    
-    reasons.append(f"Market: {market_signal}")
-    
-    return {
-        "symbol": symbol, "trading_style": trading_style.capitalize(), "timeframe": timeframe,
-        "score": score, "signal": signal, "regime": regime, "reason": ", ".join(reasons),
-        "index_context": index_context, "industry_context": industry_context,
-        "market_health": market_health, "market_signal": market_signal, "market_factors": market_factors,
-        "contrarian_mode": contrarian_mode, "processed_data": df,
-        "zerodha_analysis": zerodha_analysis,  # Include full Zerodha analysis
-        **position
-    }
+    # ===== NEW: Use UnifiedAnalysisEngine =====
+    try:
+        engine = UnifiedAnalysisEngine(symbol, trading_style, timeframe, account_size)
+        unified_analysis = engine.analyze()
+        
+        # Extract key information from unified analysis
+        score = int(unified_analysis['overall_score'])
+        signal = unified_analysis['signal']
+        
+        # Build comprehensive reason including all insights
+        reasons = []
+        
+        # Add opportunities (bullish signals)
+        if unified_analysis.get('opportunities'):
+            reasons.extend(unified_analysis['opportunities'][:2])  # Top 2 opportunities
+        
+        # Add strengths
+        if unified_analysis.get('strengths'):
+            reasons.append(unified_analysis['strengths'][0])  # Top strength
+        
+        # Add technical signals
+        if unified_analysis.get('signals'):
+            reasons.extend(unified_analysis['signals'][:2])  # Top 2 signals
+        
+        # Add warnings (important!)
+        if unified_analysis.get('warnings'):
+            reasons.append(f"⚠️ {unified_analysis['warnings'][0]}")  # Top warning
+        
+        # Add threats if any
+        if unified_analysis.get('threats') and len(unified_analysis['threats']) > 0:
+            reasons.append(f"🚨 {unified_analysis['threats'][0]}")
+        
+        # Add market context
+        reasons.append(f"Market: {unified_analysis['market_context']['signal']}")
+        
+        # Limit reasons to avoid clutter
+        reasons = reasons[:6]
+        
+        # Build return object with backward compatibility
+        return {
+            "symbol": symbol,
+            "trading_style": trading_style.capitalize(),
+            "timeframe": timeframe,
+            "score": score,
+            "signal": signal,
+            "regime": regime,
+            "reason": ", ".join(reasons),
+            "index_context": index_context,
+            "industry_context": industry_context,
+            "market_health": market_health,
+            "market_signal": market_signal,
+            "market_factors": market_factors,
+            "contrarian_mode": contrarian_mode,
+            "processed_data": df,
+            # Include unified analysis for new features
+            "unified_analysis": unified_analysis,
+            # Legacy compatibility - zerodha_analysis
+            "zerodha_analysis": {
+                'overall_score': score,
+                'recommendation': signal,
+                'confidence': unified_analysis['confidence'],
+                'signals': unified_analysis.get('signals', []),
+                'warnings': unified_analysis.get('warnings', []),
+                'strengths': unified_analysis.get('strengths', []),
+                'weaknesses': unified_analysis.get('weaknesses', []),
+                'opportunities': unified_analysis.get('opportunities', []),
+                'threats': unified_analysis.get('threats', [])
+            },
+            **position
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in UnifiedAnalysisEngine for {symbol}: {e}")
+        # Fallback to basic analysis
+        close = df['Close'].iloc[-1]
+        score = 50  # Neutral
+        signal = "Hold"
+        
+        return {
+            "symbol": symbol,
+            "trading_style": trading_style.capitalize(),
+            "timeframe": timeframe,
+            "score": score,
+            "signal": signal,
+            "regime": regime,
+            "reason": f"Analysis error: {str(e)}",
+            "index_context": index_context,
+            "industry_context": industry_context,
+            "market_health": market_health,
+            "market_signal": market_signal,
+            "market_factors": market_factors,
+            "contrarian_mode": contrarian_mode,
+            "processed_data": df,
+            "zerodha_analysis": {'overall_score': 50, 'recommendation': 'HOLD'},
+            **position
+        }
 
 # ============================================================================
 # ============================================================================
