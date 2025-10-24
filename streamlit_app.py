@@ -5305,7 +5305,27 @@ def main():
         # Manual sector selection
         selected_sectors = st.sidebar.multiselect("Select Sectors", ["All"] + list(SECTORS.keys()), default=["All"])
         stock_list = get_stock_list_from_sectors(SECTORS, selected_sectors)
-    symbol = st.sidebar.selectbox("Select Stock", stock_list, index=0) if stock_list else "SBIN-EQ"
+    
+    # Initialize selected stock in session state if not exists
+    if 'selected_stock' not in st.session_state and stock_list:
+        st.session_state.selected_stock = stock_list[0] if stock_list else "SBIN-EQ"
+    
+    # Get the index for the current selection
+    try:
+        current_index = stock_list.index(st.session_state.selected_stock) if st.session_state.get('selected_stock') in stock_list else 0
+    except (ValueError, AttributeError):
+        current_index = 0
+    
+    symbol = st.sidebar.selectbox(
+        "Select Stock", 
+        stock_list if stock_list else ["SBIN-EQ"], 
+        index=current_index,
+        key="stock_selector"
+    )
+    
+    # Update session state with new selection
+    st.session_state.selected_stock = symbol
+    
     account_size = st.sidebar.number_input("Account Size (₹)", min_value=10000, value=30000, step=5000)
 
     st.sidebar.divider()
