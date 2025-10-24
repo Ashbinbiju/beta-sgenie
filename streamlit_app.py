@@ -2971,14 +2971,29 @@ def display_financials(symbol):
                 latest_year = max([k for k in bs.keys() if str(k).isdigit()], key=lambda x: int(x))
                 bs_data = bs[latest_year]
                 
+                # For banks, display relevant fields; for others display traditional fields
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     st.metric("Total Assets", f"₹{bs_data.get('Total Assets', 0):.0f} Cr")
                 with col2:
-                    st.metric("Current Assets", f"₹{bs_data.get('Current Assets', 0):.0f} Cr")
+                    # Try Current Assets first (for non-banks), then Advances (for banks)
+                    current_assets = bs_data.get('Current Assets', 0)
+                    if current_assets == 0:
+                        current_assets = bs_data.get('Advances', 0)
+                        label = "Advances"
+                    else:
+                        label = "Current Assets"
+                    st.metric(label, f"₹{current_assets:.0f} Cr")
                 with col3:
-                    st.metric("Current Liabilities", f"₹{bs_data.get('Current Liabilities', 0):.0f} Cr")
+                    # Try Current Liabilities first (for non-banks), then Deposits (for banks)
+                    current_liabilities = bs_data.get('Current Liabilities', 0)
+                    if current_liabilities == 0:
+                        current_liabilities = bs_data.get(' Deposits', bs_data.get('Deposits', 0))
+                        label = "Deposits"
+                    else:
+                        label = "Current Liabilities"
+                    st.metric(label, f"₹{current_liabilities:.0f} Cr")
     else:
         st.info("💰 Financial data not available")
 
