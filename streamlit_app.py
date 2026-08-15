@@ -58,7 +58,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 API_KEYS = {
-    "Historical": "c3C0tMGn",
+    "Historical": os.getenv("SMARTAPI_KEY", "c3C0tMGn"),  # Set SMARTAPI_KEY in Streamlit secrets
     "Trading": os.getenv("TRADING_API_KEY"),
     "Market": os.getenv("MARKET_API_KEY")
 }
@@ -1586,9 +1586,6 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     if not smart_api:
         raise ValueError("SmartAPI session unavailable")
     
-    # Use proper current date
-    end_date = datetime.now().replace(microsecond=0)
-    
     interval_map = {
         "1d": "ONE_DAY", 
         "1h": "ONE_HOUR", 
@@ -1600,21 +1597,44 @@ def _fetch_data_smartapi(symbol, period="1y", interval="1d"):
     
     # SmartAPI Official Max Days per Interval (from documentation)
     max_days_map = {
-        "FIVE_MINUTE": 100,      # 5 min
-        "FIFTEEN_MINUTE": 200,   # 15 min
-        "THIRTY_MINUTE": 200,    # 30 min
-        "ONE_HOUR": 400,         # 1 hour
-        "ONE_DAY": 2000          # 1 day
+        "FIVE_MINUTE": 100,
+        "FIFTEEN_MINUTE": 200,
+        "THIRTY_MINUTE": 200,
+        "ONE_HOUR": 400,
+        "ONE_DAY": 2000
     }
-    
-    # Get max allowed days for this interval
     max_allowed_days = max_days_map.get(api_interval, 365)
+    
+    # --- Smart date snapping ---
+    # For intraday intervals snap end_date to last NSE trading day at 15:30
+    # to avoid empty responses on weekends/holidays.
+    now = datetime.now()
+    is_intraday = api_interval != "ONE_DAY"
+    
+    def last_trading_day(dt):
+        """Return the most recent Mon-Fri on or before dt."""
+        d = dt
+        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+            d -= timedelta(days=1)
+        return d
+
+    if is_intraday:
+        last_td = last_trading_day(now)
+        # If today is a trading day and market is still open (before 15:30 IST), use today
+        market_close = last_td.replace(hour=15, minute=30, second=0, microsecond=0)
+        if now.weekday() < 5 and now <= market_close:
+            # During live session: use current time as end
+            end_date = now.replace(microsecond=0)
+        else:
+            # Weekend or after market close: snap to 15:30 of last trading day
+            end_date = last_td.replace(hour=15, minute=30, second=0, microsecond=0)
+    else:
+        # Daily data: just use today (SmartAPI handles it fine for daily)
+        end_date = now.replace(hour=15, minute=30, second=0, microsecond=0)
     
     # Calculate days requested
     period_map = {"2y": 730, "1y": 365, "6mo": 180, "1mo": 30, "1d": 1}
     requested_days = period_map.get(period, 365)
-    
-    # Enforce SmartAPI limits
     days = min(requested_days, max_allowed_days)
     start_date = (end_date - timedelta(days=days)).replace(microsecond=0)
     
@@ -3402,14 +3422,19 @@ def main():
                 try:
                     # Pre-flight checks for SmartAPI
                     if api_provider == "SmartAPI":
-                        missing = [k for k, v in {"CLIENT_ID": CLIENT_ID, "PASSWORD": PASSWORD, "TOTP_SECRET": TOTP_SECRET}.items() if not v]
+                        missing = [k for k, v in {
+                            "CLIENT_ID": CLIENT_ID,
+                            "PASSWORD": PASSWORD,
+                            "TOTP_SECRET": TOTP_SECRET,
+                            "SMARTAPI_KEY": API_KEYS["Historical"],
+                        }.items() if not v]
                         if missing:
                             st.error(f"❌ SmartAPI credentials missing in secrets: **{', '.join(missing)}**")
                             st.info("Go to Streamlit Cloud → App Settings → Secrets and add the missing keys.")
                             st.stop()
                         smart = get_global_smart_api()
                         if not smart:
-                            st.error("❌ SmartAPI session failed. Check CLIENT_ID / PASSWORD / TOTP_SECRET in Streamlit secrets.")
+                            st.error("❌ SmartAPI session failed. Check CLIENT_ID / PASSWORD / TOTP_SECRET / SMARTAPI_KEY in Streamlit secrets.")
                             st.stop()
                     elif api_provider == "Dhan":
                         if not DHAN_CLIENT_ID or not DHAN_ACCESS_TOKEN:
