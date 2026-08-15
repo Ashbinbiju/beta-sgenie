@@ -3400,6 +3400,22 @@ def main():
         if st.button("🔍 Analyze Selected Stock"):
             with st.spinner(f"Analyzing {symbol} using {api_provider}..."):
                 try:
+                    # Pre-flight checks for SmartAPI
+                    if api_provider == "SmartAPI":
+                        missing = [k for k, v in {"CLIENT_ID": CLIENT_ID, "PASSWORD": PASSWORD, "TOTP_SECRET": TOTP_SECRET}.items() if not v]
+                        if missing:
+                            st.error(f"❌ SmartAPI credentials missing in secrets: **{', '.join(missing)}**")
+                            st.info("Go to Streamlit Cloud → App Settings → Secrets and add the missing keys.")
+                            st.stop()
+                        smart = get_global_smart_api()
+                        if not smart:
+                            st.error("❌ SmartAPI session failed. Check CLIENT_ID / PASSWORD / TOTP_SECRET in Streamlit secrets.")
+                            st.stop()
+                    elif api_provider == "Dhan":
+                        if not DHAN_CLIENT_ID or not DHAN_ACCESS_TOKEN:
+                            st.error("❌ Dhan credentials missing. Add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN to Streamlit secrets.")
+                            st.stop()
+
                     data = fetch_stock_data_cached(symbol, interval=timeframe, api_provider=api_provider)
                     if not data.empty:
                         rec = generate_recommendation(data, symbol, 'swing' if trading_style == "Swing Trading" else 'intraday', timeframe, account_size, contrarian_mode)
@@ -3472,8 +3488,24 @@ def main():
                         st.markdown("---")
                         display_stock_news(symbol, max_news=5)
                             
-                    else: st.warning("No data available for the selected stock.")
-                except Exception as e: st.error(f"❌ Error: {str(e)}")
+                    else:
+                        st.warning(f"⚠️ No data returned for **{symbol}** via {api_provider}.")
+                        with st.expander("🔍 Troubleshooting"):
+                            st.markdown("""
+                            **Possible causes:**
+                            - Symbol token not found in SmartAPI instrument list — try a different symbol
+                            - Market is closed (weekend/holiday) — SmartAPI may return empty for intraday timeframes
+                            - API session expired — reload the page to reinitialize session
+                            - Rate limit hit — wait 30 seconds and try again
+                            
+                            **Try:**
+                            1. Switch to **Swing Trading** (uses daily candles, more reliable)
+                            2. Try a different stock like `SBIN-EQ` or `INFY-EQ`
+                            3. Reload the page to refresh the SmartAPI session
+                            """)
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+                    logging.exception(f"Analysis error for {symbol}")
 
     # --- SCANNER TAB ---
     with tab2:
