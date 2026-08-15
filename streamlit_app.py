@@ -46,10 +46,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 load_dotenv()
 
 # --- Environment variables for both APIs ---
-# SmartAPI
-CLIENT_ID = os.getenv("CLIENT_ID")
-PASSWORD = os.getenv("PASSWORD")
-TOTP_SECRET = os.getenv("TOTP_SECRET")
+# SmartAPI — supports both Streamlit secret names and local .env names
+CLIENT_ID = os.getenv("ANGEL_CLIENT_CODE") or os.getenv("CLIENT_ID")
+PASSWORD = os.getenv("ANGEL_PASSWORD") or os.getenv("PASSWORD")
+TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET") or os.getenv("TOTP_SECRET")
 # Dhan
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
